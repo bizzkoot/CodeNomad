@@ -173,47 +173,47 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
                       data-folder-index={index()}
                       class="group relative border-b border-gray-100 dark:border-gray-700 last:border-b-0"
                     >
-                      <button
-                        class="w-full text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all focus:outline-none flex items-center justify-between gap-3"
-                        classList={{
-                          "bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500 ring-inset":
-                            focusMode() === "recent" && selectedIndex() === index(),
-                        }}
-                        onClick={() => handleFolderSelect(folder.path)}
-                        onMouseEnter={() => {
-                          setFocusMode("recent")
-                          setSelectedIndex(index())
-                        }}
-                      >
-                        <div class="flex-1 min-w-0">
-                          <div class="flex items-center gap-2 mb-1">
-                            <Folder class="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
-                            <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                              {folder.path.split("/").pop()}
-                            </span>
+                      <div class="flex items-center">
+                        <button
+                          class="flex-1 text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all focus:outline-none flex items-center justify-between gap-3"
+                          classList={{
+                            "bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500 ring-inset":
+                              focusMode() === "recent" && selectedIndex() === index(),
+                          }}
+                          onClick={() => handleFolderSelect(folder.path)}
+                          onMouseEnter={() => {
+                            setFocusMode("recent")
+                            setSelectedIndex(index())
+                          }}
+                        >
+                          <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 mb-1">
+                              <Folder class="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                              <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                {folder.path.split("/").pop()}
+                              </span>
+                            </div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400 font-mono truncate pl-6">
+                              {getDisplayPath(folder.path)}
+                            </div>
+                            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1 pl-6">
+                              {formatRelativeTime(folder.lastAccessed)}
+                            </div>
                           </div>
-                          <div class="text-xs text-gray-500 dark:text-gray-400 font-mono truncate pl-6">
-                            {getDisplayPath(folder.path)}
-                          </div>
-                          <div class="text-xs text-gray-400 dark:text-gray-500 mt-1 pl-6">
-                            {formatRelativeTime(folder.lastAccessed)}
-                          </div>
-                        </div>
-                        <div class="flex items-center gap-2 flex-shrink-0">
                           <Show when={focusMode() === "recent" && selectedIndex() === index()}>
                             <kbd class="px-1.5 py-0.5 text-xs font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded">
                               ↵
                             </kbd>
                           </Show>
-                          <button
-                            onClick={(e) => handleRemove(folder.path, e)}
-                            class="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-all"
-                            title="Remove from recent"
-                          >
-                            <Trash2 class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400" />
-                          </button>
-                        </div>
-                      </button>
+                        </button>
+                        <button
+                          onClick={(e) => handleRemove(folder.path, e)}
+                          class="opacity-0 group-hover:opacity-100 p-2.5 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all mr-2"
+                          title="Remove from recent"
+                        >
+                          <Trash2 class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400" />
+                        </button>
+                      </div>
                     </div>
                   )}
                 </For>
