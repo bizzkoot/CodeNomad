@@ -182,19 +182,23 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
     if (!status || typeof status !== "object") return []
 
     try {
-      if (Array.isArray(status)) {
-        return status.map((s) => ({
-          name: s.name || "Unknown",
-          status: s.status || "stopped",
-        }))
-      }
+      const obj = status as Record<string, string>
+      return Object.entries(obj).map(([name, statusValue]) => {
+        let mappedStatus: "running" | "stopped" | "error"
 
-      const obj = status as Record<string, unknown>
-      return Object.entries(obj).map(([name, data]) => {
-        const serverData = data as { status?: string }
+        if (statusValue === "connected") {
+          mappedStatus = "running"
+        } else if (statusValue === "disabled") {
+          mappedStatus = "stopped"
+        } else if (statusValue === "failed") {
+          mappedStatus = "error"
+        } else {
+          mappedStatus = "stopped"
+        }
+
         return {
           name,
-          status: (serverData?.status as "running" | "stopped" | "error") || "stopped",
+          status: mappedStatus,
         }
       })
     } catch {
