@@ -37,47 +37,54 @@ export function setupInstanceIPC(mainWindow: BrowserWindow) {
     return result.filePaths[0]
   })
 
-  ipcMain.handle("instance:create", async (event, id: string, folder: string, binaryPath?: string) => {
-    const instance: Instance = {
-      id,
-      folder,
-      port: 0,
-      pid: 0,
-      status: "starting",
-    }
-
-    instances.set(id, instance)
-
-    try {
-      const { pid, port, binaryPath: actualBinaryPath } = await processManager.spawn(folder, id, binaryPath)
-
-      instance.port = port
-      instance.pid = pid
-      instance.status = "ready"
-
-      mainWindow.webContents.send("instance:started", { id, port, pid, binaryPath: actualBinaryPath })
-
-      const meta = processManager.getAllProcesses().get(pid)
-      if (meta) {
-        meta.childProcess.on("exit", (code, signal) => {
-          instance.status = "stopped"
-          mainWindow.webContents.send("instance:stopped", { id })
-        })
+  ipcMain.handle(
+    "instance:create",
+    async (event, id: string, folder: string, binaryPath?: string, environmentVariables?: Record<string, string>) => {
+      const instance: Instance = {
+        id,
+        folder,
+        port: 0,
+        pid: 0,
+        status: "starting",
       }
 
-      return { id, port, pid, binaryPath: actualBinaryPath }
-    } catch (error) {
-      instance.status = "error"
-      instance.error = error instanceof Error ? error.message : String(error)
+      instances.set(id, instance)
 
-      mainWindow.webContents.send("instance:error", {
-        id,
-        error: instance.error,
-      })
+      try {
+        const {
+          pid,
+          port,
+          binaryPath: actualBinaryPath,
+        } = await processManager.spawn(folder, id, binaryPath, environmentVariables)
 
-      throw error
-    }
-  })
+        instance.port = port
+        instance.pid = pid
+        instance.status = "ready"
+
+        mainWindow.webContents.send("instance:started", { id, port, pid, binaryPath: actualBinaryPath })
+
+        const meta = processManager.getAllProcesses().get(pid)
+        if (meta) {
+          meta.childProcess.on("exit", (code, signal) => {
+            instance.status = "stopped"
+            mainWindow.webContents.send("instance:stopped", { id })
+          })
+        }
+
+        return { id, port, pid, binaryPath: actualBinaryPath }
+      } catch (error) {
+        instance.status = "error"
+        instance.error = error instanceof Error ? error.message : String(error)
+
+        mainWindow.webContents.send("instance:error", {
+          id,
+          error: instance.error,
+        })
+
+        throw error
+      }
+    },
+  )
 
   ipcMain.handle("instance:stop", async (event, pid: number) => {
     await processManager.kill(pid)

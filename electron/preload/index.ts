@@ -6,6 +6,7 @@ export interface ElectronAPI {
     id: string,
     folder: string,
     binaryPath?: string,
+    environmentVariables?: Record<string, string>,
   ) => Promise<{ id: string; port: number; pid: number; binaryPath: string }>
   stopInstance: (pid: number) => Promise<void>
   onInstanceStarted: (callback: (data: { id: string; port: number; pid: number; binaryPath: string }) => void) => void
@@ -35,8 +36,8 @@ export interface ElectronAPI {
 
 const electronAPI: ElectronAPI = {
   selectFolder: () => ipcRenderer.invoke("dialog:selectFolder"),
-  createInstance: (id: string, folder: string, binaryPath?: string) =>
-    ipcRenderer.invoke("instance:create", id, folder, binaryPath),
+  createInstance: (id: string, folder: string, binaryPath?: string, environmentVariables?: Record<string, string>) =>
+    ipcRenderer.invoke("instance:create", id, folder, binaryPath, environmentVariables),
   stopInstance: (pid: number) => ipcRenderer.invoke("instance:stop", pid),
   onInstanceStarted: (callback) => {
     ipcRenderer.on("instance:started", (_, data) => callback(data))

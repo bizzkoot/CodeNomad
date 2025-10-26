@@ -50,17 +50,29 @@ class ProcessManager {
     }
   }
 
-  async spawn(folder: string, instanceId: string, binaryPath?: string): Promise<ProcessInfo> {
+  async spawn(
+    folder: string,
+    instanceId: string,
+    binaryPath?: string,
+    environmentVariables?: Record<string, string>,
+  ): Promise<ProcessInfo> {
     this.validateFolder(folder)
     const actualBinaryPath = binaryPath ? this.validateCustomBinary(binaryPath) : this.validateOpenCodeBinary()
 
     this.sendLog(instanceId, "info", `Starting OpenCode server for ${folder} using ${actualBinaryPath}...`)
 
+    // Merge environment variables with process environment
+    const env = { ...process.env }
+    if (environmentVariables) {
+      Object.assign(env, environmentVariables)
+      this.sendLog(instanceId, "info", `Using ${Object.keys(environmentVariables).length} custom environment variables`)
+    }
+
     return new Promise((resolve, reject) => {
       const child = spawn(actualBinaryPath, ["serve", "--port", "0", "--print-logs", "--log-level", "DEBUG"], {
         cwd: folder,
         stdio: ["ignore", "pipe", "pipe"],
-        env: process.env,
+        env,
         shell: false,
       })
 

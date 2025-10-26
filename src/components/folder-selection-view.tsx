@@ -2,6 +2,7 @@ import { Component, createSignal, Show, For, onMount, onCleanup } from "solid-js
 import { Folder, Clock, Trash2, FolderPlus, Settings, ChevronDown, ChevronUp } from "lucide-solid"
 import { recentFolders, removeRecentFolder, preferences } from "../stores/preferences"
 import OpenCodeBinarySelector from "./opencode-binary-selector"
+import EnvironmentVariablesEditor from "./environment-variables-editor"
 
 interface FolderSelectionViewProps {
   onSelectFolder: (folder?: string, binaryPath?: string) => void
@@ -265,13 +266,19 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
               </button>
 
               <Show when={showAdvanced()}>
-                <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 overflow-visible">
-                  <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">OpenCode Binary</div>
-                  <OpenCodeBinarySelector
-                    selectedBinary={selectedBinary()}
-                    onBinaryChange={setSelectedBinary}
-                    disabled={props.isLoading}
-                  />
+                <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 overflow-visible space-y-4">
+                  <div>
+                    <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">OpenCode Binary</div>
+                    <OpenCodeBinarySelector
+                      selectedBinary={selectedBinary()}
+                      onBinaryChange={setSelectedBinary}
+                      disabled={props.isLoading}
+                    />
+                  </div>
+
+                  <div>
+                    <EnvironmentVariablesEditor disabled={props.isLoading} />
+                  </div>
                 </div>
               </Show>
             </div>

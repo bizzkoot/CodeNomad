@@ -4,6 +4,7 @@ import { storage, type ConfigData } from "../lib/storage"
 export interface Preferences {
   showThinkingBlocks: boolean
   lastUsedBinary?: string
+  environmentVariables?: Record<string, string>
 }
 
 export interface OpenCodeBinary {
@@ -105,6 +106,22 @@ function updateLastUsedBinary(path: string): void {
   }
 }
 
+function updateEnvironmentVariables(envVars: Record<string, string>): void {
+  updatePreferences({ environmentVariables: envVars })
+}
+
+function addEnvironmentVariable(key: string, value: string): void {
+  const current = preferences().environmentVariables || {}
+  const updated = { ...current, [key]: value }
+  updateEnvironmentVariables(updated)
+}
+
+function removeEnvironmentVariable(key: string): void {
+  const current = preferences().environmentVariables || {}
+  const { [key]: removed, ...rest } = current
+  updateEnvironmentVariables(rest)
+}
+
 // Load config on mount and listen for changes from other instances
 onMount(() => {
   loadConfig()
@@ -129,4 +146,7 @@ export {
   addOpenCodeBinary,
   removeOpenCodeBinary,
   updateLastUsedBinary,
+  updateEnvironmentVariables,
+  addEnvironmentVariable,
+  removeEnvironmentVariable,
 }

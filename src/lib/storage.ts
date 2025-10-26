@@ -51,6 +51,7 @@ export class FileStorage {
       return {
         preferences: {
           showThinkingBlocks: false,
+          environmentVariables: {},
         },
         recentFolders: [],
         opencodeBinaries: [],
