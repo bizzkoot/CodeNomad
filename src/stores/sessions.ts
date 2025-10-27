@@ -25,7 +25,7 @@ const [loading, setLoading] = createSignal({
 })
 
 const [messagesLoaded, setMessagesLoaded] = createSignal<Map<string, Set<string>>>(new Map())
-const [sessionInfoByInstance, setSessionInfoByInstance] = createSignal<Map<string, SessionInfo>>(new Map())
+const [sessionInfoByInstance, setSessionInfoByInstance] = createSignal<Map<string, Map<string, SessionInfo>>>(new Map())
 
 async function fetchSessions(instanceId: string): Promise<void> {
   const instance = instances().get(instanceId)
@@ -133,21 +133,26 @@ async function getDefaultModel(
   return { providerId: "", modelId: "" }
 }
 
-function updateSessionInfo(instanceId: string) {
+function getSessionInfo(instanceId: string, sessionId: string): SessionInfo | undefined {
+  return sessionInfoByInstance().get(instanceId)?.get(sessionId)
+}
+
+function updateSessionInfo(instanceId: string, sessionId: string) {
   const instanceSessions = sessions().get(instanceId)
   if (!instanceSessions) return
 
-  let totalTokens = 0
-  let totalCost = 0
+  const session = instanceSessions.get(sessionId)
+  if (!session) return
+
+  let tokens = 0
+  let cost = 0
   let contextWindow = 0
   let isSubscriptionModel = false
   let modelID = ""
   let providerID = ""
 
-  // Calculate from last assistant message in each session (like original calculateSessionInfo)
-  for (const session of instanceSessions.values()) {
-    if (session.messagesInfo.size === 0) continue
-
+  // Calculate from last assistant message in this session only
+  if (session.messagesInfo.size > 0) {
     // Go backwards through messagesInfo to find the last relevant assistant message (like TUI)
     const messageArray = Array.from(session.messagesInfo.values()).reverse()
 
@@ -158,23 +163,23 @@ function updateSessionInfo(instanceId: string) {
         if (usage.output > 0) {
           if (info.summary) {
             // If summary message, only count output tokens and stop (like TUI)
-            totalTokens = usage.output || 0
-            totalCost = info.cost || 0
+            tokens = usage.output || 0
+            cost = info.cost || 0
           } else {
             // Regular message - count all token types (like TUI)
-            totalTokens =
+            tokens =
               (usage.input || 0) +
               (usage.cache?.read || 0) +
               (usage.cache?.write || 0) +
               (usage.output || 0) +
               (usage.reasoning || 0)
-            totalCost = info.cost || 0
+            cost = info.cost || 0
           }
 
           // Get model info for context window and subscription check
           modelID = info.modelID || ""
           providerID = info.providerID || ""
-          isSubscriptionModel = totalCost === 0
+          isSubscriptionModel = cost === 0
 
           break // Break after finding the last assistant message
         }
@@ -200,12 +205,14 @@ function updateSessionInfo(instanceId: string) {
 
   setSessionInfoByInstance((prev) => {
     const next = new Map(prev)
-    next.set(instanceId, {
-      tokens: totalTokens,
-      cost: totalCost,
+    const instanceInfo = new Map(prev.get(instanceId))
+    instanceInfo.set(sessionId, {
+      tokens,
+      cost,
       contextWindow,
       isSubscriptionModel,
     })
+    next.set(instanceId, instanceInfo)
     return next
   })
 }
@@ -266,7 +273,20 @@ async function createSession(instanceId: string, agent?: string): Promise<Sessio
       return next
     })
 
-    updateSessionInfo(instanceId)
+    // Initialize session info with zeros for the new session
+    setSessionInfoByInstance((prev) => {
+      const next = new Map(prev)
+      const instanceInfo = new Map(prev.get(instanceId))
+      instanceInfo.set(session.id, {
+        tokens: 0,
+        cost: 0,
+        contextWindow: 0,
+        isSubscriptionModel: false,
+      })
+      next.set(instanceId, instanceInfo)
+      return next
+    })
+
     return session
   } catch (error) {
     console.error("Failed to create session:", error)
@@ -302,6 +322,22 @@ async function deleteSession(instanceId: string, sessionId: string): Promise<voi
       const instanceSessions = next.get(instanceId)
       if (instanceSessions) {
         instanceSessions.delete(sessionId)
+      }
+      return next
+    })
+
+    // Remove session info entry
+    setSessionInfoByInstance((prev) => {
+      const next = new Map(prev)
+      const instanceInfo = next.get(instanceId)
+      if (instanceInfo) {
+        const updatedInstanceInfo = new Map(instanceInfo)
+        updatedInstanceInfo.delete(sessionId)
+        if (updatedInstanceInfo.size === 0) {
+          next.delete(instanceId)
+        } else {
+          next.set(instanceId, updatedInstanceInfo)
+        }
       }
       return next
     })
@@ -594,7 +630,7 @@ async function loadMessages(instanceId: string, sessionId: string, force = false
     })
   }
 
-  updateSessionInfo(instanceId)
+  updateSessionInfo(instanceId, sessionId)
 }
 
 function handleMessageUpdate(instanceId: string, event: any): void {
@@ -643,7 +679,7 @@ function handleMessageUpdate(instanceId: string, event: any): void {
       return next
     })
 
-    updateSessionInfo(instanceId)
+    updateSessionInfo(instanceId, part.sessionID)
   } else if (event.type === "message.updated") {
     const info = event.properties?.info
     if (!info) return
@@ -697,7 +733,7 @@ function handleMessageUpdate(instanceId: string, event: any): void {
       return next
     })
 
-    updateSessionInfo(instanceId)
+    updateSessionInfo(instanceId, info.sessionID)
   }
 }
 
@@ -1000,6 +1036,7 @@ export {
   providers,
   loading,
   sessionInfoByInstance,
+  getSessionInfo,
   fetchSessions,
   createSession,
   deleteSession,

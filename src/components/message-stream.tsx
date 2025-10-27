@@ -5,7 +5,7 @@ import ToolCall from "./tool-call"
 import { sseManager } from "../lib/sse-manager"
 import Kbd from "./kbd"
 import { preferences } from "../stores/preferences"
-import { providers, sessionInfoByInstance } from "../stores/sessions"
+import { providers, getSessionInfo } from "../stores/sessions"
 
 // Calculate session tokens and cost from messagesInfo (matches TUI logic)
 function calculateSessionInfo(messagesInfo?: Map<string, any>, instanceId?: string) {
@@ -135,7 +135,7 @@ export default function MessageStream(props: MessageStreamProps) {
 
   const sessionInfo = createMemo(() => {
     return (
-      sessionInfoByInstance().get(props.instanceId) || {
+      getSessionInfo(props.instanceId, props.sessionId) || {
         tokens: 0,
         cost: 0,
         contextWindow: 0,
@@ -145,7 +145,7 @@ export default function MessageStream(props: MessageStreamProps) {
   })
 
   const formattedSessionInfo = createMemo(() => {
-    const sessionInfo = sessionInfoByInstance().get(props.instanceId) || {
+    const sessionInfo = getSessionInfo(props.instanceId, props.sessionId) || {
       tokens: 0,
       cost: 0,
       contextWindow: 0,
