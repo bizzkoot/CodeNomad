@@ -85,10 +85,10 @@ const SessionPicker: Component<SessionPickerProps> = (props) => {
                       {(session) => (
                         <button
                           type="button"
-                          class="selector-option w-full text-left"
+                          class="selector-option w-full text-left hover:bg-surface-hover focus:bg-surface-hover"
                           onClick={() => handleSessionSelect(session.id)}
                         >
-                          <div class="selector-option-content">
+                          <div class="selector-option-content w-full">
                             <span class="selector-option-label truncate">
                               {session.title || "Untitled"}
                             </span>

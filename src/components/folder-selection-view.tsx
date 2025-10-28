@@ -187,15 +187,15 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
               <div class="panel-list">
                 <For each={folders()}>
                   {(folder, index) => (
-                    <div class="panel-list-item">
-                      <div class="flex items-center">
+                    <div 
+                      class="panel-list-item w-full"
+                      classList={{
+                        "panel-list-item-highlight": focusMode() === "recent" && selectedIndex() === index(),
+                      }}
+                    >
+                      <div class="flex items-center w-full">
                         <button
-                          class="panel-list-item-content"
-                          classList={{
-                            "panel-list-item-highlight ring-2 ring-inset":
-                              focusMode() === "recent" && selectedIndex() === index(),
-                          }}
-                          style={{ "--tw-ring-color": "var(--accent-primary)" }}
+                          class="panel-list-item-content flex-1 w-full"
                           onClick={() => handleFolderSelect(folder.path)}
                           onMouseEnter={() => {
                             setFocusMode("recent")
@@ -218,7 +218,7 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
                           </div>
                           <Show when={focusMode() === "recent" && selectedIndex() === index()}>
                             <kbd class="kbd">
-                              ↵
+                              ↵ 
                             </kbd>
                           </Show>
                         </button>

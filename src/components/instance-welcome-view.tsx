@@ -179,14 +179,15 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
               <div class="panel-list">
                 <For each={parentSessions()}>
                   {(session, index) => (
-                    <div class="panel-list-item">
+                    <div 
+                      class="panel-list-item w-full"
+                      classList={{
+                        "panel-list-item-highlight": focusMode() === "sessions" && selectedIndex() === index(),
+                      }}
+                    >
                       <button
                         data-session-index={index()}
-                        class="panel-list-item-content group"
-                        classList={{
-                          "panel-list-item-highlight ring-accent-inset":
-                            focusMode() === "sessions" && selectedIndex() === index(),
-                        }}
+                        class="panel-list-item-content group w-full"
                         onClick={() => handleSessionSelect(session.id)}
                         onMouseEnter={() => {
                           setFocusMode("sessions")

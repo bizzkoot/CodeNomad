@@ -1029,7 +1029,7 @@
 }
 
 .selector-option {
-  @apply px-3 py-2 cursor-pointer rounded outline-none transition-colors flex items-start gap-2;
+  @apply px-3 py-2 cursor-pointer rounded outline-none transition-colors flex items-start gap-2 w-full;
   color: var(--text-primary);
 }
 
@@ -1373,7 +1373,7 @@
 }
 
 .panel-list-item {
-  @apply border-b last:border-b-0 transition-colors;
+  @apply border-b last:border-b-0 transition-colors w-full;
   border-color: var(--border-base);
 }
 
@@ -1381,20 +1381,20 @@
   background-color: var(--surface-hover);
 }
 
-.panel-list-item-content {
-  @apply flex-1 text-left px-4 py-3 flex items-center justify-between gap-3 outline-none transition-colors;
-}
-
-.panel-list-item-content:hover {
-  background-color: var(--surface-hover);
-}
-
 .panel-list-item-highlight {
-  background-color: rgba(0, 102, 255, 0.1);
+  background-color: rgba(0, 102, 255, 0.1) !important;
 }
 
 [data-theme="dark"] .panel-list-item-highlight {
-  background-color: rgba(0, 128, 255, 0.2);
+  background-color: rgba(0, 128, 255, 0.2) !important;
+}
+
+.panel-list-item-content {
+  @apply flex-1 text-left px-4 py-3 flex items-center justify-between gap-3 outline-none transition-colors w-full;
+}
+
+.panel-list-item-content:hover {
+  background-color: transparent;
 }
 
 .panel-empty-state {
