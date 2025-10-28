@@ -66,34 +66,34 @@ const LogsView: Component<LogsViewProps> = (props) => {
   const getLevelColor = (level: string) => {
     switch (level) {
       case "error":
-        return "text-red-600 dark:text-red-400"
+        return "log-level-error"
       case "warn":
-        return "text-yellow-600 dark:text-yellow-400"
+        return "log-level-warn"
       case "debug":
-        return "text-gray-500 dark:text-gray-500"
+        return "log-level-debug"
       default:
-        return "text-gray-900 dark:text-gray-100"
+        return "log-level-default"
     }
   }
 
   return (
-    <div class="flex flex-col h-full bg-white dark:bg-gray-900">
-      <div class="flex items-center justify-between px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-        <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">Server Logs</h3>
+    <div class="log-container">
+      <div class="log-header">
+        <h3 class="text-sm font-medium" style="color: var(--text-secondary)">Server Logs</h3>
       </div>
 
       <Show when={instance()?.environmentVariables && Object.keys(instance()?.environmentVariables!).length > 0}>
-        <div class="px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800">
-          <div class="text-xs font-medium text-blue-800 dark:text-blue-200 mb-2">
+        <div class="env-vars-container">
+          <div class="env-vars-title">
             Environment Variables ({Object.keys(instance()?.environmentVariables!).length})
           </div>
           <div class="space-y-1">
             <For each={Object.entries(instance()?.environmentVariables!)}>
               {([key, value]) => (
-                <div class="flex items-center gap-2 text-xs">
-                  <span class="font-mono font-medium text-blue-800 dark:text-blue-200 min-w-0 flex-1">{key}</span>
-                  <span class="text-blue-600 dark:text-blue-400">=</span>
-                  <span class="font-mono text-blue-700 dark:text-blue-300 min-w-0 flex-1" title={value}>
+                <div class="env-var-item">
+                  <span class="env-var-key">{key}</span>
+                  <span class="env-var-separator">=</span>
+                  <span class="env-var-value" title={value}>
                     {value}
                   </span>
                 </div>
@@ -106,17 +106,17 @@ const LogsView: Component<LogsViewProps> = (props) => {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        class="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900 font-mono text-xs leading-relaxed"
+        class="log-content"
       >
         <Show
           when={logs().length > 0}
-          fallback={<div class="text-gray-500 dark:text-gray-500 text-center py-8">Waiting for server output...</div>}
+          fallback={<div class="log-empty-state">Waiting for server output...</div>}
         >
           <For each={logs()}>
             {(entry) => (
-              <div class="flex gap-3 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800 px-2 -mx-2 rounded">
-                <span class="text-gray-500 dark:text-gray-500 select-none shrink-0">{formatTime(entry.timestamp)}</span>
-                <span class={`${getLevelColor(entry.level)} break-all`}>{entry.message}</span>
+              <div class="log-entry">
+                <span class="log-timestamp">{formatTime(entry.timestamp)}</span>
+                <span class={`log-message ${getLevelColor(entry.level)}`}>{entry.message}</span>
               </div>
             )}
           </For>
@@ -126,7 +126,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
       <Show when={!autoScroll()}>
         <button
           onClick={scrollToBottom}
-          class="absolute bottom-6 right-6 px-3 py-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 flex items-center gap-1 text-sm"
+          class="scroll-to-bottom"
         >
           <ChevronDown class="w-4 h-4" />
           Scroll to bottom

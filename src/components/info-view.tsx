@@ -67,46 +67,46 @@ const InfoView: Component<InfoViewProps> = (props) => {
   const getLevelColor = (level: string) => {
     switch (level) {
       case "error":
-        return "text-red-600 dark:text-red-400"
+        return "log-level-error"
       case "warn":
-        return "text-yellow-600 dark:text-yellow-400"
+        return "log-level-warn"
       case "debug":
-        return "text-gray-500 dark:text-gray-500"
+        return "log-level-debug"
       default:
-        return "text-gray-900 dark:text-gray-100"
+        return "log-level-default"
     }
   }
 
   return (
-    <div class="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
+    <div class="log-container">
       <div class="flex-1 flex flex-col lg:flex-row gap-4 p-4 overflow-hidden">
         <div class="lg:w-80 flex-shrink-0 overflow-y-auto">
           <Show when={instance()}>{(inst) => <InstanceInfo instance={inst()} />}</Show>
         </div>
 
-        <div class="flex-1 flex flex-col min-h-0 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-          <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-            <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Server Logs</h2>
+        <div class="panel flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div class="log-header">
+            <h2 class="panel-title">Server Logs</h2>
           </div>
 
           <div
             ref={scrollRef}
             onScroll={handleScroll}
-            class="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900 font-mono text-xs leading-relaxed"
+            class="log-content"
           >
             <Show
               when={logs().length > 0}
               fallback={
-                <div class="text-gray-500 dark:text-gray-500 text-center py-8">Waiting for server output...</div>
+                <div class="log-empty-state">Waiting for server output...</div>
               }
             >
               <For each={logs()}>
                 {(entry) => (
-                  <div class="flex gap-3 py-0.5 hover:bg-gray-100 dark:hover:bg-gray-800 px-2 -mx-2 rounded">
-                    <span class="text-gray-500 dark:text-gray-500 select-none shrink-0">
+                  <div class="log-entry">
+                    <span class="log-timestamp">
                       {formatTime(entry.timestamp)}
                     </span>
-                    <span class={`${getLevelColor(entry.level)} break-all`}>{entry.message}</span>
+                    <span class={`log-message ${getLevelColor(entry.level)}`}>{entry.message}</span>
                   </div>
                 )}
               </For>
@@ -116,7 +116,7 @@ const InfoView: Component<InfoViewProps> = (props) => {
           <Show when={!autoScroll()}>
             <button
               onClick={scrollToBottom}
-              class="absolute bottom-6 right-6 px-3 py-2 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 flex items-center gap-1 text-sm"
+              class="scroll-to-bottom"
             >
               <ChevronDown class="w-4 h-4" />
               Scroll to bottom

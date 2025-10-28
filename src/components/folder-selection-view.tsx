@@ -154,50 +154,48 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
   }
 
   return (
-    <div class="flex h-full w-full items-center justify-center bg-gray-50 dark:bg-gray-900">
+    <div class="flex h-full w-full items-center justify-center" style="background-color: var(--surface-secondary)">
       <div class="w-full max-w-3xl px-8 py-12">
         <div class="mb-8 text-center">
           <div class="mb-4 flex justify-center">
-            <Folder class="h-16 w-16 text-gray-400 dark:text-gray-600" />
+            <Folder class="h-16 w-16" style="color: var(--text-muted)" />
           </div>
-          <h1 class="mb-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">Welcome to OpenCode</h1>
-          <p class="text-base text-gray-600 dark:text-gray-400">Select a folder to start coding with AI</p>
+          <h1 class="mb-2 text-2xl font-semibold" style="color: var(--text-primary)">Welcome to OpenCode</h1>
+          <p class="text-base" style="color: var(--text-secondary)">Select a folder to start coding with AI</p>
         </div>
 
         <div class="space-y-4 overflow-visible">
           <Show
             when={folders().length > 0}
             fallback={
-              <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 text-center">
-                <div class="text-gray-400 dark:text-gray-600 mb-2">
+              <div class="panel panel-empty-state">
+                <div class="panel-empty-state-icon">
                   <Clock class="w-12 h-12 mx-auto" />
                 </div>
-                <p class="text-gray-600 dark:text-gray-400 font-medium text-sm mb-1">No Recent Folders</p>
-                <p class="text-xs text-gray-500 dark:text-gray-500">Browse for a folder to get started</p>
+                <p class="panel-empty-state-title">No Recent Folders</p>
+                <p class="panel-empty-state-description">Browse for a folder to get started</p>
               </div>
             }
           >
-            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-              <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-                <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Recent Folders</h2>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            <div class="panel">
+              <div class="panel-header">
+                <h2 class="panel-title">Recent Folders</h2>
+                <p class="panel-subtitle">
                   {folders().length} {folders().length === 1 ? "folder" : "folders"} available
                 </p>
               </div>
-              <div class="max-h-[400px] overflow-y-auto">
+              <div class="panel-list">
                 <For each={folders()}>
                   {(folder, index) => (
-                    <div
-                      data-folder-index={index()}
-                      class="group relative border-b border-gray-100 dark:border-gray-700 last:border-b-0"
-                    >
+                    <div class="panel-list-item">
                       <div class="flex items-center">
                         <button
-                          class="flex-1 text-left px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all focus:outline-none flex items-center justify-between gap-3"
+                          class="panel-list-item-content"
                           classList={{
-                            "bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500 ring-inset":
+                            "panel-list-item-highlight ring-2 ring-inset":
                               focusMode() === "recent" && selectedIndex() === index(),
                           }}
+                          style={{ "--tw-ring-color": "var(--accent-primary)" }}
                           onClick={() => handleFolderSelect(folder.path)}
                           onMouseEnter={() => {
                             setFocusMode("recent")
@@ -206,15 +204,15 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
                         >
                           <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2 mb-1">
-                              <Folder class="w-4 h-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />
-                              <span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                              <Folder class="w-4 h-4 flex-shrink-0" style="color: var(--text-muted)" />
+                              <span class="text-sm font-medium truncate" style="color: var(--text-primary)">
                                 {folder.path.split("/").pop()}
                               </span>
                             </div>
-                            <div class="text-xs text-gray-500 dark:text-gray-400 font-mono truncate pl-6">
+                            <div class="text-xs font-mono truncate pl-6" style="color: var(--text-muted)">
                               {getDisplayPath(folder.path)}
                             </div>
-                            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1 pl-6">
+                            <div class="text-xs mt-1 pl-6" style="color: var(--text-muted)">
                               {formatRelativeTime(folder.lastAccessed)}
                             </div>
                           </div>
@@ -226,10 +224,11 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
                         </button>
                         <button
                           onClick={(e) => handleRemove(folder.path, e)}
-                          class="opacity-0 group-hover:opacity-100 p-2.5 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all mr-2"
+                          class="opacity-0 group-hover:opacity-100 p-2.5 transition-all mr-2 hover:bg-red-100 dark:hover:bg-red-900/30"
                           title="Remove from recent"
                         >
-                          <Trash2 class="w-3.5 h-3.5 text-gray-400 dark:text-gray-500 hover:text-red-600 dark:hover:text-red-400" />
+                          <Trash2 class="w-3.5 h-3.5 transition-colors" style="color: var(--text-muted)" 
+                            classList={{ "hover:text-red-600": true, "dark:hover:text-red-400": true }} />
                         </button>
                       </div>
                     </div>
@@ -239,17 +238,21 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
             </div>
           </Show>
 
-          <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-            <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-              <h2 class="text-base font-semibold text-gray-900 dark:text-gray-100">Browse for Folder</h2>
-              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Select any folder on your computer</p>
+          <div class="panel">
+            <div class="panel-header">
+              <h2 class="panel-title">Browse for Folder</h2>
+              <p class="panel-subtitle">Select any folder on your computer</p>
             </div>
 
-            <div class="p-4">
+            <div class="panel-body">
               <button
                 onClick={handleBrowse}
                 disabled={props.isLoading}
-                class="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed transition-all font-medium flex items-center justify-between text-sm"
+                class="w-full px-4 py-2.5 rounded-lg transition-all font-medium flex items-center justify-between text-sm disabled:cursor-not-allowed"
+                classList={{
+                  "bg-blue-600 text-white hover:bg-blue-700": !props.isLoading,
+                  "bg-gray-300 dark:bg-gray-600 text-gray-500 cursor-not-allowed": props.isLoading
+                }}
                 onMouseEnter={() => setFocusMode("new")}
               >
                 <div class="flex items-center gap-2 flex-1 justify-center">
@@ -263,26 +266,26 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
             </div>
 
             {/* Advanced settings section */}
-            <div class="border-t border-gray-200 dark:border-gray-700">
+            <div class="panel-section">
               <button
                 onClick={() => setShowAdvanced(!showAdvanced())}
-                class="w-full px-4 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                class="panel-section-header"
               >
                 <div class="flex items-center gap-2">
-                  <Settings class="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                  <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Advanced Settings</span>
+                  <Settings class="w-4 h-4" style="color: var(--text-muted)" />
+                  <span class="text-sm font-medium" style="color: var(--text-secondary)">Advanced Settings</span>
                 </div>
                 {showAdvanced() ? (
-                  <ChevronUp class="w-4 h-4 text-gray-400" />
+                  <ChevronUp class="w-4 h-4" style="color: var(--text-muted)" />
                 ) : (
-                  <ChevronDown class="w-4 h-4 text-gray-400" />
+                  <ChevronDown class="w-4 h-4" style="color: var(--text-muted)" />
                 )}
               </button>
 
               <Show when={showAdvanced()}>
-                <div class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-900/50 overflow-visible space-y-4">
+                <div class="panel-section-content">
                   <div>
-                    <div class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">OpenCode Binary</div>
+                    <div class="text-sm font-medium mb-2" style="color: var(--text-secondary)">OpenCode Binary</div>
                     <OpenCodeBinarySelector
                       selectedBinary={selectedBinary()}
                       onBinaryChange={handleBinaryChange}
@@ -299,8 +302,8 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
           </div>
         </div>
 
-        <div class="mt-6 px-4 py-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
-          <div class="flex items-center justify-center flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
+        <div class="mt-6 panel panel-footer">
+          <div class="panel-footer-hints">
             <Show when={folders().length > 0}>
               <div class="flex items-center gap-1.5">
                 <kbd class="kbd">↑</kbd>
