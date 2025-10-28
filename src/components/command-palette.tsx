@@ -126,18 +126,18 @@ const CommandPalette: Component<CommandPaletteProps> = (props) => {
   return (
     <Dialog open={props.open} onOpenChange={(open) => !open && props.onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay class="fixed inset-0 bg-black/50 z-50" />
+        <Dialog.Overlay class="modal-overlay" />
         <div class="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
           <Dialog.Content
-            class="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-2xl max-h-[60vh] flex flex-col"
+            class="modal-surface w-full max-w-2xl max-h-[60vh]"
             onKeyDown={handleKeyDown}
           >
             <Dialog.Title class="sr-only">Command Palette</Dialog.Title>
             <Dialog.Description class="sr-only">Search and execute commands</Dialog.Description>
 
-            <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div class="modal-search-container">
               <div class="flex items-center gap-3">
-                <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 modal-search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
                     stroke-linecap="round"
                     stroke-linejoin="round"
@@ -154,15 +154,15 @@ const CommandPalette: Component<CommandPaletteProps> = (props) => {
                     setSelectedIndex(0)
                   }}
                   placeholder="Type a command or search..."
-                  class="flex-1 bg-transparent outline-none text-gray-900 dark:text-gray-100 placeholder-gray-400"
+                  class="modal-search-input"
                 />
               </div>
             </div>
 
-            <div ref={listRef} class="flex-1 overflow-y-auto">
+            <div ref={listRef} class="modal-list-container">
               <Show
                 when={filteredCommands().length > 0}
-                fallback={<div class="p-8 text-center text-gray-500">No commands found for "{query()}"</div>}
+                fallback={<div class="modal-empty-state">No commands found for "{query()}"</div>}
               >
                 <For each={Array.from(groupedCommands().entries())}>
                   {([category, commands]) => {
@@ -174,7 +174,7 @@ const CommandPalette: Component<CommandPaletteProps> = (props) => {
 
                     return (
                       <div class="py-2">
-                        <div class="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                        <div class="modal-section-header">
                           {category}
                         </div>
                         <For each={commands}>
@@ -185,16 +185,16 @@ const CommandPalette: Component<CommandPaletteProps> = (props) => {
                                 type="button"
                                 data-command-index={commandIndex}
                                 onClick={() => handleCommandClick(command.id)}
-                                class={`w-full px-4 py-3 flex items-start gap-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer border-none text-left ${
-                                  commandIndex === selectedIndex() ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                                class={`modal-item ${
+                                  commandIndex === selectedIndex() ? "modal-item-highlight" : ""
                                 }`}
                                 onMouseEnter={() => setSelectedIndex(commandIndex)}
                               >
                                 <div class="flex-1 min-w-0">
-                                  <div class="font-medium text-gray-900 dark:text-gray-100">
+                                  <div class="modal-item-label">
                                     {typeof command.label === "function" ? command.label() : command.label}
                                   </div>
-                                  <div class="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
+                                  <div class="modal-item-description">
                                     {command.description}
                                   </div>
                                 </div>

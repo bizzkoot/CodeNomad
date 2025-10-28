@@ -219,7 +219,7 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
                             </div>
                           </div>
                           <Show when={focusMode() === "recent" && selectedIndex() === index()}>
-                            <kbd class="px-1.5 py-0.5 text-xs font-semibold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded">
+                            <kbd class="kbd">
                               ↵
                             </kbd>
                           </Show>
@@ -256,7 +256,7 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
                   <FolderPlus class="w-4 h-4" />
                   <span>{props.isLoading ? "Opening..." : "Browse Folders"}</span>
                 </div>
-                <kbd class="px-1.5 py-0.5 text-xs font-semibold bg-blue-700 border border-blue-500 rounded">
+                <kbd class="kbd">
                   Cmd+Enter
                 </kbd>
               </button>
@@ -303,31 +303,21 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
           <div class="flex items-center justify-center flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
             <Show when={folders().length > 0}>
               <div class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded font-mono">
-                  ↑
-                </kbd>
-                <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded font-mono">
-                  ↓
-                </kbd>
+                <kbd class="kbd">↑</kbd>
+                <kbd class="kbd">↓</kbd>
                 <span>Navigate</span>
               </div>
               <div class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded font-mono">
-                  Enter
-                </kbd>
+                <kbd class="kbd">Enter</kbd>
                 <span>Select</span>
               </div>
               <div class="flex items-center gap-1.5">
-                <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded font-mono">
-                  Del
-                </kbd>
+                <kbd class="kbd">Del</kbd>
                 <span>Remove</span>
               </div>
             </Show>
             <div class="flex items-center gap-1.5">
-              <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded">
-                Cmd+Enter
-              </kbd>
+              <kbd class="kbd">Cmd+Enter</kbd>
               <span>Browse</span>
             </div>
           </div>

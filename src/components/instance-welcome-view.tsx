@@ -211,7 +211,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
                           </div>
                         </div>
                         <Show when={focusMode() === "sessions" && selectedIndex() === index()}>
-                          <kbd class="px-1.5 py-0.5 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded flex-shrink-0">
+                          <kbd class="kbd flex-shrink-0">
                             ↵
                           </kbd>
                         </Show>
@@ -281,7 +281,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
                         </svg>
                         <span>Create Session</span>
                       </div>
-                      <kbd class="px-1.5 py-0.5 text-xs font-semibold bg-blue-700 border border-blue-500 rounded flex-shrink-0 dark:bg-blue-600 dark:border-blue-400">
+                      <kbd class="kbd flex-shrink-0">
                         Cmd+Enter
                       </kbd>
                     </Show>
@@ -302,42 +302,26 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       <div class="px-4 py-2 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
         <div class="flex items-center justify-center flex-wrap gap-3 text-xs text-gray-500 dark:text-gray-400">
           <div class="flex items-center gap-1.5">
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded font-mono text-xs">
-              ↑
-            </kbd>
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded font-mono text-xs">
-              ↓
-            </kbd>
+            <kbd class="kbd">↑</kbd>
+            <kbd class="kbd">↓</kbd>
             <span>Navigate</span>
           </div>
           <div class="flex items-center gap-1.5">
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded font-mono text-xs">
-              PgUp
-            </kbd>
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded font-mono text-xs">
-              PgDn
-            </kbd>
+            <kbd class="kbd">PgUp</kbd>
+            <kbd class="kbd">PgDn</kbd>
             <span>Jump</span>
           </div>
           <div class="flex items-center gap-1.5">
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded font-mono text-xs">
-              Home
-            </kbd>
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded font-mono text-xs">
-              End
-            </kbd>
+            <kbd class="kbd">Home</kbd>
+            <kbd class="kbd">End</kbd>
             <span>First/Last</span>
           </div>
           <div class="flex items-center gap-1.5">
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded font-mono text-xs">
-              Enter
-            </kbd>
+            <kbd class="kbd">Enter</kbd>
             <span>Resume</span>
           </div>
           <div class="flex items-center gap-1.5">
-            <kbd class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs">
-              Cmd+Enter
-            </kbd>
+            <kbd class="kbd">Cmd+Enter</kbd>
             <span>New Session</span>
           </div>
         </div>

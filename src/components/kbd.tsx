@@ -36,13 +36,11 @@ const Kbd: Component<KbdProps> = (props) => {
   }
 
   return (
-    <kbd
-      class={`font-mono bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-xs inline-flex items-center gap-0.5 ${props.class || ""}`}
-    >
+    <kbd class={`kbd ${props.class || ""}`}>
       <For each={parts()}>
         {(part, index) => (
           <>
-            {index() > 0 && <span class="opacity-50">+</span>}
+            {index() > 0 && <span class="kbd-separator">+</span>}
             <span>{part.text}</span>
           </>
         )}

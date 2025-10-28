@@ -1041,3 +1041,86 @@
   @apply w-4 h-4 animate-spin;
   color: var(--accent-primary);
 }
+
+/* Modal utilities */
+.modal-overlay {
+  @apply fixed inset-0 z-50;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-surface {
+  @apply rounded-lg shadow-2xl flex flex-col;
+  background-color: var(--surface-base);
+  color: var(--text-primary);
+}
+
+.modal-search-container {
+  @apply p-4 border-b;
+  border-color: var(--border-base);
+}
+
+.modal-search-input {
+  @apply flex-1 bg-transparent outline-none;
+  color: var(--text-primary);
+}
+
+.modal-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.modal-search-icon {
+  color: var(--text-muted);
+}
+
+.modal-list-container {
+  @apply flex-1 overflow-y-auto;
+}
+
+.modal-section-header {
+  @apply px-4 py-2 text-xs font-semibold uppercase tracking-wide;
+  color: var(--text-muted);
+}
+
+.modal-item {
+  @apply w-full px-4 py-3 flex items-start gap-3 transition-colors cursor-pointer border-none text-left;
+  color: var(--text-primary);
+}
+
+.modal-item:hover {
+  background-color: var(--surface-hover);
+}
+
+.modal-item-highlight {
+  background-color: rgba(0, 102, 255, 0.1);
+}
+
+[data-theme="dark"] .modal-item-highlight {
+  background-color: rgba(0, 128, 255, 0.2);
+}
+
+.modal-item-label {
+  @apply font-medium;
+  color: var(--text-primary);
+}
+
+.modal-item-description {
+  @apply text-sm mt-0.5;
+  color: var(--text-secondary);
+}
+
+.modal-empty-state {
+  @apply p-8 text-center;
+  color: var(--text-muted);
+}
+
+/* Keyboard utilities */
+.kbd {
+  @apply inline-flex items-center gap-0.5 font-mono text-xs px-1.5 py-0.5 rounded;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-base);
+  color: var(--text-primary);
+}
+
+.kbd-separator {
+  @apply opacity-50;
+}
