@@ -180,15 +180,16 @@ export default function MessageStream(props: MessageStreamProps) {
   const displayItems = createMemo(() => {
     const items: DisplayItem[] = []
 
-    let lastAssistantMessageId = ""
+    let lastAssistantIndex = -1
     for (let i = props.messages.length - 1; i >= 0; i--) {
       if (props.messages[i].type === "assistant") {
-        lastAssistantMessageId = props.messages[i].id
+        lastAssistantIndex = i
         break
       }
     }
 
-    for (const message of props.messages) {
+    for (let index = 0; index < props.messages.length; index++) {
+      const message = props.messages[index]
       const messageInfo = props.messagesInfo?.get(message.id)
 
       // If we hit the revert point, stop rendering messages
@@ -200,7 +201,7 @@ export default function MessageStream(props: MessageStreamProps) {
       const toolParts = message.parts.filter((p) => p.type === "tool")
       const reasoningParts = preferences().showThinkingBlocks ? message.parts.filter((p) => p.type === "reasoning") : []
 
-      const isQueued = message.type === "user" && message.id > lastAssistantMessageId
+      const isQueued = message.type === "user" && (lastAssistantIndex === -1 || index > lastAssistantIndex)
 
       if (textParts.length > 0 || reasoningParts.length > 0 || messageInfo?.error) {
         items.push({

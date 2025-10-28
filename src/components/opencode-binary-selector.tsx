@@ -67,7 +67,7 @@ const OpenCodeBinarySelector: Component<OpenCodeBinarySelectorProps> = (props) =
     onCleanup(() => {
       document.removeEventListener("click", handleClickOutside)
       // Clean up validating state on unmount
-      setValidatingPaths(new Set())
+      setValidatingPaths(new Set<string>())
       setValidating(false)
     })
   })
