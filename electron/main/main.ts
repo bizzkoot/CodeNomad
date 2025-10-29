@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron"
+import { app, BrowserWindow, dialog, ipcMain, nativeTheme } from "electron"
 import { join } from "path"
 import { createApplicationMenu } from "./menu"
 import { setupInstanceIPC } from "./ipc"
@@ -10,11 +10,15 @@ setupStorageIPC()
 let mainWindow: BrowserWindow | null = null
 
 function createWindow() {
+  const prefersDark = nativeTheme.shouldUseDarkColors
+  const backgroundColor = prefersDark ? "#1a1a1a" : "#ffffff"
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 800,
     minHeight: 600,
+    backgroundColor,
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,

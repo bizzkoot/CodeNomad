@@ -76,6 +76,22 @@
   @apply cursor-not-allowed opacity-50;
 }
 
+/* Ensure Tailwind base reset on [type="button"] doesn't remove accent styles */
+button.button-primary {
+  background-color: var(--accent-primary);
+  color: var(--text-inverted);
+}
+
+[data-theme="dark"] button.button-primary {
+  background-color: #3f3f46;
+  color: #f5f6f8;
+}
+
+[data-theme="dark"] button.button-primary:hover:not(:disabled) {
+  background-color: #52525b;
+  opacity: 1;
+}
+
 .button-secondary {
   @apply inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-base font-medium transition-colors;
   background-color: var(--surface-secondary);
@@ -378,12 +394,23 @@
   background-color: var(--surface-hover);
 }
 
+[data-theme="dark"] .tab-active {
+  background-color: #3f3f46;
+  color: #f5f6f8;
+}
+
+[data-theme="dark"] .tab-active:hover {
+  background-color: #52525b;
+}
+
 [data-theme="dark"] .tab-inactive {
-  background-color: var(--surface-muted);
+  background-color: #2a2a31;
+  color: #d4d4d8;
 }
 
 [data-theme="dark"] .tab-inactive:hover {
-  background-color: var(--surface-hover);
+  background-color: #3f3f46;
+  color: #f5f6f8;
 }
 
 .tab-label {
@@ -408,6 +435,15 @@
 
 .new-tab-button:hover {
   background-color: var(--surface-hover);
+}
+
+[data-theme="dark"] .new-tab-button {
+  background-color: #3f3f46;
+  color: #f5f6f8;
+}
+
+[data-theme="dark"] .new-tab-button:hover {
+  background-color: #52525b;
 }
 
 .new-tab-button:focus-visible {
@@ -1201,12 +1237,16 @@
 }
 
 .selector-button {
-  @apply px-3 py-1.5 text-sm rounded transition-colors cursor-pointer;
+  @apply px-3 py-1.5 text-sm rounded transition-colors cursor-pointer w-full inline-flex items-center justify-center font-medium;
+  background-color: var(--surface-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-base);
 }
 
 .selector-button-primary {
-  background-color: var(--accent-primary);
-  color: var(--text-inverted);
+  background-color: var(--accent-primary) !important;
+  color: var(--text-inverted) !important;
+  border: 1px solid var(--accent-primary) !important;
 }
 
 .selector-button-primary:hover:not(:disabled) {
@@ -1374,7 +1414,7 @@
 }
 
 .panel-section-header {
-  @apply w-full px-4 py-3 flex items-center justify-between transition-colors cursor-pointer;
+  @apply w-full px-4 py-3 flex items-center justify-center transition-colors cursor-pointer gap-2;
   background-color: var(--surface-secondary);
 }
 

@@ -58,6 +58,68 @@
   --line-height-relaxed: 1.6;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Surface tokens */
+    --surface-base: #1a1a1a;
+    --surface-secondary: #2a2a2a;
+    --surface-muted: #212529;
+    --surface-code: #1a1a1a;
+    --surface-hover: #3a3a3a;
+    
+    /* Border tokens */
+    --border-base: #3a3a3a;
+    --border-secondary: #3a3a3a;
+    --border-muted: #3a3a3a;
+    
+    /* Text tokens */
+    --text-primary: #e0e0e0;
+    --text-secondary: #999999;
+    --text-muted: #999999;
+    --text-inverted: #1a1a1a;
+    
+    /* Accent tokens */
+    --accent-primary: #0080ff;
+    --accent-hover: #0066cc;
+    
+    /* Status tokens */
+    --status-success: #4caf50;
+    --status-error: #f44336;
+    --status-warning: #ff9800;
+    
+    /* Message-specific tokens */
+    --message-user-bg: #1a2332;
+    --message-user-border: #42a5f5;
+    --message-assistant-bg: #251a2e;
+    --message-assistant-border: #ba68c8;
+    --message-tool-bg: #212529;
+    --message-tool-border: #adb5bd;
+    
+    /* Typography tokens (same as light theme) */
+    --font-family-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    
+    /* Font weights */
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    
+    /* Font sizes */
+    --font-size-xs: 11px;
+    --font-size-sm: 12px;
+    --font-size-base: 14px;
+    --font-size-lg: 16px;
+    --font-size-xl: 18px;
+    --font-size-2xl: 20px;
+    
+    /* Line heights */
+    --line-height-tight: 1.25;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.6;
+  }
+}
+
 [data-theme="dark"] {
   /* Surface tokens */
   --surface-base: #1a1a1a;
