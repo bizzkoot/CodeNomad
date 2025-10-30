@@ -18,15 +18,18 @@ const InstanceTabs: Component<InstanceTabsProps> = (props) => {
     <div class="tab-bar tab-bar-instance">
       <div class="tab-container" role="tablist">
         <div class="flex items-center gap-1 overflow-x-auto">
-          <For each={Array.from(props.instances.entries())}>
-            {([id, instance]) => (
-              <InstanceTab
-                instance={instance}
-                active={id === props.activeInstanceId}
-                onSelect={() => props.onSelect(id)}
-                onClose={() => props.onClose(id)}
-              />
-            )}
+          <For each={Array.from(props.instances.keys())}>
+            {(id) => {
+              const instance = props.instances.get(id)
+              return (
+                <InstanceTab
+                  instance={instance!}
+                  active={id === props.activeInstanceId}
+                  onSelect={() => props.onSelect(id)}
+                  onClose={() => props.onClose(id)}
+                />
+              )
+            }}
           </For>
           <button
             class="new-tab-button"
@@ -37,7 +40,7 @@ const InstanceTabs: Component<InstanceTabsProps> = (props) => {
             <Plus class="w-4 h-4" />
           </button>
         </div>
-        <Show when={Array.from(props.instances.entries()).length > 1}>
+        <Show when={props.instances.size > 1}>
           <div class="flex-shrink-0 ml-4">
             <KeyboardHint
               shortcuts={[keyboardRegistry.get("instance-prev")!, keyboardRegistry.get("instance-next")!].filter(

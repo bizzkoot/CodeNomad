@@ -152,42 +152,26 @@ const SessionList: Component<SessionListProps> = (props) => {
   })
 
   const sessionSections = createMemo(() => {
-    const parentItems: SessionListItem[] = []
-    const childItems: SessionListItem[] = []
+    const parentIds: string[] = []
+    const childIds: string[] = []
 
     for (const [id, session] of props.sessions.entries()) {
-      const item: SessionListItem = {
-        id,
-        title: session.title || "Untitled",
-        isActive: id === props.activeSessionId,
-        isParent: session.parentId === null,
-        onSelect: () => props.onSelect(id),
-        onClose: session.parentId === null ? () => props.onClose(id) : undefined,
-      }
-
       if (session.parentId === null) {
-        parentItems.push(item)
+        parentIds.push(id)
       } else {
-        childItems.push(item)
+        childIds.push(id)
       }
     }
 
-    childItems.sort((a, b) => {
-      const sessionA = props.sessions.get(a.id)
-      const sessionB = props.sessions.get(b.id)
+    childIds.sort((a, b) => {
+      const sessionA = props.sessions.get(a)
+      const sessionB = props.sessions.get(b)
       if (!sessionA || !sessionB) return 0
       return sessionB.time.updated - sessionA.time.updated
     })
 
-    parentItems.push({
-      id: "info",
-      title: "Info",
-      isSpecial: true,
-      isActive: props.activeSessionId === "info",
-      onSelect: () => props.onSelect("info"),
-    })
-
-    return { parentItems, childItems }
+    parentIds.push("info")
+    return { parentIds, childIds }
   })
 
   return (
@@ -221,30 +205,48 @@ const SessionList: Component<SessionListProps> = (props) => {
           <div class="session-section-header px-3 py-2 text-xs font-semibold text-primary/70 uppercase tracking-wide">
             User Session & Info
           </div>
-          <For each={sessionSections().parentItems}>
-            {(item) => (
-              <div class="session-list-item group">
-                <button
-                  class={`session-item-base ${
-                    item.isActive ? "session-item-active" : "session-item-inactive"
-                  } ${item.isSpecial ? "session-item-special" : ""}`}
-                  onClick={item.onSelect}
-                  title={item.title}
-                  role="button"
-                  aria-selected={item.isActive}
-                >
-                  <Show when={item.isSpecial} fallback={<MessageSquare class="w-4 h-4 flex-shrink-0" />}>
-                    <Info class="w-4 h-4 flex-shrink-0" />
-                  </Show>
+          <For each={sessionSections().parentIds}>
+            {(id) => {
+              if (id === "info") {
+                return (
+                  <div class="session-list-item group">
+                    <button
+                      class={`session-item-base ${
+                        props.activeSessionId === "info" ? "session-item-active" : "session-item-inactive"
+                      } session-item-special`}
+                      onClick={() => props.onSelect("info")}
+                      title="Info"
+                      role="button"
+                      aria-selected={props.activeSessionId === "info"}
+                    >
+                      <Info class="w-4 h-4 flex-shrink-0" />
+                      <span class="session-item-title truncate">Info</span>
+                    </button>
+                  </div>
+                )
+              }
 
-                  <span class="session-item-title truncate">{item.title}</span>
+              const session = props.sessions.get(id)
+              if (!session) return null
 
-                  <Show when={!item.isSpecial && item.onClose}>
+              return (
+                <div class="session-list-item group">
+                  <button
+                    class={`session-item-base ${
+                      id === props.activeSessionId ? "session-item-active" : "session-item-inactive"
+                    }`}
+                    onClick={() => props.onSelect(id)}
+                    title={session.title || "Untitled"}
+                    role="button"
+                    aria-selected={id === props.activeSessionId}
+                  >
+                    <MessageSquare class="w-4 h-4 flex-shrink-0" />
+                    <span class="session-item-title truncate">{session.title || "Untitled"}</span>
                     <span
                       class="session-item-close opacity-0 group-hover:opacity-100 hover:bg-status-error hover:text-white rounded p-0.5 transition-all"
                       onClick={(event) => {
                         event.stopPropagation()
-                        item.onClose?.()
+                        props.onClose(id)
                       }}
                       role="button"
                       tabIndex={0}
@@ -252,51 +254,40 @@ const SessionList: Component<SessionListProps> = (props) => {
                     >
                       <X class="w-3 h-3" />
                     </span>
-                  </Show>
-                </button>
-              </div>
-            )}
+                  </button>
+                </div>
+              )
+            }}
           </For>
         </div>
 
-        <Show when={sessionSections().childItems.length > 0}>
+        <Show when={sessionSections().childIds.length > 0}>
           <div class="session-section">
             <div class="session-section-header px-3 py-2 text-xs font-semibold text-primary/70 uppercase tracking-wide">
               Agent Sessions
             </div>
-            <For each={sessionSections().childItems}>
-              {(item) => (
-                <div class="session-list-item group">
-                  <button
-                    class={`session-item-base ${
-                      item.isActive ? "session-item-active" : "session-item-inactive"
-                    } ${item.isSpecial ? "session-item-special" : ""}`}
-                    onClick={item.onSelect}
-                    title={item.title}
-                    role="button"
-                    aria-selected={item.isActive}
-                  >
-                    <MessageSquare class="w-4 h-4 flex-shrink-0" />
+            <For each={sessionSections().childIds}>
+              {(id) => {
+                const session = props.sessions.get(id)
+                if (!session) return null
 
-                    <span class="session-item-title truncate">{item.title}</span>
-
-                    <Show when={!item.isSpecial && item.onClose}>
-                      <span
-                        class="session-item-close opacity-0 group-hover:opacity-100 hover:bg-status-error hover:text-white rounded p-0.5 transition-all"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          item.onClose?.()
-                        }}
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Close session"
-                      >
-                        <X class="w-3 h-3" />
-                      </span>
-                    </Show>
-                  </button>
-                </div>
-              )}
+                return (
+                  <div class="session-list-item group">
+                    <button
+                      class={`session-item-base ${
+                        id === props.activeSessionId ? "session-item-active" : "session-item-inactive"
+                      }`}
+                      onClick={() => props.onSelect(id)}
+                      title={session.title || "Untitled"}
+                      role="button"
+                      aria-selected={id === props.activeSessionId}
+                    >
+                      <MessageSquare class="w-4 h-4 flex-shrink-0" />
+                      <span class="session-item-title truncate">{session.title || "Untitled"}</span>
+                    </button>
+                  </div>
+                )
+              }}
             </For>
           </div>
         </Show>
