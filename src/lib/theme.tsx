@@ -20,9 +20,9 @@ function applyTheme(dark: boolean) {
 
 export function ThemeProvider(props: { children: JSX.Element }) {
   const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)")
-  const [isDark, setIsDarkSignal] = createSignal(systemPrefersDark.matches)
+  const [isDark, setIsDarkSignal] = createSignal(true) //systemPrefersDark.matches)
 
-  applyTheme(systemPrefersDark.matches)
+  applyTheme(true) //systemPrefersDark.matches)
 
   async function loadTheme() {
     try {
@@ -31,13 +31,13 @@ export function ThemeProvider(props: { children: JSX.Element }) {
       let themeDark: boolean
 
       if (savedTheme === "system") {
-        themeDark = systemPrefersDark.matches
+        themeDark = true //systemPrefersDark.matches
       } else if (savedTheme === "dark") {
         themeDark = true
       } else if (savedTheme === "light") {
-        themeDark = false
+        themeDark = true //false
       } else {
-        themeDark = systemPrefersDark.matches
+        themeDark = true //systemPrefersDark.matches
       }
 
       setIsDarkSignal(themeDark)

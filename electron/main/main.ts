@@ -10,7 +10,7 @@ setupStorageIPC()
 let mainWindow: BrowserWindow | null = null
 
 function createWindow() {
-  const prefersDark = nativeTheme.shouldUseDarkColors
+  const prefersDark = true //nativeTheme.shouldUseDarkColors
   const backgroundColor = prefersDark ? "#1a1a1a" : "#ffffff"
 
   mainWindow = new BrowserWindow({

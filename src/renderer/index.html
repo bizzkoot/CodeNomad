@@ -8,28 +8,28 @@
       :root {
         color-scheme: light dark;
       }
-      html,
+      /* html,
       body {
         background-color: #ffffff;
         color: #1a1a1a;
       }
-      @media (prefers-color-scheme: dark) {
+      @media (prefers-color-scheme: dark) { */
         html,
         body {
           background-color: #1a1a1a;
           color: #e0e0e0;
         }
-      }
+      /* } */
     </style>
     <script>
       ;(function () {
         try {
           const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-          if (prefersDark) {
+          // if (prefersDark) {
             document.documentElement.setAttribute('data-theme', 'dark')
-          } else {
-            document.documentElement.removeAttribute('data-theme')
-          }
+          // } else {
+          //   document.documentElement.removeAttribute('data-theme')
+          // }
         } catch (error) {
           console.warn('Failed to apply initial theme', error)
         }
