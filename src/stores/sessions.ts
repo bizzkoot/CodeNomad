@@ -649,6 +649,14 @@ function getSessionFamily(instanceId: string, parentId: string): Session[] {
   return [parent, ...children]
 }
 
+function isSessionBusy(instanceId: string, sessionId: string): boolean {
+  const instanceSessions = sessions().get(instanceId)
+  if (!instanceSessions) return false
+  if (!instanceSessions.has(sessionId)) return false
+
+  return true
+}
+
 async function loadMessages(instanceId: string, sessionId: string, force = false): Promise<void> {
   // If force reload, clear the loaded cache
   if (force) {
@@ -1416,6 +1424,7 @@ export {
   getParentSessions,
   getChildSessions,
   getSessionFamily,
+  isSessionBusy,
   updateSessionAgent,
   updateSessionModel,
   getDefaultModel,

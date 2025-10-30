@@ -43,7 +43,11 @@ class KeyboardRegistry {
   }
 
   private matches(event: KeyboardEvent, shortcut: KeyboardShortcut): boolean {
-    const keyMatch = event.key.toLowerCase() === shortcut.key.toLowerCase()
+    const shortcutKey = shortcut.key.toLowerCase()
+    const eventKey = event.key ? event.key.toLowerCase() : ""
+    const eventCode = event.code ? event.code.toLowerCase() : ""
+
+    const keyMatch = eventKey === shortcutKey || eventCode === shortcutKey
     const ctrlMatch = event.ctrlKey === (shortcut.modifiers.ctrl ?? false)
     const metaMatch = event.metaKey === (shortcut.modifiers.meta ?? false)
     const shiftMatch = event.shiftKey === (shortcut.modifiers.shift ?? false)

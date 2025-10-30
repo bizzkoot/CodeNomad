@@ -52,6 +52,7 @@ import {
   updateSessionAgent,
   updateSessionModel,
   agents,
+  isSessionBusy,
 } from "./stores/sessions"
 import { setupTabKeyboardShortcuts } from "./lib/keyboard"
 import { isOpen as isCommandPaletteOpen, showCommandPalette, hideCommandPalette } from "./stores/command-palette"
@@ -725,17 +726,9 @@ const App: Component = () => {
 
         const sessions = getSessions(instance.id)
         const session = sessions.find((s) => s.id === sessionId)
-        if (!session || session.messages.length === 0) return false
+        if (!session) return false
 
-        const lastMessage = session.messages[session.messages.length - 1]
-        const messageInfo = session.messagesInfo.get(lastMessage.id)
-
-        const timeCompleted = messageInfo?.time?.completed
-        return (
-          lastMessage.type === "assistant" &&
-          messageInfo !== undefined &&
-          (timeCompleted === undefined || timeCompleted === 0)
-        )
+        return isSessionBusy(instance.id, sessionId)
       },
       async () => {
         if (showFolderSelection()) {
