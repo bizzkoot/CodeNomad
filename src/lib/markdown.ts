@@ -71,7 +71,8 @@ function resolveLanguage(token: string): { canonical: string | null; raw: string
 
   // Check aliases
   for (const [key, lang] of Object.entries(bundledLanguages)) {
-    if (lang.aliases?.includes(normalized)) {
+    const aliases = (lang as { aliases?: string[] }).aliases
+    if (aliases?.includes(normalized)) {
       return { canonical: key, raw: normalized }
     }
   }
@@ -114,7 +115,7 @@ async function ensureLanguages(content: string) {
     languageLoadQueue.push(async () => {
       try {
         const h = await getOrCreateHighlighter()
-        await h.loadLanguage(langKey)
+        await h.loadLanguage(langKey as never)
         loadedLanguages.add(langKey)
         triggerLanguageListeners()
       } catch {
@@ -129,6 +130,52 @@ async function ensureLanguages(content: string) {
   if (languageLoadQueue.length > 0 && !isQueueRunning) {
     runLanguageLoadQueue()
   }
+}
+
+export function decodeHtmlEntities(content: string): string {
+  if (!content.includes("&")) {
+    return content
+  }
+
+  const entityPattern = /&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]+);/g
+  const namedEntities: Record<string, string> = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: " ",
+  }
+
+  let result = content
+  let previous = ""
+
+  while (result.includes("&") && result !== previous) {
+    previous = result
+    result = result.replace(entityPattern, (match, entity) => {
+      if (!entity) {
+        return match
+      }
+
+      if (entity[0] === "#") {
+        const isHex = entity[1]?.toLowerCase() === "x"
+        const value = isHex ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10)
+        if (!Number.isNaN(value)) {
+          try {
+            return String.fromCodePoint(value)
+          } catch {
+            return match
+          }
+        }
+        return match
+      }
+
+      const decoded = namedEntities[entity.toLowerCase()]
+      return decoded !== undefined ? decoded : match
+    })
+  }
+
+  return result
 }
 
 async function runLanguageLoadQueue() {
@@ -161,7 +208,8 @@ function setupRenderer(isDark: boolean) {
   const renderer = new marked.Renderer()
 
   renderer.code = (code: string, lang: string | undefined) => {
-    const encodedCode = encodeURIComponent(code)
+    const decodedCode = decodeHtmlEntities(code)
+    const encodedCode = encodeURIComponent(decodedCode)
 
     // Use "text" as default when no language is specified
     const resolvedLang = lang && lang.trim() ? lang.trim() : "text"
@@ -182,7 +230,7 @@ function setupRenderer(isDark: boolean) {
 
     // Skip highlighting for "text" language or when highlighter is not available
     if (resolvedLang === "text" || !highlighter) {
-      return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}<pre><code>${escapeHtml(code)}</code></pre></div>`
+      return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}<pre><code>${escapeHtml(decodedCode)}</code></pre></div>`
     }
 
     // Resolve language and check if it's loaded
@@ -191,13 +239,13 @@ function setupRenderer(isDark: boolean) {
 
     // Skip highlighting for "text" aliases
     if (langKey === "text" || raw === "text") {
-      return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}<pre><code>${escapeHtml(code)}</code></pre></div>`
+      return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}<pre><code>${escapeHtml(decodedCode)}</code></pre></div>`
     }
 
     // Use highlighting if language is loaded, otherwise fall back to plain code
     if (loadedLanguages.has(langKey)) {
       try {
-        const html = highlighter.codeToHtml(code, {
+        const html = highlighter.codeToHtml(decodedCode, {
           lang: langKey,
           theme: currentTheme === "dark" ? "github-dark" : "github-light",
         })
@@ -207,7 +255,7 @@ function setupRenderer(isDark: boolean) {
       }
     }
 
-    return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}<pre><code class="language-${escapedLang}">${escapeHtml(code)}</code></pre></div>`
+    return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}<pre><code class="language-${escapedLang}">${escapeHtml(decodedCode)}</code></pre></div>`
   }
 
   renderer.link = (href: string, title: string | null | undefined, text: string) => {
@@ -216,7 +264,8 @@ function setupRenderer(isDark: boolean) {
   }
 
   renderer.codespan = (code: string) => {
-    return `<code class="inline-code">${escapeHtml(code)}</code>`
+    const decoded = decodeHtmlEntities(code)
+    return `<code class="inline-code">${escapeHtml(decoded)}</code>`
   }
 
   marked.use({ renderer })
@@ -237,11 +286,13 @@ export async function renderMarkdown(content: string): Promise<string> {
     await initMarkdown(currentTheme === "dark")
   }
 
+  const decoded = decodeHtmlEntities(content)
+
   // Queue language loading but don't wait for it to complete
-  await ensureLanguages(content)
+  await ensureLanguages(decoded)
 
   // Proceed to parse immediately - highlighting will be available on next render
-  return marked.parse(content) as Promise<string>
+  return marked.parse(decoded) as Promise<string>
 }
 
 export async function getSharedHighlighter(): Promise<Highlighter> {
@@ -252,9 +303,8 @@ export function escapeHtml(text: string): string {
   const map: Record<string, string> = {
     "&": "&amp;",
     "<": "&lt;",
-    ">": "&gt;",
     '"': "&quot;",
     "'": "&#039;",
   }
-  return text.replace(/[&<>"']/g, (m) => map[m])
+  return text.replace(/[&<"']/g, (m) => map[m])
 }

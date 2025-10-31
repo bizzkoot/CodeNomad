@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onMount, onCleanup } from "solid-js"
-import { renderMarkdown, onLanguagesLoaded, initMarkdown } from "../lib/markdown"
+import { renderMarkdown, onLanguagesLoaded, initMarkdown, decodeHtmlEntities } from "../lib/markdown"
 import type { TextPart } from "../types/message"
 
 interface MarkdownProps {
@@ -15,7 +15,8 @@ export function Markdown(props: MarkdownProps) {
 
   createEffect(async () => {
     const part = props.part
-    const text = part.text || ""
+    const rawText = typeof part.text === "string" ? part.text : ""
+    const text = decodeHtmlEntities(rawText)
     const dark = Boolean(props.isDark)
     const themeKey = dark ? "dark" : "light"
 
@@ -72,7 +73,8 @@ export function Markdown(props: MarkdownProps) {
     // Register listener for language loading completion
     const cleanupLanguageListener = onLanguagesLoaded(async () => {
       const part = props.part
-      const text = part.text || ""
+      const rawText = typeof part.text === "string" ? part.text : ""
+      const text = decodeHtmlEntities(rawText)
 
       if (latestRequestedText !== text) {
         return
