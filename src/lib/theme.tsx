@@ -21,6 +21,7 @@ function applyTheme(dark: boolean) {
 export function ThemeProvider(props: { children: JSX.Element }) {
   const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)")
   const [isDark, setIsDarkSignal] = createSignal(true) //systemPrefersDark.matches)
+  let themePreference: "system" | "dark" | "light" = "dark"
 
   applyTheme(true) //systemPrefersDark.matches)
 
@@ -31,20 +32,25 @@ export function ThemeProvider(props: { children: JSX.Element }) {
       let themeDark: boolean
 
       if (savedTheme === "system") {
-        themeDark = true //systemPrefersDark.matches
+        themePreference = "system"
+        themeDark = systemPrefersDark.matches
       } else if (savedTheme === "dark") {
+        themePreference = "dark"
         themeDark = true
       } else if (savedTheme === "light") {
-        themeDark = true //false
+        themePreference = "light"
+        themeDark = false
       } else {
-        themeDark = true //systemPrefersDark.matches
+        themePreference = "dark"
+        themeDark = true
       }
 
       setIsDarkSignal(themeDark)
       applyTheme(themeDark)
     } catch (error) {
       console.warn("Failed to load theme from config:", error)
-      const themeDark = systemPrefersDark.matches
+      themePreference = "dark"
+      const themeDark = true
       setIsDarkSignal(themeDark)
       applyTheme(themeDark)
     }
@@ -53,7 +59,9 @@ export function ThemeProvider(props: { children: JSX.Element }) {
   async function saveTheme(dark: boolean) {
     try {
       const config = await storage.loadConfig()
-      ;(config as any).theme = dark ? "dark" : "light"
+      const nextPreference = dark ? "dark" : "light"
+      ;(config as any).theme = nextPreference
+      themePreference = nextPreference
       await storage.saveConfig(config)
     } catch (error) {
       console.warn("Failed to save theme to config:", error)
@@ -68,12 +76,10 @@ export function ThemeProvider(props: { children: JSX.Element }) {
     })
 
     // Listen for system theme changes
-    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
-      const config = (window as any).currentConfig
-      const savedTheme = config?.theme
-      if (!savedTheme || savedTheme === "system") {
-        setIsDarkSignal(e.matches)
-        applyTheme(e.matches)
+    const handleSystemThemeChange = (event: MediaQueryListEvent) => {
+      if (themePreference === "system") {
+        setIsDarkSignal(event.matches)
+        applyTheme(event.matches)
       }
     }
 
