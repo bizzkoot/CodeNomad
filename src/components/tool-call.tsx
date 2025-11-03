@@ -290,10 +290,15 @@ export default function ToolCall(props: ToolCallProps) {
 
     const isLarge = toolName === "edit" || toolName === "write" || toolName === "patch"
     const messageClass = `message-text tool-call-markdown${isLarge ? " tool-call-markdown-large" : ""}`
+    const disableHighlight = state?.status === "running"
 
     return (
       <div class={messageClass}>
-        <Markdown part={{ type: "text", text: content }} isDark={isDark()} />
+        <Markdown
+          part={{ type: "text", text: content }}
+          isDark={isDark()}
+          disableHighlight={disableHighlight}
+        />
       </div>
     )
   }

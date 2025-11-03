@@ -5,6 +5,7 @@ let highlighter: Highlighter | null = null
 let highlighterPromise: Promise<Highlighter> | null = null
 let currentTheme: "light" | "dark" = "light"
 let isInitialized = false
+let highlightSuppressed = false
 
 // Track loaded languages and queue for on-demand loading
 const loadedLanguages = new Set<string>()
@@ -81,6 +82,9 @@ function resolveLanguage(token: string): { canonical: string | null; raw: string
 }
 
 async function ensureLanguages(content: string) {
+  if (highlightSuppressed) {
+    return
+  }
   // Parse code fences to extract language tokens
   // Updated regex to capture optional language tokens and handle trailing annotations
   const codeBlockRegex = /```[ \t]*([A-Za-z0-9_.+#-]+)?[^`]*?```/g
@@ -228,6 +232,10 @@ function setupRenderer(isDark: boolean) {
 </div>
 `.trim()
 
+    if (highlightSuppressed) {
+      return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}<pre><code class="language-${escapedLang}">${escapeHtml(decodedCode)}</code></pre></div>`
+    }
+
     // Skip highlighting for "text" language or when highlighter is not available
     if (resolvedLang === "text" || !highlighter) {
       return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}<pre><code>${escapeHtml(decodedCode)}</code></pre></div>`
@@ -281,18 +289,33 @@ export function isMarkdownReady(): boolean {
   return isInitialized && highlighter !== null
 }
 
-export async function renderMarkdown(content: string): Promise<string> {
+export async function renderMarkdown(
+  content: string,
+  options?: {
+    suppressHighlight?: boolean
+  },
+): Promise<string> {
   if (!isInitialized) {
     await initMarkdown(currentTheme === "dark")
   }
 
+  const suppressHighlight = options?.suppressHighlight ?? false
   const decoded = decodeHtmlEntities(content)
 
-  // Queue language loading but don't wait for it to complete
-  await ensureLanguages(decoded)
+  if (!suppressHighlight) {
+    // Queue language loading but don't wait for it to complete
+    await ensureLanguages(decoded)
+  }
 
-  // Proceed to parse immediately - highlighting will be available on next render
-  return marked.parse(decoded) as Promise<string>
+  const previousSuppressed = highlightSuppressed
+  highlightSuppressed = suppressHighlight
+
+  try {
+    // Proceed to parse immediately - highlighting will be available on next render
+    return marked.parse(decoded) as Promise<string>
+  } finally {
+    highlightSuppressed = previousSuppressed
+  }
 }
 
 export async function getSharedHighlighter(): Promise<Highlighter> {

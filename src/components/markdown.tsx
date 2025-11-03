@@ -6,6 +6,7 @@ interface MarkdownProps {
   part: TextPart
   isDark?: boolean
   size?: "base" | "sm" | "tight"
+  disableHighlight?: boolean
 }
 
 export function Markdown(props: MarkdownProps) {
@@ -19,10 +20,29 @@ export function Markdown(props: MarkdownProps) {
     const text = decodeHtmlEntities(rawText)
     const dark = Boolean(props.isDark)
     const themeKey = dark ? "dark" : "light"
+    const highlightEnabled = !props.disableHighlight
 
     latestRequestedText = text
 
     await initMarkdown(dark)
+
+    if (!highlightEnabled) {
+      part.renderCache = undefined
+
+      try {
+        const rendered = await renderMarkdown(text, { suppressHighlight: true })
+
+        if (latestRequestedText === text) {
+          setHtml(rendered)
+        }
+      } catch (error) {
+        console.error("Failed to render markdown:", error)
+        if (latestRequestedText === text) {
+          setHtml(text)
+        }
+      }
+      return
+    }
 
     const cache = part.renderCache
     if (cache && cache.text === text && cache.theme === themeKey) {
@@ -72,6 +92,10 @@ export function Markdown(props: MarkdownProps) {
 
     // Register listener for language loading completion
     const cleanupLanguageListener = onLanguagesLoaded(async () => {
+      if (props.disableHighlight) {
+        return
+      }
+
       const part = props.part
       const rawText = typeof part.text === "string" ? part.text : ""
       const text = decodeHtmlEntities(rawText)
