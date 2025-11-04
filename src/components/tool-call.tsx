@@ -178,21 +178,6 @@ export default function ToolCall(props: ToolCallProps) {
     setInitializedId(id)
   })
 
-  // Restore scroll position when content updates
-  createEffect(() => {
-    const id = toolCallId()
-    const element = markdownContainerRef
-    if (!id || !element) return
-
-    const tool = toolName()
-    if (tool === "todowrite" || tool === "task") return
-
-    const content = getMarkdownContent(tool, props.toolCall?.state || {})
-    if (!content) return
-
-    restoreScrollState(id, element)
-  })
-
   // Cleanup cache entry when component unmounts or toolCallId changes
   createEffect(() => {
     const id = toolCallId()
