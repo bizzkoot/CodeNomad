@@ -21,7 +21,6 @@ export interface Message {
   timestamp: number
   status: "sending" | "sent" | "streaming" | "complete" | "error"
   version: number
-  partVersions?: Map<string, number>
   displayParts?: MessageDisplayParts
 }
 
@@ -29,6 +28,7 @@ export interface TextPart {
   id?: string
   type: "text"
   text: string
+  version?: number
   synthetic?: boolean
   renderCache?: RenderCache
 }

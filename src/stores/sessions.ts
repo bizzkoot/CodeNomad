@@ -185,33 +185,17 @@ export function computeDisplayParts(message: Message, showThinking: boolean): Me
   return { text, tool, reasoning, combined, showThinking, version }
 }
 
-function ensurePartVersionsMap(message: Message) {
-  if (!message.partVersions) {
-    message.partVersions = new Map()
-  }
-  return message.partVersions
+function initializePartVersion(part: any, version = 0) {
+  if (!part || typeof part !== "object") return
+  const partAny = part as any
+  partAny.version = typeof partAny.version === "number" ? partAny.version : version
 }
 
-function initializePartVersion(message: Message, part: any) {
-  const partId = typeof part?.id === "string" ? part.id : null
-  if (!partId) return
-  const versions = ensurePartVersionsMap(message)
-  if (!versions.has(partId)) {
-    versions.set(partId, 0)
-  }
-  const partAny = part as any
-  partAny.__version = versions.get(partId)
-}
-
-function bumpPartVersion(message: Message, part: any): number | undefined {
-  const partId = typeof part?.id === "string" ? part.id : null
-  if (!partId) return undefined
-  const versions = ensurePartVersionsMap(message)
-  const next = (versions.get(partId) ?? 0) + 1
-  versions.set(partId, next)
-  const partAny = part as any
-  partAny.__version = next
-  return next
+function bumpPartVersion(previousPart: any, nextPart: any): number {
+  const prevVersion = typeof previousPart?.version === "number" ? previousPart.version : -1
+  const nextVersion = prevVersion + 1
+  initializePartVersion(nextPart, nextVersion)
+  return nextVersion
 }
 
 function withSession(instanceId: string, sessionId: string, updater: (session: Session) => void) {
@@ -836,10 +820,9 @@ async function loadMessages(instanceId: string, sessionId: string, force = false
         timestamp: info.time?.created || Date.now(),
         status: "complete" as const,
         version: 0,
-        partVersions: new Map(),
       }
 
-      parts.forEach((part: any) => initializePartVersion(message, part))
+      parts.forEach((part: any) => initializePartVersion(part))
 
       message.displayParts = computeDisplayParts(message, preferences().showThinkingBlocks)
 
@@ -956,10 +939,9 @@ function handleMessageUpdate(instanceId: string, event: any): void {
         timestamp: Date.now(),
         status: "streaming" as const,
         version: 0,
-        partVersions: new Map(),
       }
 
-      initializePartVersion(newMessage, part)
+      initializePartVersion(part)
       newMessage.displayParts = computeDisplayParts(newMessage, preferences().showThinkingBlocks)
 
       let insertIndex = session.messages.length
@@ -1017,11 +999,11 @@ function handleMessageUpdate(instanceId: string, event: any): void {
       const partIndex = partMap.get(part.id)
 
       if (partIndex === undefined) {
+        initializePartVersion(part)
         baseParts.push(part)
         if (part.id && typeof part.id === "string") {
           partMap.set(part.id, baseParts.length - 1)
         }
-        initializePartVersion(message, part)
         shouldIncrementVersion = true
         // Clear render cache for new text parts
         if (part.type === "text") {
@@ -1040,8 +1022,8 @@ function handleMessageUpdate(instanceId: string, event: any): void {
           return
         }
 
+        bumpPartVersion(previousPart, part)
         baseParts[partIndex] = part
-        bumpPartVersion(message, part)
         if (part.type !== "text" || !previousPart || previousPart.text !== part.text) {
           shouldIncrementVersion = true
           // Clear render cache when text changes
@@ -1347,10 +1329,9 @@ async function sendMessage(
     timestamp: Date.now(),
     status: "sending",
     version: 0,
-    partVersions: new Map(),
   }
 
-  optimisticParts.forEach((part: any) => initializePartVersion(optimisticMessage, part))
+  optimisticParts.forEach((part: any) => initializePartVersion(part))
 
   optimisticMessage.displayParts = computeDisplayParts(optimisticMessage, preferences().showThinkingBlocks)
 

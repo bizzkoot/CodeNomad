@@ -4,8 +4,6 @@ import { Markdown } from "./markdown"
 import { useTheme } from "../lib/theme"
 import type { TextPart } from "../types/message"
 
-// Module-level cache for stable TextPart objects per tool call
-const markdownPartCache = new Map<string, TextPart>()
 const toolScrollState = new Map<string, { scrollTop: number; atBottom: boolean }>()
 
 function updateScrollState(id: string, element: HTMLElement) {
@@ -37,27 +35,6 @@ function restoreScrollState(id: string, element: HTMLElement) {
   })
 }
 
-function getCachedMarkdownPart(id: string, text: string): TextPart {
-  if (!id) {
-    // No caching case - return fresh object
-    return { type: "text", text }
-  }
-
-  const part = markdownPartCache.get(id)
-  if (!part) {
-    const freshPart: TextPart = { type: "text", text }
-    markdownPartCache.set(id, freshPart)
-    return freshPart
-  }
-
-  if (part.text !== text) {
-    const freshPart: TextPart = { type: "text", text }
-    markdownPartCache.set(id, freshPart)
-    return freshPart
-  }
-
-  return part
-}
 
 interface ToolCallProps {
   toolCall: any
@@ -184,7 +161,6 @@ export default function ToolCall(props: ToolCallProps) {
     if (!id) return
 
     onCleanup(() => {
-      markdownPartCache.delete(id)
       toolScrollState.delete(id)
     })
   })
@@ -367,7 +343,7 @@ export default function ToolCall(props: ToolCallProps) {
     const messageClass = `message-text tool-call-markdown${isLarge ? " tool-call-markdown-large" : ""}`
     const disableHighlight = state?.status === "running"
 
-    const cachedPart = getCachedMarkdownPart(toolCallId(), content)
+    const markdownPart: TextPart = { type: "text", text: content }
 
     return (
       <div
@@ -390,7 +366,7 @@ export default function ToolCall(props: ToolCallProps) {
         onScroll={(event) => updateScrollState(toolCallId(), event.currentTarget)}
       >
         <Markdown
-          part={cachedPart}
+          part={markdownPart}
           isDark={isDark()}
           disableHighlight={disableHighlight}
           onRendered={handleMarkdownRendered}
