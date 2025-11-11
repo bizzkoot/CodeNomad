@@ -1,23 +1,22 @@
 import { createSignal } from "solid-js"
+import { 
+  MessageUpdateEvent, 
+  MessageRemovedEvent, 
+  MessagePartUpdatedEvent, 
+  MessagePartRemovedEvent 
+} from "../types/message"
+import type {
+  EventSessionUpdated,
+  EventSessionCompacted,
+  EventSessionError,
+  EventSessionIdle
+} from "@opencode-ai/sdk"
 
 interface SSEConnection {
   instanceId: string
   eventSource: EventSource
   reconnectAttempts: number
   status: "connecting" | "connected" | "disconnected" | "error"
-}
-
-interface MessageUpdateEvent {
-  type: "message_updated"
-  sessionId: string
-  messageId: string
-  parts: any[]
-  status: string
-}
-
-interface SessionUpdateEvent {
-  type: "session_updated"
-  session: any
 }
 
 interface TuiToastEvent {
@@ -30,12 +29,17 @@ interface TuiToastEvent {
   }
 }
 
-interface SessionIdleEvent {
-  type: "session.idle"
-  properties: {
-    sessionID: string
-  }
-}
+type SSEEvent = 
+  | MessageUpdateEvent
+  | MessageRemovedEvent
+  | MessagePartUpdatedEvent
+  | MessagePartRemovedEvent
+  | EventSessionUpdated
+  | EventSessionCompacted
+  | EventSessionError
+  | EventSessionIdle
+  | TuiToastEvent
+  | { type: string; properties?: Record<string, unknown> } // Fallback for unknown event types
 
 const [connectionStatus, setConnectionStatus] = createSignal<
   Map<string, "connecting" | "connected" | "disconnected" | "error">
@@ -98,34 +102,36 @@ class SSEManager {
     }
   }
 
-  private handleEvent(instanceId: string, event: any): void {
+  private handleEvent(instanceId: string, event: SSEEvent): void {
     console.log("[SSE] Received event:", event.type, event)
 
     switch (event.type) {
       case "message.updated":
+        this.onMessageUpdate?.(instanceId, event as MessageUpdateEvent)
+        break
       case "message.part.updated":
-        this.onMessageUpdate?.(instanceId, event)
+        this.onMessagePartUpdated?.(instanceId, event as MessagePartUpdatedEvent)
         break
       case "message.removed":
-        this.onMessageRemoved?.(instanceId, event)
+        this.onMessageRemoved?.(instanceId, event as MessageRemovedEvent)
         break
       case "message.part.removed":
-        this.onMessagePartRemoved?.(instanceId, event)
+        this.onMessagePartRemoved?.(instanceId, event as MessagePartRemovedEvent)
         break
       case "session.updated":
-        this.onSessionUpdate?.(instanceId, event)
+        this.onSessionUpdate?.(instanceId, event as EventSessionUpdated)
         break
       case "session.compacted":
-        this.onSessionCompacted?.(instanceId, event)
+        this.onSessionCompacted?.(instanceId, event as EventSessionCompacted)
         break
       case "session.error":
-        this.onSessionError?.(instanceId, event)
+        this.onSessionError?.(instanceId, event as EventSessionError)
         break
       case "tui.toast.show":
         this.onTuiToast?.(instanceId, event as TuiToastEvent)
         break
       case "session.idle":
-        this.onSessionIdle?.(instanceId, event as SessionIdleEvent)
+        this.onSessionIdle?.(instanceId, event as EventSessionIdle)
         break
       default:
         console.warn("[SSE] Unknown event type:", event.type)
@@ -162,13 +168,14 @@ class SSEManager {
   }
 
   onMessageUpdate?: (instanceId: string, event: MessageUpdateEvent) => void
-  onMessageRemoved?: (instanceId: string, event: any) => void
-  onMessagePartRemoved?: (instanceId: string, event: any) => void
-  onSessionUpdate?: (instanceId: string, event: SessionUpdateEvent) => void
-  onSessionCompacted?: (instanceId: string, event: any) => void
-  onSessionError?: (instanceId: string, event: any) => void
+  onMessageRemoved?: (instanceId: string, event: MessageRemovedEvent) => void
+  onMessagePartUpdated?: (instanceId: string, event: MessagePartUpdatedEvent) => void
+  onMessagePartRemoved?: (instanceId: string, event: MessagePartRemovedEvent) => void
+  onSessionUpdate?: (instanceId: string, event: EventSessionUpdated) => void
+  onSessionCompacted?: (instanceId: string, event: EventSessionCompacted) => void
+  onSessionError?: (instanceId: string, event: EventSessionError) => void
   onTuiToast?: (instanceId: string, event: TuiToastEvent) => void
-  onSessionIdle?: (instanceId: string, event: SessionIdleEvent) => void
+  onSessionIdle?: (instanceId: string, event: EventSessionIdle) => void
 
   getStatus(instanceId: string): "connecting" | "connected" | "disconnected" | "error" | null {
     return connectionStatus().get(instanceId) ?? null

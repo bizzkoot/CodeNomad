@@ -7,20 +7,40 @@ import { getLanguageFromPath } from "../lib/markdown"
 import { isRenderableDiffText } from "../lib/diff-utils"
 import { getToolRenderCache, setToolRenderCache } from "../lib/tool-render-cache"
 import { preferences, setDiffViewMode, type DiffViewMode } from "../stores/preferences"
-import type { TextPart } from "../types/message"
+import type { TextPart, SDKPart, ClientPart } from "../types/message"
+
+type ToolCallPart = Extract<ClientPart, { type: "tool" }>
+
+// Import ToolState types from SDK
+type ToolState = import("@opencode-ai/sdk").ToolState
+type ToolStateRunning = import("@opencode-ai/sdk").ToolStateRunning  
+type ToolStateCompleted = import("@opencode-ai/sdk").ToolStateCompleted
+type ToolStateError = import("@opencode-ai/sdk").ToolStateError
+
+// Type guards
+function isToolStateRunning(state: ToolState): state is ToolStateRunning {
+  return state.status === "running"
+}
+
+function isToolStateCompleted(state: ToolState): state is ToolStateCompleted {
+  return state.status === "completed"
+}
+
+function isToolStateError(state: ToolState): state is ToolStateError {
+  return state.status === "error"
+}
 
 
 const toolScrollState = new Map<string, { scrollTop: number; atBottom: boolean }>()
 
 function makeRenderCacheKey(
-  baseId?: string | null,
+  toolCallId?: string | null,
   messageId?: string,
   messageVersion?: number,
   partVersion?: number,
 ) {
-  if (!baseId && !messageId) return undefined
   const suffix = `${messageVersion ?? 0}:${partVersion ?? 0}`
-  const keyBase = baseId || messageId || "tool"
+  const keyBase = `${messageId}:${toolCallId}`
   return `${keyBase}::${suffix}`
 }
 
@@ -55,7 +75,7 @@ function restoreScrollState(id: string, element: HTMLElement) {
 
 
 interface ToolCallProps {
-  toolCall: any
+  toolCall: Extract<ClientPart, { type: "tool" }>
   toolCallId?: string
   messageId?: string
   messageVersion?: number
@@ -122,12 +142,17 @@ interface DiffPayload {
   filePath?: string
 }
 
-function extractDiffPayload(toolName: string, state: any): DiffPayload | null {
+function extractDiffPayload(toolName: string, state: ToolState): DiffPayload | null {
 
   if (!diffCapableTools.has(toolName)) return null
   if (!state) return null
-  const metadata = state.metadata || {}
-  const candidates = [metadata.diff, state.output, metadata.output]
+  
+  const metadata = (isToolStateRunning(state) || isToolStateCompleted(state) || isToolStateError(state))
+    ? state.metadata || {}
+    : {}
+  
+  const output = isToolStateCompleted(state) ? state.output : undefined
+  const candidates = [metadata.diff, output, metadata.output]
   let diffText: string | null = null
 
   for (const candidate of candidates) {
@@ -141,8 +166,12 @@ function extractDiffPayload(toolName: string, state: any): DiffPayload | null {
     return null
   }
 
-  const input = state.input || {}
-  const filePath = input.filePath || metadata.filePath || input.path
+  const input = (isToolStateRunning(state) || isToolStateCompleted(state) || isToolStateError(state))
+    ? state.input as Record<string, unknown>
+    : {}
+  const filePath = (typeof input.filePath === "string" ? input.filePath : undefined) || 
+                   (typeof metadata.filePath === "string" ? metadata.filePath : undefined) || 
+                   (typeof input.path === "string" ? input.path : undefined)
 
   return { diffText, filePath }
 }
@@ -202,7 +231,12 @@ export default function ToolCall(props: ToolCallProps) {
 
   createEffect(() => {
     if (props.toolCall?.tool !== "task") return
-    const summarySignature = JSON.stringify(props.toolCall?.state?.metadata?.summary ?? [])
+    const state = props.toolCall?.state
+    const summarySignature = JSON.stringify(
+      state && (isToolStateRunning(state) || isToolStateCompleted(state) || isToolStateError(state))
+        ? state.metadata?.summary ?? [] 
+        : []
+    )
     requestAnimationFrame(() => {
       void summarySignature
       handleScrollRendered()
@@ -288,14 +322,20 @@ export default function ToolCall(props: ToolCallProps) {
 
   const renderToolTitle = () => {
     const toolName = props.toolCall?.tool || ""
-    const state = props.toolCall?.state || {}
-    const input = state.input || {}
+    const state = props.toolCall?.state
 
-    if (state.status === "pending") {
-      return renderToolAction()
+    if (!state) return renderToolAction()
+    if (state.status === "pending") return renderToolAction()
+
+    const input = (isToolStateRunning(state) || isToolStateCompleted(state) || isToolStateError(state)) 
+      ? (state.input as Record<string, unknown>)
+      : {} as Record<string, unknown>
+
+    if (isToolStateRunning(state) && state.title) {
+      return state.title
     }
-
-    if (state.title) {
+    
+    if (isToolStateCompleted(state)) {
       return state.title
     }
 
@@ -303,20 +343,20 @@ export default function ToolCall(props: ToolCallProps) {
 
     switch (toolName) {
       case "read":
-        if (input.filePath) {
+        if (typeof input.filePath === "string") {
           return `${name} ${getRelativePath(input.filePath)}`
         }
         return name
 
       case "edit":
       case "write":
-        if (input.filePath) {
+        if (typeof input.filePath === "string") {
           return `${name} ${getRelativePath(input.filePath)}`
         }
         return name
 
       case "bash":
-        if (input.description) {
+        if (typeof input.description === "string") {
           return `${name} ${input.description}`
         }
         return name
@@ -344,7 +384,7 @@ export default function ToolCall(props: ToolCallProps) {
         return "Plan"
 
       case "invalid":
-        if (input.tool) {
+        if (typeof input.tool === "string") {
           return getToolName(input.tool)
         }
         return name
@@ -454,7 +494,7 @@ export default function ToolCall(props: ToolCallProps) {
     )
   }
 
-  function renderMarkdownTool(toolName: string, state: any) {
+  function renderMarkdownTool(toolName: string, state: ToolState) {
     const content = getMarkdownContent(toolName, state)
     if (!content) {
       return null
@@ -496,53 +536,69 @@ export default function ToolCall(props: ToolCallProps) {
     )
   }
 
-  function getMarkdownContent(toolName: string, state: any): string | null {
-    const input = state?.input || {}
-    const metadata = state?.metadata || {}
+  function getMarkdownContent(toolName: string, state: ToolState): string | null {
+    if (!state) return null
+    
+    const input = (isToolStateRunning(state) || isToolStateCompleted(state) || isToolStateError(state))
+      ? state.input as Record<string, unknown>
+      : {}
+    const metadata = (isToolStateRunning(state) || isToolStateCompleted(state) || isToolStateError(state))
+      ? state.metadata || {}
+      : {}
 
     switch (toolName) {
       case "read": {
         const preview = typeof metadata.preview === "string" ? metadata.preview : null
-        const language = getLanguageFromPath(input.filePath || "")
+        const language = getLanguageFromPath(typeof input.filePath === "string" ? input.filePath : "")
         return ensureMarkdownContent(preview, language, true)
       }
 
       case "edit": {
         const diffText = typeof metadata.diff === "string" ? metadata.diff : null
-        const fallback = typeof state.output === "string" ? state.output : null
+        const fallback = isToolStateCompleted(state) && typeof state.output === "string" ? state.output : null
         return ensureMarkdownContent(diffText || fallback, "diff", true)
       }
 
       case "write": {
         const content = typeof input.content === "string" ? input.content : null
         const metadataContent = typeof metadata.content === "string" ? metadata.content : null
-        const language = getLanguageFromPath(input.filePath || "")
+        const language = getLanguageFromPath(typeof input.filePath === "string" ? input.filePath : "")
         return ensureMarkdownContent(content || metadataContent, language, true)
       }
 
       case "patch": {
         const patchContent = typeof metadata.diff === "string" ? metadata.diff : null
-        const fallback = typeof state.output === "string" ? state.output : null
+        const fallback = isToolStateCompleted(state) && typeof state.output === "string" ? state.output : null
         return ensureMarkdownContent(patchContent || fallback, "diff", true)
       }
 
       case "bash": {
         const command = typeof input.command === "string" && input.command.length > 0 ? `$ ${input.command}` : ""
-        const outputResult = formatUnknown(metadata.output ?? state.output)
+        const outputResult = formatUnknown(
+          isToolStateCompleted(state) ? state.output : 
+          (isToolStateRunning(state) || isToolStateError(state)) && metadata.output ? metadata.output : 
+          undefined
+        )
         const parts = [command, outputResult?.text].filter(Boolean)
         const combined = parts.join("\n")
         return ensureMarkdownContent(combined, "bash", true)
       }
 
       case "webfetch": {
-        const result = formatUnknown(state.output ?? metadata.output)
+        const result = formatUnknown(
+          isToolStateCompleted(state) ? state.output : 
+          (isToolStateRunning(state) || isToolStateError(state)) && metadata.output ? metadata.output : 
+          undefined
+        )
         if (!result) return null
         return ensureMarkdownContent(result.text, result.language, true)
       }
 
       default: {
         const result = formatUnknown(
-          state.output ?? metadata.output ?? metadata.diff ?? metadata.preview ?? input.content,
+          isToolStateCompleted(state) ? state.output : 
+          (isToolStateRunning(state) || isToolStateError(state)) && metadata.output ? metadata.output : 
+          metadata.diff ?? metadata.preview ?? input.content,
         )
         if (!result) return null
         return ensureMarkdownContent(result.text, result.language, true)
@@ -618,8 +674,12 @@ export default function ToolCall(props: ToolCallProps) {
   }
 
   const renderTodowriteTool = () => {
-    const state = props.toolCall?.state || {}
-    const metadata = state.metadata || {}
+    const state = props.toolCall?.state
+    if (!state) return null
+    
+    const metadata = (isToolStateRunning(state) || isToolStateCompleted(state) || isToolStateError(state))
+      ? state.metadata || {}
+      : {}
     const todos = metadata.todos || []
 
     if (!Array.isArray(todos) || todos.length === 0) {
@@ -677,8 +737,12 @@ export default function ToolCall(props: ToolCallProps) {
   }
 
   const renderTaskTool = () => {
-    const state = props.toolCall?.state || {}
-    const metadata = state.metadata || {}
+    const state = props.toolCall?.state
+    if (!state) return null
+    
+    const metadata = (isToolStateRunning(state) || isToolStateCompleted(state) || isToolStateError(state))
+      ? state.metadata || {}
+      : {}
     const summary = metadata.summary || []
 
     if (!Array.isArray(summary) || summary.length === 0) {

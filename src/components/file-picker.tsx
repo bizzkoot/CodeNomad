@@ -1,5 +1,7 @@
 import { Component, createSignal, createEffect, For, Show, onCleanup } from "solid-js"
 
+import type { OpencodeClient } from "@opencode-ai/sdk/client"
+
 interface FileItem {
   path: string
   added?: number
@@ -12,7 +14,7 @@ interface FilePickerProps {
   onSelect: (path: string) => void
   onNavigate: (direction: "up" | "down") => void
   onClose: () => void
-  instanceClient: any
+  instanceClient: OpencodeClient
   searchQuery: string
   textareaRef?: HTMLTextAreaElement
   workspaceFolder: string

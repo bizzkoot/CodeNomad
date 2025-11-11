@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js"
 import type { Session, Agent, Provider } from "../types/session"
-import type { Message, MessageDisplayParts } from "../types/message"
+import type { Message, MessageDisplayParts, MessagePartRemovedEvent, MessagePartUpdatedEvent, MessageRemovedEvent, MessageUpdateEvent } from "../types/message"
 import { partHasRenderableText } from "../types/message"
 import { instances } from "./instances"
 
@@ -8,6 +8,22 @@ import { sseManager } from "../lib/sse-manager"
 import { decodeHtmlEntities } from "../lib/markdown"
 import { showToastNotification, ToastVariant } from "../lib/notifications"
 import { preferences, addRecentModelPreference, getAgentModelPreference, setAgentModelPreference } from "./preferences"
+import type {
+  EventSessionUpdated,
+  EventSessionCompacted,
+  EventSessionError,
+  EventSessionIdle
+} from "@opencode-ai/sdk"
+
+interface TuiToastEvent {
+  type: "tui.toast.show"
+  properties: {
+    title?: string
+    message: string
+    variant: "info" | "success" | "warning" | "error"
+    duration?: number
+  }
+}
 
 interface SessionInfo {
   tokens: number
@@ -275,13 +291,17 @@ export function computeDisplayParts(message: Message, showThinking: boolean): Me
 function initializePartVersion(part: any, version = 0) {
   if (!part || typeof part !== "object") return
   const partAny = part as any
-  partAny.version = typeof partAny.version === "number" ? partAny.version : version
+  // Ensure version is always set for client-side part tracking
+  if (typeof partAny.version !== "number") {
+    partAny.version = version
+  }
 }
 
 function bumpPartVersion(previousPart: any, nextPart: any): number {
   const prevVersion = typeof previousPart?.version === "number" ? previousPart.version : -1
   const nextVersion = prevVersion + 1
-  initializePartVersion(nextPart, nextVersion)
+  // Always initialize the version on the new part
+  nextPart.version = nextVersion
   return nextVersion
 }
 
@@ -383,6 +403,7 @@ async function fetchSessions(instanceId: string): Promise<void> {
         parentId: apiSession.parentID || null,
         agent: "",
         model: { providerId: "", modelId: "" },
+        version: apiSession.version,  // Include version from SDK
         time: {
           created: apiSession.time.created,
           updated: apiSession.time.updated,
@@ -639,6 +660,7 @@ async function createSession(instanceId: string, agent?: string): Promise<Sessio
       parentId: null,
       agent: selectedAgent,
       model: defaultModel,
+      version: response.data.version,  // Include version from SDK
       time: {
         created: response.data.time.created,
         updated: response.data.time.updated,
@@ -743,6 +765,7 @@ async function forkSession(
       providerId: info.model?.providerID || "",
       modelId: info.model?.modelID || "",
     },
+    version: "0",  // Default version for forked sessions
     time: {
       created: info.time?.created || Date.now(),
       updated: info.time?.updated || Date.now(),
@@ -1157,7 +1180,7 @@ async function loadMessages(instanceId: string, sessionId: string, force = false
   updateSessionInfo(instanceId, sessionId)
 }
 
-function handleMessageUpdate(instanceId: string, event: any): void {
+function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | MessagePartUpdatedEvent): void {
   const instanceSessions = sessions().get(instanceId)
   if (!instanceSessions) return
 
@@ -1330,7 +1353,165 @@ function handleMessageUpdate(instanceId: string, event: any): void {
     }
 
     withSession(instanceId, part.sessionID, (session) => {
-      // Session already mutated in place
+      // All the message mutation logic should go here to ensure reactivity
+      const index = getSessionIndex(instanceId, part.sessionID)
+      let messageIndex = index.messageIndex.get(part.messageID)
+      let replacedTemp = false
+
+      if (messageIndex === undefined) {
+        // Search for queued message with status 'sending' and no server id
+        for (let i = 0; i < session.messages.length; i++) {
+          const msg = session.messages[i]
+          if (msg.sessionId === part.sessionID && msg.status === "sending") {
+            messageIndex = i
+            replacedTemp = true
+            break
+          }
+        }
+      }
+
+      if (messageIndex === undefined) {
+        // Create new message
+        const newMessage: Message = {
+          id: part.messageID,
+          sessionId: part.sessionID,
+          type: "assistant" as const,
+          parts: [part],
+          timestamp: Date.now(),
+          status: "streaming" as const,
+          version: 0,
+        }
+
+        initializePartVersion(part)
+        newMessage.displayParts = computeDisplayParts(newMessage, preferences().showThinkingBlocks)
+
+        let insertIndex = session.messages.length
+        for (let i = session.messages.length - 1; i >= 0; i--) {
+          if (session.messages[i].id < newMessage.id) {
+            insertIndex = i + 1
+            break
+          }
+        }
+
+        session.messages.splice(insertIndex, 0, newMessage)
+        rebuildSessionIndex(instanceId, part.sessionID, session.messages)
+      } else {
+        // Update existing message
+        const message = session.messages[messageIndex]
+        if (typeof message.version !== "number") {
+          message.version = 0
+        }
+
+        // Strip synthetic parts when real data arrives
+        let filteredSynthetics = false
+        if (message.parts.some((partItem: any) => partItem.synthetic === true)) {
+          message.parts = message.parts.filter((partItem: any) => partItem.synthetic !== true)
+          filteredSynthetics = true
+          // Clear render cache from remaining parts when synthetic parts are removed
+          message.parts.forEach((partItem: any) => {
+            if (partItem.type === "text") {
+              partItem.renderCache = undefined
+            }
+          })
+        }
+
+        let baseParts: any[]
+        if (replacedTemp) {
+          baseParts = message.parts.filter((partItem: any) => partItem.type !== "text")
+          message.parts = baseParts
+          // Clear render cache when replacing temp content
+          baseParts.forEach((partItem: any) => {
+            if (partItem.type === "text") {
+              partItem.renderCache = undefined
+            }
+          })
+        } else {
+          baseParts = message.parts
+        }
+
+        // Update part in place
+        let partMap = index.partIndex.get(message.id)
+        if (!partMap) {
+          partMap = new Map()
+          index.partIndex.set(message.id, partMap)
+        }
+
+        let shouldIncrementVersion = filteredSynthetics || replacedTemp
+        const partIndex = partMap.get(part.id)
+
+        if (partIndex === undefined) {
+          initializePartVersion(part)
+          baseParts.push(part)
+          if (part.id && typeof part.id === "string") {
+            partMap.set(part.id, baseParts.length - 1)
+          }
+          shouldIncrementVersion = true
+          // Clear render cache for new text parts
+          if (part.type === "text") {
+            part.renderCache = undefined
+          }
+        } else {
+          const previousPart = baseParts[partIndex]
+          const textUnchanged =
+            !filteredSynthetics &&
+            !replacedTemp &&
+            part.type === "text" &&
+            previousPart?.type === "text" &&
+            previousPart.text === part.text
+
+          if (textUnchanged) {
+            return
+          }
+
+          bumpPartVersion(previousPart, part)
+          baseParts[partIndex] = part
+          if (part.type !== "text" || !previousPart || previousPart.text !== part.text) {
+            shouldIncrementVersion = true
+            // Clear render cache when text changes
+            if (part.type === "text") {
+              part.renderCache = undefined
+            }
+          }
+        }
+
+        const oldId = message.id
+        message.id = replacedTemp ? part.messageID : message.id
+        message.status = message.status === "sending" ? "streaming" : message.status
+        message.parts = baseParts
+
+        if (shouldIncrementVersion) {
+          message.version += 1
+          message.displayParts = computeDisplayParts(message, preferences().showThinkingBlocks)
+        } else if (
+          !message.displayParts ||
+          message.displayParts.showThinking !== preferences().showThinkingBlocks ||
+          message.displayParts.version !== message.version
+        ) {
+          message.displayParts = computeDisplayParts(message, preferences().showThinkingBlocks)
+        }
+
+        // Update message index if ID changed
+        if (oldId !== message.id) {
+          index.messageIndex.delete(oldId)
+          index.messageIndex.set(message.id, messageIndex)
+          const existingPartMap = index.partIndex.get(oldId)
+          if (existingPartMap) {
+            index.partIndex.delete(oldId)
+            index.partIndex.set(message.id, existingPartMap)
+          }
+        }
+
+        // Refresh part indexes after filtering synthetic parts or replacing optimistic content
+        if (filteredSynthetics || replacedTemp) {
+          const partMap = new Map<string, number>()
+          message.parts.forEach((partItem, idx) => {
+            if (partItem.id && typeof partItem.id === "string") {
+              partMap.set(partItem.id, idx)
+            }
+          })
+          index.partIndex.set(message.id, partMap)
+        }
+      }
     })
 
     updateSessionInfo(instanceId, part.sessionID)
@@ -1432,14 +1613,102 @@ function handleMessageUpdate(instanceId: string, event: any): void {
     session.messagesInfo.set(info.id, info)
 
     withSession(instanceId, info.sessionID, (session) => {
-      // Session already mutated in place
+      const index = getSessionIndex(instanceId, info.sessionID)
+      let messageIndex = index.messageIndex.get(info.id)
+
+      if (messageIndex === undefined) {
+        // Look for queued message to replace
+        let tempMessageIndex = -1
+        for (let i = 0; i < session.messages.length; i++) {
+          const msg = session.messages[i]
+          if (
+            msg.sessionId === info.sessionID &&
+            msg.type === (info.role === "user" ? "user" : "assistant") &&
+            msg.status === "sending"
+          ) {
+            tempMessageIndex = i
+            break
+          }
+        }
+
+        if (tempMessageIndex === -1) {
+          for (let i = 0; i < session.messages.length; i++) {
+            const msg = session.messages[i]
+            if (msg.sessionId === info.sessionID && msg.status === "sending") {
+              tempMessageIndex = i
+              break
+            }
+          }
+        }
+
+        if (tempMessageIndex > -1) {
+          // Replace queued message
+          const message = session.messages[tempMessageIndex]
+          if (typeof message.version !== "number") {
+            message.version = 0
+          }
+
+          const oldId = message.id
+          message.id = info.id
+          message.type = (info.role === "user" ? "user" : "assistant") as "user" | "assistant"
+          message.timestamp = info.time?.created || Date.now()
+          message.status = "complete" as const
+          message.version += 1
+          message.displayParts = computeDisplayParts(message, preferences().showThinkingBlocks)
+
+          if (oldId !== message.id) {
+            index.messageIndex.delete(oldId)
+            index.messageIndex.set(message.id, tempMessageIndex)
+            const existingPartMap = index.partIndex.get(oldId)
+            if (existingPartMap) {
+              index.partIndex.delete(oldId)
+              index.partIndex.set(message.id, existingPartMap)
+            }
+          }
+        } else {
+          // Append new message
+          const newMessage: Message = {
+            id: info.id,
+            sessionId: info.sessionID,
+            type: (info.role === "user" ? "user" : "assistant") as "user" | "assistant",
+            parts: [],
+            timestamp: info.time?.created || Date.now(),
+            status: "complete" as const,
+            version: 0,
+          }
+
+          newMessage.displayParts = computeDisplayParts(newMessage, preferences().showThinkingBlocks)
+
+          let insertIndex = session.messages.length
+          for (let i = session.messages.length - 1; i >= 0; i--) {
+            if (session.messages[i].id < newMessage.id) {
+              insertIndex = i + 1
+              break
+            }
+          }
+
+          session.messages.splice(insertIndex, 0, newMessage)
+          rebuildSessionIndex(instanceId, info.sessionID, session.messages)
+        }
+      } else {
+        // Update existing message status
+        const message = session.messages[messageIndex]
+        if (typeof message.version !== "number") {
+          message.version = 0
+        }
+        message.status = "complete" as const
+        message.version += 1
+        message.displayParts = computeDisplayParts(message, preferences().showThinkingBlocks)
+      }
+
+      session.messagesInfo.set(info.id, info)
     })
 
     updateSessionInfo(instanceId, info.sessionID)
   }
 }
 
-function handleSessionUpdate(instanceId: string, event: any): void {
+function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): void {
 
   const info = event.properties?.info
   if (!info) return
@@ -1455,11 +1724,12 @@ function handleSessionUpdate(instanceId: string, event: any): void {
       instanceId,
       title: info.title || "Untitled",
       parentId: info.parentID || null,
-      agent: info.agent || "",
+      agent: "",
       model: {
-        providerId: info.model?.providerID || "",
-        modelId: info.model?.modelID || "",
+        providerId: "",
+        modelId: "",
       },
+      version: info.version || "0",
       time: {
         created: info.time?.created || Date.now(),
         updated: info.time?.updated || Date.now(),
@@ -1481,13 +1751,6 @@ function handleSessionUpdate(instanceId: string, event: any): void {
     const updatedSession = {
       ...existingSession,
       title: info.title || existingSession.title,
-      agent: info.agent || existingSession.agent,
-      model: info.model
-        ? {
-            providerId: info.model.providerID || existingSession.model.providerId,
-            modelId: info.model.modelID || existingSession.model.modelId,
-          }
-        : existingSession.model,
       time: {
         ...existingSession.time,
         updated: info.time?.updated || Date.now(),
@@ -1499,7 +1762,7 @@ function handleSessionUpdate(instanceId: string, event: any): void {
             snapshot: info.revert.snapshot,
             diff: info.revert.diff,
           }
-        : undefined,
+        : existingSession.revert,
     }
 
     setSessions((prev) => {
@@ -1510,6 +1773,15 @@ function handleSessionUpdate(instanceId: string, event: any): void {
       return next
     })
   }
+}
+
+function handleSessionIdle(instanceId: string, event: EventSessionIdle): void {
+  const sessionId = event.properties?.sessionID
+  if (!sessionId) return
+
+  console.log(`[SSE] Session idle: ${sessionId}`)
+  // Could be used to show user that the session is idle/finished processing
+  // For now, just log it - could be extended to show a notification or update UI state
 }
 
 function resolvePastedPlaceholders(prompt: string, attachments: any[] = []): string {
@@ -1779,7 +2051,7 @@ async function updateSessionModel(
   updateSessionInfo(instanceId, sessionId)
 }
 
-function handleSessionCompacted(instanceId: string, event: any): void {
+function handleSessionCompacted(instanceId: string, event: EventSessionCompacted): void {
   const sessionID = event.properties?.sessionID
   if (!sessionID) return
 
@@ -1800,26 +2072,25 @@ function handleSessionCompacted(instanceId: string, event: any): void {
   })
 }
 
-function handleSessionError(instanceId: string, event: any): void {
+function handleSessionError(instanceId: string, event: EventSessionError): void {
   const error = event.properties?.error
   const sessionID = event.properties?.sessionID
   console.error(`[SSE] Session error:`, error)
 
-  let message = error?.data?.message || error?.message || "Unknown error"
+  let message = "Unknown error"
 
-  if (error?.data?.responseBody) {
-    try {
-      const body = JSON.parse(error.data.responseBody)
-      if (body.error) {
-        message = body.error
-      }
-    } catch {}
+  if (error) {
+    if ('data' in error && error.data && typeof error.data === 'object' && 'message' in error.data) {
+      message = error.data.message as string
+    } else if ('message' in error && typeof error.message === 'string') {
+      message = error.message
+    }
   }
 
   alert(`Error: ${message}`)
 }
 
-function handleMessageRemoved(instanceId: string, event: any): void {
+function handleMessageRemoved(instanceId: string, event: MessageRemovedEvent): void {
   const sessionID = event.properties?.sessionID
   if (!sessionID) return
 
@@ -1827,7 +2098,7 @@ function handleMessageRemoved(instanceId: string, event: any): void {
   loadMessages(instanceId, sessionID, true).catch(console.error)
 }
 
-function handleMessagePartRemoved(instanceId: string, event: any): void {
+function handleMessagePartRemoved(instanceId: string, event: MessagePartRemovedEvent): void {
   const sessionID = event.properties?.sessionID
   if (!sessionID) return
 
@@ -1835,7 +2106,7 @@ function handleMessagePartRemoved(instanceId: string, event: any): void {
   loadMessages(instanceId, sessionID, true).catch(console.error)
 }
 
-function handleTuiToast(_instanceId: string, event: any): void {
+function handleTuiToast(_instanceId: string, event: TuiToastEvent): void {
   const payload = event?.properties
   if (!payload || typeof payload.message !== "string" || typeof payload.variant !== "string") return
   if (!payload.message.trim()) return
@@ -1853,11 +2124,13 @@ function handleTuiToast(_instanceId: string, event: any): void {
 }
 
 sseManager.onMessageUpdate = handleMessageUpdate
+sseManager.onMessagePartUpdated = handleMessageUpdate
 sseManager.onMessageRemoved = handleMessageRemoved
 sseManager.onMessagePartRemoved = handleMessagePartRemoved
 sseManager.onSessionUpdate = handleSessionUpdate
 sseManager.onSessionCompacted = handleSessionCompacted
 sseManager.onSessionError = handleSessionError
+sseManager.onSessionIdle = handleSessionIdle
 sseManager.onTuiToast = handleTuiToast
 
 export {

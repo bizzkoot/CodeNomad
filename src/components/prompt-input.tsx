@@ -4,6 +4,7 @@ import { addToHistory, getHistory } from "../stores/message-history"
 import { getAttachments, addAttachment, clearAttachments, removeAttachment } from "../stores/attachments"
 import { createFileAttachment, createTextAttachment, createAgentAttachment } from "../types/attachment"
 import type { Attachment } from "../types/attachment"
+import type { Agent } from "../types/session"
 import Kbd from "./kbd"
 import HintRow from "./hint-row"
 import { getActiveInstance } from "../stores/instances"
@@ -516,7 +517,7 @@ export default function PromptInput(props: PromptInputProps) {
     setAtPosition(null)
   }
 
-  function handlePickerSelect(item: { type: "agent"; agent: any } | { type: "file"; file: any }) {
+  function handlePickerSelect(item: { type: "agent"; agent: Agent } | { type: "file"; file: { path: string; isGitFile: boolean } }) {
     if (item.type === "agent") {
       const agentName = item.agent.name
       const existingAttachments = attachments()
@@ -642,7 +643,7 @@ export default function PromptInput(props: PromptInputProps) {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      const path = (file as any).path || file.name
+      const path = (file as File & { path?: string }).path || file.name
       const filename = file.name
       const mime = file.type || "text/plain"
 

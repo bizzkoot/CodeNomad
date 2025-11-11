@@ -1,5 +1,5 @@
 import { Component, Show, For, onMount, createSignal } from "solid-js"
-import type { Instance } from "../types/instance"
+import type { Instance, RawMcpStatus } from "../types/instance"
 
 interface InstanceInfoProps {
   instance: Instance
@@ -12,12 +12,12 @@ type ParsedMcpStatus = {
   error?: string
 }
 
-function parseMcpStatus(status: unknown): ParsedMcpStatus[] {
+function parseMcpStatus(status: RawMcpStatus): ParsedMcpStatus[] {
   if (!status || typeof status !== "object") return []
 
   const result: ParsedMcpStatus[] = []
 
-  for (const [name, value] of Object.entries(status as Record<string, unknown>)) {
+  for (const [name, value] of Object.entries(status)) {
     if (!value || typeof value !== "object") continue
     const rawStatus = (value as { status?: string }).status
     if (!rawStatus) continue
@@ -47,7 +47,7 @@ const InstanceInfo: Component<InstanceInfoProps> = (props) => {
   const metadata = () => props.instance.metadata
   const mcpServers = () => {
     const status = metadata()?.mcpStatus
-    return parseMcpStatus(status)
+    return status ? parseMcpStatus(status) : []
   }
 
   onMount(async () => {
@@ -64,7 +64,7 @@ const InstanceInfo: Component<InstanceInfoProps> = (props) => {
       ])
 
       const project = projectResult.status === "fulfilled" ? projectResult.value.data : undefined
-      const mcpStatus = mcpResult.status === "fulfilled" ? mcpResult.value.data : undefined
+      const mcpStatus = mcpResult.status === "fulfilled" ? mcpResult.value.data as RawMcpStatus : undefined
 
       const { updateInstance } = await import("../stores/instances")
       updateInstance(props.instance.id, {

@@ -4,10 +4,12 @@ import { isItemExpanded, toggleItemExpanded } from "../stores/tool-call-state"
 import { Markdown } from "./markdown"
 import { useTheme } from "../lib/theme"
 import { preferences } from "../stores/preferences"
-import { partHasRenderableText } from "../types/message"
+import { partHasRenderableText, SDKPart, TextPart, ClientPart } from "../types/message"
+
+type ToolCallPart = Extract<ClientPart, { type: "tool" }>
 
 interface MessagePartProps {
-  part: any
+  part: ClientPart
   messageType?: "user" | "assistant"
 }
 export default function MessagePart(props: MessagePartProps) {
@@ -21,22 +23,30 @@ export default function MessagePart(props: MessagePartProps) {
   const plainTextContent = () => {
     const part = props.part
 
-    if (typeof part?.text === "string") {
+    if ((part.type === "text" || part.type === "reasoning") && typeof part.text === "string") {
       return part.text
     }
 
-    const segments: string[] = []
-    const contentArray = Array.isArray(part?.content) ? part.content : []
+    return ""
+  }
 
-    for (const item of contentArray) {
-      if (typeof item === "string") {
-        segments.push(item)
-      } else if (item && typeof item === "object" && typeof (item as { text?: unknown }).text === "string") {
-        segments.push((item as { text: string }).text)
+  const createTextPartForMarkdown = (): TextPart => {
+    const part = props.part
+    if ((part.type === "text" || part.type === "reasoning") && typeof part.text === "string") {
+      return {
+        id: part.id,
+        type: "text",
+        text: part.text,
+        synthetic: part.type === "text" ? part.synthetic : false,
+        version: (part as { version?: number }).version
       }
     }
-
-    return segments.join("\n")
+    return {
+      id: part.id,
+      type: "text", 
+      text: "",
+      synthetic: false
+    }
   }
 
   function handleReasoningClick(e: Event) {
@@ -47,25 +57,23 @@ export default function MessagePart(props: MessagePartProps) {
   return (
     <Switch>
       <Match when={partType() === "text"}>
-        <Show when={!props.part.synthetic && partHasRenderableText(props.part)}>
+        <Show when={!(props.part.type === "text" && props.part.synthetic) && partHasRenderableText(props.part)}>
           <div class={textContainerClass()}>
             <Show
               when={isAssistantMessage()}
               fallback={<span>{plainTextContent()}</span>}
             >
-              <Markdown part={props.part} isDark={isDark()} size={isAssistantMessage() ? "tight" : "base"} />
+              <Markdown part={createTextPartForMarkdown()} isDark={isDark()} size={isAssistantMessage() ? "tight" : "base"} />
             </Show>
           </div>
         </Show>
       </Match>
 
       <Match when={partType() === "tool"}>
-        <ToolCall toolCall={props.part} toolCallId={props.part?.id} />
+        <ToolCall toolCall={props.part as ToolCallPart} toolCallId={props.part?.id} />
       </Match>
 
-      <Match when={partType() === "error"}>
-        <div class="message-error-part">⚠ {props.part.message}</div>
-      </Match>
+
 
       <Match when={partType() === "reasoning"}>
         <Show when={preferences().showThinkingBlocks && partHasRenderableText(props.part)}>
@@ -77,7 +85,7 @@ export default function MessagePart(props: MessagePartProps) {
               </div>
               <Show when={isReasoningExpanded()}>
                 <div class={`${textContainerClass()} mt-2`}>
-                  <Markdown part={props.part} isDark={isDark()} size={isAssistantMessage() ? "tight" : "base"} />
+                  <Markdown part={createTextPartForMarkdown()} isDark={isDark()} size={isAssistantMessage() ? "tight" : "base"} />
                 </div>
               </Show>
             </div>

@@ -2,6 +2,7 @@ import { Component, onMount, onCleanup, Show, createMemo, createEffect, createSi
 import { Toaster } from "solid-toast"
 import type { Session } from "./types/session"
 import type { Attachment } from "./types/attachment"
+import type { SDKPart, ClientPart } from "./types/message"
 import FolderSelectionView from "./components/folder-selection-view"
 import InstanceWelcomeView from "./components/instance-welcome-view"
 import CommandPalette from "./components/command-palette"
@@ -99,12 +100,12 @@ const SessionView: Component<{
       return null
     }
  
-    const textParts = targetMessage.parts.filter((p: any) => p.type === "text")
+    const textParts = targetMessage.parts.filter((p): p is ClientPart & { type: "text"; text: string } => p.type === "text")
     if (textParts.length === 0) {
       return null
     }
  
-    return textParts.map((p: any) => p.text).join("\n")
+    return textParts.map((p) => p.text).join("\n")
   }
  
   async function handleRevert(messageId: string) {
@@ -555,9 +556,9 @@ const App: Component = () => {
               modelID: session.model.modelId,
             },
           })
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error("Failed to compact session:", error)
-          const message = error?.message || "Failed to compact session"
+          const message = error instanceof Error ? error.message : "Failed to compact session"
           alert(`Compact failed: ${message}`)
         }
       },
@@ -630,11 +631,11 @@ const App: Component = () => {
 
           // Restore the reverted user message to the prompt input
           if (revertedMessage && revertedInfo?.role === "user") {
-            const textParts = revertedMessage.parts.filter((p: any) => p.type === "text")
+            const textParts = revertedMessage.parts.filter((p): p is ClientPart & { type: "text"; text: string } => p.type === "text")
             if (textParts.length > 0) {
               const textarea = document.querySelector(".prompt-input") as HTMLTextAreaElement
               if (textarea) {
-                textarea.value = textParts.map((p: any) => p.text).join("\n")
+                textarea.value = textParts.map((p) => p.text).join("\n")
                 textarea.dispatchEvent(new Event("input", { bubbles: true }))
                 textarea.focus()
               }

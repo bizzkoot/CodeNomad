@@ -1,5 +1,6 @@
 import { createMemo, Show, onMount, createEffect } from "solid-js"
 import { DiffView, DiffModeEnum } from "@git-diff-view/solid"
+import type { DiffHighlighterLang } from "@git-diff-view/core"
 import { getLanguageFromPath } from "../lib/markdown"
 import { normalizeDiffText } from "../lib/diff-utils"
 import { setToolRenderCache } from "../lib/tool-render-cache"
@@ -34,11 +35,11 @@ export function ToolCallDiffViewer(props: ToolCallDiffViewerProps) {
     return {
       oldFile: {
         fileName,
-        fileLang: language as any, // Cast to any to avoid type issues with DiffHighlighterLang
+        fileLang: (language || "text") as DiffHighlighterLang | null,
       },
       newFile: {
         fileName,
-        fileLang: language as any, // Cast to any to avoid type issues with DiffHighlighterLang
+        fileLang: (language || "text") as DiffHighlighterLang | null,
       },
       hunks: [normalized],
     }

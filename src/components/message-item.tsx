@@ -1,14 +1,13 @@
 import { For, Show } from "solid-js"
-import type { Message } from "../types/message"
+import type { Message, SDKPart, MessageInfo, ClientPart } from "../types/message"
 import { partHasRenderableText } from "../types/message"
 import MessagePart from "./message-part"
 
-
 interface MessageItemProps {
   message: Message
-  messageInfo?: any
+  messageInfo?: MessageInfo
   isQueued?: boolean
-  parts?: any[]
+  parts?: ClientPart[]
   onRevert?: (messageId: string) => void
   onFork?: (messageId?: string) => void
 }
@@ -23,9 +22,10 @@ export default function MessageItem(props: MessageItemProps) {
   const messageParts = () => props.parts ?? props.message.parts
 
   const errorMessage = () => {
-    if (!props.messageInfo?.error) return null
+    const info = props.messageInfo
+    if (!info || info.role !== "assistant" || !info.error) return null
 
-    const error = props.messageInfo.error
+    const error = info.error
     if (error.name === "ProviderAuthError") {
       return error.data?.message || "Authentication error"
     }
@@ -50,7 +50,8 @@ export default function MessageItem(props: MessageItemProps) {
   }
 
   const isGenerating = () => {
-    return !hasContent() && props.messageInfo?.time?.completed === 0
+    const info = props.messageInfo
+    return !hasContent() && info && info.role === "assistant" && info.time.completed !== undefined && info.time.completed === 0
   }
 
   const handleRevert = () => {
@@ -66,29 +67,17 @@ export default function MessageItem(props: MessageItemProps) {
  
   const agentIdentifier = () => {
     if (isUser()) return ""
-    return (
-      props.messageInfo?.agent ||
-      props.messageInfo?.mode ||
-      props.messageInfo?.agentID ||
-      props.messageInfo?.agentId ||
-      props.messageInfo?.metadata?.agentID ||
-      ""
-    )
+    const info = props.messageInfo
+    if (!info || info.role !== "assistant") return ""
+    return info.mode || ""
   }
- 
+
   const modelIdentifier = () => {
     if (isUser()) return ""
-    const modelID =
-      props.messageInfo?.modelID ||
-      props.messageInfo?.modelId ||
-      props.messageInfo?.model?.modelID ||
-      props.messageInfo?.model?.id ||
-      ""
-    const providerID =
-      props.messageInfo?.providerID ||
-      props.messageInfo?.providerId ||
-      props.messageInfo?.model?.providerID ||
-      ""
+    const info = props.messageInfo
+    if (!info || info.role !== "assistant") return ""
+    const modelID = info.modelID || ""
+    const providerID = info.providerID || ""
     if (modelID && providerID) return `${providerID}/${modelID}`
     return modelID
   }

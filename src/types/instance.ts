@@ -1,4 +1,5 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/client"
+import type { Project as SDKProject } from "@opencode-ai/sdk"
 
 export interface LogEntry {
   timestamp: number
@@ -6,24 +7,23 @@ export interface LogEntry {
   message: string
 }
 
-export interface ProjectInfo {
-  id: string
-  worktree: string
-  vcs?: "git"
-  time: {
-    created: number
-    initialized?: number
-  }
-}
+// Use SDK Project type instead of our own
+export type ProjectInfo = SDKProject
 
 export interface McpServerStatus {
   name: string
   status: "running" | "stopped" | "error"
 }
 
+// Raw MCP status from server (SDK returns unknown for /mcp endpoint)
+export type RawMcpStatus = Record<string, {
+  status?: string
+  error?: string
+}>
+
 export interface InstanceMetadata {
   project?: ProjectInfo
-  mcpStatus?: unknown
+  mcpStatus?: RawMcpStatus
   version?: string
 }
 

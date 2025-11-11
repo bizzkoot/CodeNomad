@@ -1,3 +1,23 @@
+// SDK types
+import type {
+  EventMessageUpdated as MessageUpdateEvent,
+  EventMessageRemoved as MessageRemovedEvent,
+  EventMessagePartUpdated as MessagePartUpdatedEvent,
+  EventMessagePartRemoved as MessagePartRemovedEvent,
+  Part as SDKPart,
+  Message as SDKMessage
+} from "@opencode-ai/sdk"
+
+// Re-export for other modules
+export type {
+  MessageUpdateEvent,
+  MessageRemovedEvent,
+  MessagePartUpdatedEvent,
+  MessagePartRemovedEvent,
+  SDKPart,
+  SDKMessage
+}
+
 export interface RenderCache {
   text: string
   html: string
@@ -5,11 +25,20 @@ export interface RenderCache {
   mode?: string
 }
 
+// Client-specific part extensions (using intersection type since SDKPart is a union)
+export type ClientPart = SDKPart & {
+  sessionID?: string
+  messageID?: string
+  synthetic?: boolean
+  version?: number
+  renderCache?: RenderCache
+}
+
 export interface MessageDisplayParts {
-  text: any[]
-  tool: any[]
-  reasoning: any[]
-  combined: any[]
+  text: ClientPart[]
+  tool: ClientPart[]
+  reasoning: ClientPart[]
+  combined: ClientPart[]
   showThinking: boolean
   version: number
 }
@@ -18,7 +47,7 @@ export interface Message {
   id: string
   sessionId: string
   type: "user" | "assistant"
-  parts: any[]
+  parts: ClientPart[]
   timestamp: number
   status: "sending" | "sent" | "streaming" | "complete" | "error"
   version: number
@@ -34,42 +63,41 @@ export interface TextPart {
   renderCache?: RenderCache
 }
 
-function hasTextSegment(segment: unknown): boolean {
+export type MessageInfo = SDKMessage
+
+function hasTextSegment(segment: string | { text?: string }): boolean {
   if (typeof segment === "string") {
     return segment.trim().length > 0
   }
 
-  if (segment && typeof segment === "object") {
-    const maybeText = (segment as { text?: unknown }).text
-    if (typeof maybeText === "string") {
-      return maybeText.trim().length > 0
-    }
+  if (segment && typeof segment === "object" && segment.text) {
+    return typeof segment.text === "string" && segment.text.trim().length > 0
   }
 
   return false
 }
 
-export function partHasRenderableText(part: any): boolean {
+export function partHasRenderableText(part: ClientPart): boolean {
   if (!part || typeof part !== "object") {
     return false
   }
 
-  if (hasTextSegment(part.text)) {
+  const typedPart = part as SDKPart
+  
+  if (typedPart.type === "text" && hasTextSegment(typedPart.text)) {
     return true
   }
 
-  const contentArray = Array.isArray(part?.content) ? part.content : []
-  for (const item of contentArray) {
-    if (hasTextSegment(item)) {
-      return true
-    }
+  if (typedPart.type === "file" && (typedPart as any).filename) {
+    return true
   }
 
-  const thinkingContent = Array.isArray(part?.thinking?.content) ? part.thinking.content : []
-  for (const chunk of thinkingContent) {
-    if (hasTextSegment(chunk)) {
-      return true
-    }
+  if (typedPart.type === "tool") {
+    return true // Tool parts are always renderable
+  }
+
+  if (typedPart.type === "reasoning" && hasTextSegment(typedPart.text)) {
+    return true
   }
 
   return false

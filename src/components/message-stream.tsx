@@ -1,5 +1,31 @@
 import { For, Show, createSignal, createEffect, createMemo, onCleanup } from "solid-js"
-import type { Message, MessageDisplayParts } from "../types/message"
+import type { Message, MessageDisplayParts, SDKPart, MessageInfo, ClientPart } from "../types/message"
+
+type ToolCallPart = Extract<ClientPart, { type: "tool" }>
+
+// Import ToolState types from SDK
+type ToolState = import("@opencode-ai/sdk").ToolState
+type ToolStateRunning = import("@opencode-ai/sdk").ToolStateRunning  
+type ToolStateCompleted = import("@opencode-ai/sdk").ToolStateCompleted
+type ToolStateError = import("@opencode-ai/sdk").ToolStateError
+
+// Type guards
+function isToolStateRunning(state: ToolState): state is ToolStateRunning {
+  return state.status === "running"
+}
+
+function isToolStateCompleted(state: ToolState): state is ToolStateCompleted {
+  return state.status === "completed"
+}
+
+function isToolStateError(state: ToolState): state is ToolStateError {
+  return state.status === "error"
+}
+
+// Type guard to check if a part is a tool part
+function isToolPart(part: ClientPart): part is ToolCallPart {
+  return part.type === "tool"
+}
 import MessageItem from "./message-item"
 import ToolCall from "./tool-call"
 import { sseManager } from "../lib/sse-manager"
@@ -51,25 +77,26 @@ function navigateToTaskSession(location: TaskSessionLocation) {
 }
 
 // Calculate session tokens and cost from messagesInfo (matches TUI logic)
-function calculateSessionInfo(messagesInfo?: Map<string, any>, instanceId?: string) {
+function calculateSessionInfo(messagesInfo?: Map<string, MessageInfo>, instanceId?: string) {
   if (!messagesInfo || messagesInfo.size === 0)
     return { tokens: 0, cost: 0, contextWindow: 0, isSubscriptionModel: false }
 
   let tokens = 0
   let cost = 0
   let contextWindow = 0
-  let isSubscriptionModel = false
   let modelID = ""
   let providerID = ""
+  let isSubscriptionModel = false
 
   // Go backwards through messages to find the last relevant assistant message (like TUI)
   const messageArray = Array.from(messagesInfo.values()).reverse()
 
   for (const info of messageArray) {
+    if (!info) continue
     if (info.role === "assistant" && info.tokens) {
       const usage = info.tokens
 
-      if (usage.output > 0) {
+      if (usage.output && usage.output > 0) {
         if (info.summary) {
           // If summary message, only count output tokens and stop (like TUI)
           tokens = usage.output || 0
@@ -145,7 +172,7 @@ interface MessageStreamProps {
   instanceId: string
   sessionId: string
   messages: Message[]
-  messagesInfo?: Map<string, any>
+  messagesInfo?: Map<string, MessageInfo>
   revert?: {
     messageID: string
     partID?: string
@@ -160,16 +187,16 @@ interface MessageStreamProps {
 interface MessageDisplayItem {
   type: "message"
   message: Message
-  combinedParts: any[]
+  combinedParts: ClientPart[]
   isQueued: boolean
-  messageInfo?: any
+  messageInfo?: MessageInfo
 }
 
 interface ToolDisplayItem {
   type: "tool"
   key: string
-  toolPart: any
-  messageInfo?: any
+  toolPart: ToolCallPart
+  messageInfo?: MessageInfo
   messageId: string
   messageVersion: number
   partVersion: number
@@ -178,21 +205,24 @@ interface ToolDisplayItem {
 type DisplayItem = MessageDisplayItem | ToolDisplayItem
 
 interface MessageCacheEntry {
+  message: Message
   version: number
   showThinking: boolean
   isQueued: boolean
-  messageInfo?: any
+  messageInfo?: MessageInfo
   displayParts: MessageDisplayParts
   item: MessageDisplayItem
 }
 
 interface ToolCacheEntry {
-  toolPart: any
-  messageInfo?: any
+  toolPart: ClientPart
+  messageInfo?: MessageInfo
   signature: string
   contentKey: string
   item: ToolDisplayItem
 }
+
+
 
 interface SessionCache {
   messageItemCache: Map<string, MessageCacheEntry>
@@ -231,18 +261,17 @@ export default function MessageStream(props: MessageStreamProps) {
   const scrollStateKey = () => makeScrollKey(props.instanceId, props.sessionId)
   const connectionStatus = () => sseManager.getStatus(props.instanceId)
 
-  function createToolSignature(message: Message, toolPart: any, toolIndex: number, messageInfo?: any): string {
+  function createToolSignature(message: Message, toolPart: ClientPart, toolIndex: number, messageInfo?: MessageInfo): string {
     const messageId = message.id
     const partId = typeof toolPart?.id === "string" ? toolPart.id : `${messageId}-tool-${toolIndex}`
     return `${messageId}:${partId}`
   }
 
-  function createToolContentKey(toolPart: any, messageInfo?: any): string {
-    const state = toolPart?.state ?? {}
-    const version = typeof toolPart?.version === "number" ? toolPart.version : null
+  function createToolContentKey(toolPart: ClientPart, messageInfo?: MessageInfo): string {
+    const state = isToolPart(toolPart) ? toolPart.state : undefined
+    const version = typeof toolPart?.version === "number" ? toolPart.version : 0
     const status = state?.status ?? "unknown"
     return `${toolPart.id}:${version}:${status}`
-
   }
 
   const sessionInfo = createMemo(() => {
@@ -383,7 +412,7 @@ export default function MessageStream(props: MessageStreamProps) {
       const hasRenderableContent =
         message.type !== "assistant" ||
         combinedParts.length > 0 ||
-        Boolean(messageInfo?.error) ||
+        Boolean(messageInfo && messageInfo.role === "assistant" && messageInfo.error) ||
         message.status === "error"
 
       if (hasRenderableContent) {
@@ -415,6 +444,7 @@ export default function MessageStream(props: MessageStreamProps) {
             messageInfo,
           }
           newMessageCache.set(message.id, {
+            message,
             version,
             showThinking,
             isQueued,
@@ -426,13 +456,15 @@ export default function MessageStream(props: MessageStreamProps) {
         }
       }
 
-      for (let toolIndex = 0; toolIndex < displayParts.tool.length; toolIndex++) {
-        const toolPart = displayParts.tool[toolIndex]
-        const toolKey = typeof toolPart?.id === "string" ? toolPart.id : `${message.id}-tool-${toolIndex}`
+      const toolParts = displayParts.tool.filter(isToolPart)
+      for (let toolIndex = 0; toolIndex < toolParts.length; toolIndex++) {
+        const toolPart = toolParts[toolIndex]
+        const originalIndex = displayParts.tool.indexOf(toolPart)
+        const toolKey = toolPart?.id || `${message.id}-tool-${originalIndex}`
         const messageVersion = typeof message.version === "number" ? message.version : 0
         const partVersion = typeof toolPart?.version === "number" ? toolPart.version : 0
 
-        const toolSignature = createToolSignature(message, toolPart, toolIndex, messageInfo)
+        const toolSignature = createToolSignature(message, toolPart, originalIndex, messageInfo)
         const contentKey = createToolContentKey(toolPart, messageInfo)
         const toolEntry = toolItemCache.get(toolKey)
         if (toolEntry && toolEntry.signature === toolSignature) {
@@ -450,7 +482,7 @@ export default function MessageStream(props: MessageStreamProps) {
             toolEntry.signature = toolSignature
             toolEntry.contentKey = contentKey
             toolEntry.item = updatedItem
-            console.debug("[ToolCall] update", toolKey, toolPart?.state?.status)
+            console.debug("[ToolCall] update", toolKey, toolPart.state?.status)
             newToolCache.set(toolKey, toolEntry)
             items.push(updatedItem)
           } else {
@@ -475,7 +507,7 @@ export default function MessageStream(props: MessageStreamProps) {
             messageVersion,
             partVersion,
           }
-          console.debug("[ToolCall] create", toolKey, toolPart?.state?.status)
+          console.debug("[ToolCall] create", toolKey, toolPart.state?.status)
           newToolCache.set(toolKey, { toolPart, messageInfo, signature: toolSignature, contentKey, item: toolItem })
           items.push(toolItem)
         }
@@ -674,7 +706,9 @@ export default function MessageStream(props: MessageStreamProps) {
             const toolPart = item.toolPart
 
             const taskSessionId =
-              typeof toolPart?.state?.metadata?.sessionId === "string" ? toolPart.state.metadata.sessionId : ""
+              (isToolStateRunning(toolPart.state) || isToolStateCompleted(toolPart.state) || isToolStateError(toolPart.state))
+                ? toolPart.state.metadata?.sessionId === "string" ? toolPart.state.metadata.sessionId : ""
+                : ""
             const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId) : null
 
             const handleGoToTaskSession = (event: Event) => {

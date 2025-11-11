@@ -4,6 +4,7 @@ export interface ConfigData {
   preferences: Preferences
   recentFolders: RecentFolder[]
   opencodeBinaries: OpenCodeBinary[]
+  theme?: "light" | "dark" | "system"
 }
 
 export interface InstanceData {

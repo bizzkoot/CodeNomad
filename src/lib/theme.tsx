@@ -1,5 +1,5 @@
 import { createContext, createSignal, useContext, onMount, createEffect, type JSX } from "solid-js"
-import { storage } from "./storage"
+import { storage, type ConfigData } from "./storage"
 
 interface ThemeContextValue {
   isDark: () => boolean
@@ -28,7 +28,7 @@ export function ThemeProvider(props: { children: JSX.Element }) {
   async function loadTheme() {
     try {
       const config = await storage.loadConfig()
-      const savedTheme = (config as any)?.theme
+      const savedTheme = config.theme
       let themeDark: boolean
 
       if (savedTheme === "system") {
@@ -60,7 +60,7 @@ export function ThemeProvider(props: { children: JSX.Element }) {
     try {
       const config = await storage.loadConfig()
       const nextPreference = dark ? "dark" : "light"
-      ;(config as any).theme = nextPreference
+      config.theme = nextPreference
       themePreference = nextPreference
       await storage.saveConfig(config)
     } catch (error) {

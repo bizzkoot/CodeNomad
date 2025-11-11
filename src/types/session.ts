@@ -1,29 +1,64 @@
-import type { Message } from "./message"
+import type { Message, MessageInfo } from "./message"
+import type { 
+  Session as SDKSession,
+  Agent as SDKAgent, 
+  Provider as SDKProvider,
+  Model as SDKModel
+} from "@opencode-ai/sdk"
 
-export interface Session {
-  id: string
-  instanceId: string
-  title: string
-  parentId: string | null
-  agent: string
-  model: {
+// Export SDK types for external use
+export type { 
+  Session as SDKSession,
+  Agent as SDKAgent, 
+  Provider as SDKProvider,
+  Model as SDKModel
+} from "@opencode-ai/sdk"
+
+// Our client-specific Session interface extending SDK Session
+export interface Session extends Omit<import("@opencode-ai/sdk").Session, 'projectID' | 'directory' | 'parentID'> {
+  instanceId: string  // Client-specific field
+  parentId: string | null  // Client-specific field (override parentID)
+  agent: string  // Client-specific field
+  model: {  // Client-specific field
     providerId: string
     modelId: string
   }
-  time: {
-    created: number
-    updated: number
-  }
-  revert?: {
-    messageID: string
-    partID?: string
-    snapshot?: string
-    diff?: string
-  }
-  messages: Message[]
-  messagesInfo: Map<string, any>
+  messages: Message[]  // Client-specific field
+  messagesInfo: Map<string, MessageInfo>  // Client-specific field
+  version: string  // Include version from SDK Session
 }
 
+// Adapter function to convert SDK Session to client Session
+export function createClientSession(
+  sdkSession: import("@opencode-ai/sdk").Session,
+  instanceId: string,
+  agent: string = "",
+  model: { providerId: string; modelId: string } = { providerId: "", modelId: "" }
+): Session {
+  return {
+    ...sdkSession,
+    instanceId,
+    parentId: sdkSession.parentID || null,
+    agent,
+    model,
+    messages: [],
+    messagesInfo: new Map(),
+  }
+}
+
+// Type guard to check if object is SDK Session
+export function isSdkSession(obj: unknown): obj is import("@opencode-ai/sdk").Session {
+  return (
+    typeof obj === "object" &&
+    obj !== null &&
+    "id" in obj &&
+    "title" in obj &&
+    "version" in obj &&
+    "time" in obj
+  )
+}
+
+// Our client-specific Agent interface (simplified version of SDK Agent)
 export interface Agent {
   name: string
   description: string
@@ -34,6 +69,7 @@ export interface Agent {
   }
 }
 
+// Our client-specific Provider interface (simplified version of SDK Provider)
 export interface Provider {
   id: string
   name: string
@@ -41,6 +77,7 @@ export interface Provider {
   defaultModelId?: string
 }
 
+// Our client-specific Model interface (simplified version of SDK Model)
 export interface Model {
   id: string
   name: string

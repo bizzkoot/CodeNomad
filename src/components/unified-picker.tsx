@@ -1,5 +1,6 @@
 import { Component, createSignal, createEffect, For, Show, onCleanup } from "solid-js"
 import type { Agent } from "../types/session"
+import type { OpencodeClient } from "@opencode-ai/sdk/client"
 
 interface FileItem {
   path: string
@@ -15,7 +16,7 @@ interface UnifiedPickerProps {
   onSelect: (item: PickerItem) => void
   onClose: () => void
   agents: Agent[]
-  instanceClient: any
+  instanceClient: OpencodeClient | null
   searchQuery: string
   textareaRef?: HTMLTextAreaElement
   workspaceFolder: string
