@@ -767,6 +767,9 @@ export default function PromptInput(props: PromptInputProps) {
             rows={4}
             style={attachments().length > 0 ? { "padding-top": "8px" } : {}}
             spellcheck={false}
+            autocorrect="off"
+            autoCapitalize="off"
+            autocomplete="off"
           />
         </div>
 
