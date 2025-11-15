@@ -1,0 +1,56 @@
+/* Button component styles */
+.button-primary,
+button.button-primary {
+  @apply px-6 py-3 text-base rounded-lg;
+  background-color: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  border-color: var(--button-primary-bg);
+}
+
+.button-primary:hover:not(:disabled),
+button.button-primary:hover:not(:disabled) {
+  background-color: var(--button-primary-hover-bg);
+  border-color: var(--button-primary-hover-bg);
+}
+
+.button-primary:focus-visible,
+button.button-primary:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-ring-offset), 0 0 0 4px var(--focus-ring-color);
+}
+
+.button-secondary,
+button.button-secondary {
+  @apply px-6 py-3 text-base rounded-lg;
+  background-color: var(--surface-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-base);
+}
+
+.button-secondary:hover:not(:disabled),
+button.button-secondary:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.button-secondary:focus-visible,
+button.button-secondary:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-ring-offset), 0 0 0 4px var(--focus-ring-color);
+}
+
+.button-tertiary,
+button.button-tertiary {
+  @apply px-4 py-2 text-sm rounded-lg;
+  background-color: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border-base);
+}
+
+.button-tertiary:hover:not(:disabled),
+button.button-tertiary:hover:not(:disabled) {
+  color: var(--text-primary);
+  background-color: var(--surface-hover);
+}
+
+.button-tertiary:focus-visible,
+button.button-tertiary:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-ring-offset), 0 0 0 4px var(--focus-ring-color);
+}

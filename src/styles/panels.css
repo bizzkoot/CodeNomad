@@ -1,11 +1,9 @@
-@import "./tokens.css";
-@import "./utilities.css";
+@import "./panels/tabs.css";
+@import "./panels/empty-loading.css";
+@import "./panels/modal.css";
+@import "./panels/panel-shell.css";
+@import "./panels/session-layout.css";
 
-/* Tab component utilities */
-.tab-bar {
-  @apply border-b;
-  border-color: var(--border-base);
-}
 
 .tab-bar-instance {
   background-color: var(--surface-secondary);

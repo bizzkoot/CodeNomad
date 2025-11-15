@@ -1,0 +1,84 @@
+/* Prompt input & attachment styles */
+.prompt-input-container {
+  @apply flex flex-col border-t;
+  border-color: var(--border-base);
+  background-color: var(--surface-base);
+}
+
+.prompt-input-wrapper {
+  @apply flex items-end gap-2 p-3;
+}
+
+.prompt-input {
+  @apply flex-1 min-h-[96px] max-h-[200px] p-2.5 border rounded-md text-sm resize-none outline-none transition-colors;
+  font-family: inherit;
+  background-color: var(--surface-base);
+  color: inherit;
+  border-color: var(--border-base);
+  line-height: var(--line-height-normal);
+}
+
+.prompt-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.prompt-input:disabled {
+  @apply opacity-60 cursor-not-allowed;
+}
+
+.prompt-input::placeholder {
+  color: var(--text-muted);
+}
+
+.send-button {
+  @apply w-10 h-10 rounded-md border-none cursor-pointer flex items-center justify-center transition-all flex-shrink-0;
+  background-color: var(--accent-primary);
+  color: var(--text-inverted);
+}
+
+.send-button:hover:not(:disabled) {
+  @apply opacity-90 scale-105;
+}
+
+.send-button:active:not(:disabled) {
+  @apply scale-95;
+}
+
+.send-button:disabled {
+  @apply opacity-40 cursor-not-allowed;
+}
+
+.send-icon {
+  @apply text-base;
+}
+
+.prompt-input-hints {
+  @apply px-4 pb-2 flex justify-between items-center;
+}
+
+.hint {
+  @apply text-xs;
+  color: var(--text-muted);
+}
+
+.hint kbd {
+  @apply inline-block px-1.5 py-0.5 text-xs font-mono rounded mx-0.5;
+  background-color: var(--surface-secondary);
+  border: 1px solid var(--border-base);
+  border-radius: 3px;
+}
+
+.attachment-chip {
+  @apply px-2.5 py-1 text-xs font-medium ring-1 ring-inset;
+  background-color: var(--attachment-chip-bg);
+  color: var(--attachment-chip-text);
+  ring-color: var(--attachment-chip-ring);
+}
+
+.attachment-remove {
+  @apply ml-0.5 flex h-4 w-4 items-center justify-center rounded transition-colors;
+}
+
+.attachment-remove:hover {
+  background-color: var(--attachment-chip-ring);
+}

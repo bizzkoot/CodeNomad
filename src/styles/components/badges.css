@@ -1,0 +1,46 @@
+/* Badge + status utilities */
+.neutral-badge {
+  @apply inline-flex items-center rounded px-1.5 py-0.5 text-xs font-normal;
+  background-color: var(--badge-neutral-bg);
+  color: var(--badge-neutral-text);
+}
+
+.status-badge {
+  @apply inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium;
+}
+
+.status-badge.ready {
+  background-color: var(--status-ready-bg);
+  color: var(--status-ready-fg);
+}
+
+.status-badge.starting {
+  background-color: var(--status-starting-bg);
+  color: var(--status-starting-fg);
+}
+
+.status-badge.error {
+  background-color: var(--status-error-bg);
+  color: var(--status-error-fg);
+}
+
+.status-badge.stopped {
+  background-color: var(--status-stopped-bg);
+  color: var(--status-stopped-fg);
+}
+
+.status-dot.ready {
+  background-color: var(--status-ready-fg);
+}
+
+.status-dot.starting {
+  background-color: var(--status-starting-fg);
+}
+
+.status-dot.error {
+  background-color: var(--status-error-fg);
+}
+
+.status-dot.stopped {
+  background-color: var(--status-stopped-fg);
+}

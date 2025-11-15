@@ -1,198 +1,4 @@
-@import "./messaging/message-base.css";
-@import "./messaging/prompt-input.css";
-@import "./messaging/message-stream.css";
-@import "./messaging/tool-call.css";
-@import "./messaging/log-view.css";
-
-/* Message item base styles */
-
-.message-item-base {
-  @apply flex flex-col gap-2 p-3 w-full;
-}
-
-.assistant-message {
-  /* gap: 0.25rem; */
-  padding: 0.6rem 0.65rem;
-}
-
-/* Message state badges */
-.message-queued-badge {
-  @apply inline-block font-bold px-3 py-1 rounded mb-3 text-xs tracking-wide;
-  background-color: var(--accent-primary);
-  color: var(--text-inverted);
-}
-
-/* Message error block */
-.message-error-block {
-  @apply text-sm p-3 rounded border-l-[3px] my-2;
-  color: var(--status-error);
-  background-color: var(--message-error-bg);
-  border-color: var(--status-error);
-}
-
-/* Message state indicators */
-.message-generating {
-  @apply text-sm italic py-2;
-  color: var(--text-muted);
-}
-
-.message-sending {
-  @apply text-xs italic mt-1;
-  color: var(--text-muted);
-}
-
-.message-error {
-  @apply text-xs mt-1;
-  color: var(--status-error);
-}
-
-.generating-spinner {
-  @apply inline-block;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-/* Prompt input component utilities */
-.prompt-input-container {
-  @apply flex flex-col border-t;
-  border-color: var(--border-base);
-  background-color: var(--surface-base);
-}
-
-.prompt-input-wrapper {
-  @apply flex items-end gap-2 p-3;
-}
-
-.prompt-input {
-  @apply flex-1 min-h-[96px] max-h-[200px] p-2.5 border rounded-md text-sm resize-none outline-none transition-colors;
-  font-family: inherit;
-  background-color: var(--surface-base);
-  color: inherit;
-  border-color: var(--border-base);
-  line-height: var(--line-height-normal);
-}
-
-.prompt-input:focus {
-  border-color: var(--accent-primary);
-}
-
-.prompt-input:disabled {
-  @apply opacity-60 cursor-not-allowed;
-}
-
-.prompt-input::placeholder {
-  color: var(--text-muted);
-}
-
-.send-button {
-  @apply w-10 h-10 rounded-md border-none cursor-pointer flex items-center justify-center transition-all flex-shrink-0;
-  background-color: var(--accent-primary);
-  color: var(--text-inverted);
-}
-
-.send-button:hover:not(:disabled) {
-  @apply opacity-90 scale-105;
-}
-
-.send-button:active:not(:disabled) {
-  @apply scale-95;
-}
-
-.send-button:disabled {
-  @apply opacity-40 cursor-not-allowed;
-}
-
-.send-icon {
-  @apply text-base;
-}
-
-.prompt-input-hints {
-  @apply px-4 pb-2 flex justify-between items-center;
-}
-
-.hint {
-  @apply text-xs;
-  color: var(--text-muted);
-}
-
-.hint kbd {
-  @apply inline-block px-1.5 py-0.5 text-xs font-mono rounded mx-0.5;
-  background-color: var(--surface-secondary);
-  border: 1px solid var(--border-base);
-  border-radius: 3px;
-}
-
-/* Attachment chip utilities */
-.attachment-chip {
-  @apply px-2.5 py-1 text-xs font-medium ring-1 ring-inset;
-  background-color: var(--attachment-chip-bg);
-  color: var(--attachment-chip-text);
-  ring-color: var(--attachment-chip-ring);
-}
-
-.attachment-remove {
-  @apply ml-0.5 flex h-4 w-4 items-center justify-center rounded transition-colors;
-}
-
-.attachment-remove:hover {
-  background-color: var(--attachment-chip-ring);
-}
-
-/* Message stream component utilities */
-.message-stream-container {
-  @apply relative flex-1 min-h-0 flex flex-col overflow-hidden;
-}
-
-.connection-status {
-  @apply grid items-center px-4 py-2 gap-4;
-  grid-template-columns: 1fr auto 1fr;
-  background-color: var(--surface-secondary);
-  border-bottom: 1px solid var(--border-base);
-}
-
-.message-stream {
-  @apply flex-1 min-h-0 overflow-y-auto flex flex-col gap-1;
-  background-color: var(--surface-base);
-  color: inherit;
-}
-
-.message-scroll-button-wrapper {
-  position: absolute;
-  right: 1rem;
-  bottom: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  align-items: flex-end;
-}
-
-.message-scroll-button {
-  @apply inline-flex items-center justify-center;
-  width: 2.75rem;
-  height: 2.75rem;
-  border-radius: 9999px;
-  border: 1px solid var(--border-base);
-  background-color: transparent;
-  color: var(--text-primary);
-  box-shadow: var(--scroll-elevation-shadow);
-  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.message-scroll-button:hover {
-  background-color: var(--surface-hover);
-  transform: translateY(-1px);
-}
-
-.message-scroll-button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--accent-primary);
-}
-
-.message-scroll-icon {
-  font-size: var(--font-size-lg);
-  color: var(--accent-primary);
-}
-
-/* Tool call message wrapper */
+/* Tool call rendering */
 .tool-call-message {
   @apply flex flex-col gap-2 p-3 w-full;
   background-color: var(--message-tool-bg);
@@ -255,65 +61,6 @@
   font-size: 13px;
 }
 
-.message-text {
-  font-size: var(--font-size-base);
-  line-height: var(--line-height-normal);
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  color: inherit;
-}
-
-.message-text-assistant {
-  white-space: normal;
-}
-
-.message-text pre {
-  overflow-x: auto;
-  padding: 8px;
-  background-color: var(--surface-code);
-  border-radius: 4px;
-}
-
-/* Message error part */
-.message-error-part {
-  color: var(--status-error);
-  font-size: var(--font-size-base);
-  padding: 8px;
-  background-color: var(--message-error-bg);
-  border-radius: 4px;
-}
-
-/* Message reasoning */
-.message-reasoning {
-  @apply my-2 border rounded;
-  border-color: var(--border-base);
-  background-color: var(--surface-secondary);
-  color: inherit;
-}
-
-.reasoning-container {
-  @apply p-2;
-}
-
-.reasoning-header {
-  @apply flex items-center gap-1.5 text-xs cursor-pointer select-none;
-  color: var(--text-muted);
-}
-
-.reasoning-header:hover {
-  color: var(--accent-primary);
-}
-
-.reasoning-icon {
-  @apply text-xs;
-  transition: transform 150ms ease;
-}
-
-.reasoning-label {
-  font-weight: var(--font-weight-medium);
-}
-
-/* Tool call component */
 .tool-call {
   @apply border overflow-hidden;
   border-color: var(--border-base);
@@ -403,7 +150,6 @@
 }
 
 .tool-call-details {
-
   @apply flex flex-col;
   background-color: var(--surface-code);
   font-size: var(--font-size-xs);
@@ -502,7 +248,6 @@
 }
 
 .tool-call-markdown .markdown-code-block {
-
   margin: 0;
   border: none;
   background-color: transparent;
@@ -555,7 +300,6 @@
 }
 
 .tool-call-section code {
-
   font-family: var(--font-family-mono);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-tight);
@@ -772,79 +516,3 @@
   @apply text-xs;
   color: var(--status-error);
 }
-
-/* Log view specific utilities */
-.log-container {
-  @apply flex flex-col h-full;
-  background-color: var(--surface-base);
-}
-
-.log-header {
-  @apply flex items-center justify-between px-4 py-3 border-b;
-  border-color: var(--border-base);
-  background-color: var(--surface-secondary);
-}
-
-.log-content {
-  @apply flex-1 overflow-y-auto p-4 font-mono text-xs leading-relaxed;
-  background-color: var(--surface-secondary);
-  color: var(--text-primary);
-}
-
-.log-entry {
-  @apply flex gap-3 py-0.5 px-2 -mx-2 rounded transition-colors;
-}
-
-.log-entry:hover {
-  background-color: var(--surface-hover);
-}
-
-.log-timestamp {
-  @apply select-none shrink-0;
-  color: var(--text-muted);
-}
-
-.log-message {
-  @apply break-all;
-}
-
-.log-level-error {
-  color: var(--log-level-error);
-}
-
-.log-level-warn {
-  color: var(--log-level-warn);
-}
-
-.log-level-debug {
-  color: var(--log-level-debug);
-}
-
-.log-level-default {
-  color: var(--log-level-default);
-}
-
-.log-empty-state {
-  @apply text-center py-8;
-  color: var(--text-muted);
-}
-
-.log-paused-state {
-  @apply flex flex-col items-center justify-center gap-3 text-center py-10 px-6;
-  border: 1px dashed var(--border-base);
-  border-radius: 12px;
-  background-color: var(--surface-base);
-}
-
-.log-paused-title {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-}
-
-.log-paused-description {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  max-width: 320px;
-}
-
