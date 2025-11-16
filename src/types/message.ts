@@ -5,7 +5,8 @@ import type {
   EventMessagePartUpdated as MessagePartUpdatedEvent,
   EventMessagePartRemoved as MessagePartRemovedEvent,
   Part as SDKPart,
-  Message as SDKMessage
+  Message as SDKMessage,
+  Permission,
 } from "@opencode-ai/sdk"
 
 // Re-export for other modules
@@ -25,6 +26,11 @@ export interface RenderCache {
   mode?: string
 }
 
+export interface PendingPermissionState {
+  permission: Permission
+  active: boolean
+}
+
 // Client-specific part extensions (using intersection type since SDKPart is a union)
 export type ClientPart = SDKPart & {
   sessionID?: string
@@ -32,6 +38,7 @@ export type ClientPart = SDKPart & {
   synthetic?: boolean
   version?: number
   renderCache?: RenderCache
+  pendingPermission?: PendingPermissionState
 }
 
 export interface MessageDisplayParts {

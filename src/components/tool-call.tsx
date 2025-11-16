@@ -1,4 +1,4 @@
-import { createSignal, Show, For, createEffect, onCleanup } from "solid-js"
+import { createSignal, Show, For, createEffect, createMemo, onCleanup } from "solid-js"
 import { isToolCallExpanded, toggleToolCallExpanded, setToolCallExpanded } from "../stores/tool-call-state"
 import { Markdown } from "./markdown"
 import { ToolCallDiffViewer } from "./diff-viewer"
@@ -8,6 +8,7 @@ import { isRenderableDiffText } from "../lib/diff-utils"
 import { getToolRenderCache, setToolRenderCache } from "../lib/tool-render-cache"
 import { useConfig } from "../stores/preferences"
 import type { DiffViewMode } from "../stores/preferences"
+import { sendPermissionResponse } from "../stores/instances"
 import type { TextPart, SDKPart, ClientPart } from "../types/message"
 
 type ToolCallPart = Extract<ClientPart, { type: "tool" }>
@@ -81,6 +82,8 @@ interface ToolCallProps {
   messageId?: string
   messageVersion?: number
   partVersion?: number
+  instanceId: string
+  sessionId: string
 }
 
 function getToolIcon(tool: string): string {
@@ -183,11 +186,22 @@ export default function ToolCall(props: ToolCallProps) {
   const toolCallId = () => props.toolCallId || props.toolCall?.id || ""
   const expanded = () => isToolCallExpanded(toolCallId())
   const [initializedId, setInitializedId] = createSignal<string | null>(null)
+  const pendingPermission = createMemo(() => props.toolCall.pendingPermission)
+  const permissionDetails = createMemo(() => pendingPermission()?.permission)
+  const isPermissionActive = createMemo(() => pendingPermission()?.active === true)
+  const activePermissionKey = createMemo(() => {
+    const permission = permissionDetails()
+    return permission && isPermissionActive() ? permission.id : ""
+  })
+  const [permissionSubmitting, setPermissionSubmitting] = createSignal(false)
+  const [permissionError, setPermissionError] = createSignal<string | null>(null)
 
+ 
+   let scrollContainerRef: HTMLDivElement | undefined
+   let toolCallRootRef: HTMLDivElement | undefined
+ 
+   const handleScrollRendered = () => {
 
-  let scrollContainerRef: HTMLDivElement | undefined
-
-  const handleScrollRendered = () => {
     const id = toolCallId()
     if (!id || !scrollContainerRef) return
     restoreScrollState(id, scrollContainerRef)
@@ -221,6 +235,23 @@ export default function ToolCall(props: ToolCallProps) {
     setInitializedId(id)
   })
 
+  createEffect(() => {
+    if (!pendingPermission()) return
+    const id = toolCallId()
+    if (!id) return
+    setToolCallExpanded(id, true)
+  })
+
+  createEffect(() => {
+    const permission = permissionDetails()
+    if (!permission) {
+      setPermissionSubmitting(false)
+      setPermissionError(null)
+    } else {
+      setPermissionError(null)
+    }
+  })
+
   // Cleanup cache entry when component unmounts or toolCallId changes
   createEffect(() => {
     const id = toolCallId()
@@ -245,6 +276,34 @@ export default function ToolCall(props: ToolCallProps) {
     })
   })
 
+  createEffect(() => {
+    const activeKey = activePermissionKey()
+    if (!activeKey) return
+    requestAnimationFrame(() => {
+      toolCallRootRef?.scrollIntoView({ block: "center", behavior: "smooth" })
+    })
+  })
+
+  createEffect(() => {
+    const activeKey = activePermissionKey()
+    if (!activeKey) return
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Enter") {
+        event.preventDefault()
+        handlePermissionResponse("once")
+      } else if (event.key === "a" || event.key === "A") {
+        event.preventDefault()
+        handlePermissionResponse("always")
+      } else if (event.key === "d" || event.key === "D") {
+        event.preventDefault()
+        handlePermissionResponse("reject")
+      }
+    }
+    document.addEventListener("keydown", handler)
+    onCleanup(() => document.removeEventListener("keydown", handler))
+  })
+
+
   const statusIcon = () => {
     const status = props.toolCall?.state?.status || ""
     switch (status) {
@@ -264,6 +323,11 @@ export default function ToolCall(props: ToolCallProps) {
   const statusClass = () => {
     const status = props.toolCall?.state?.status || "pending"
     return `tool-call-status-${status}`
+  }
+
+  const combinedStatusClass = () => {
+    const base = statusClass()
+    return pendingPermission() ? `${base} tool-call-awaiting-permission` : base
   }
 
   function toggle() {
@@ -298,6 +362,24 @@ export default function ToolCall(props: ToolCallProps) {
         return "Preparing patch..."
       default:
         return "Working..."
+    }
+  }
+
+  async function handlePermissionResponse(response: "once" | "always" | "reject") {
+    const permission = permissionDetails()
+    if (!permission || !isPermissionActive()) {
+      return
+    }
+    setPermissionSubmitting(true)
+    setPermissionError(null)
+    try {
+      const sessionId = permission.sessionID || props.sessionId
+      await sendPermissionResponse(props.instanceId, sessionId, permission.id, response)
+    } catch (error) {
+      console.error("Failed to send permission response:", error)
+      setPermissionError(error instanceof Error ? error.message : "Unable to update permission")
+    } finally {
+      setPermissionSubmitting(false)
     }
   }
 
@@ -424,10 +506,11 @@ export default function ToolCall(props: ToolCallProps) {
     return renderMarkdownTool(toolName, state)
   }
 
-  function renderDiffTool(payload: DiffPayload) {
+  function renderDiffTool(payload: DiffPayload, options?: { cacheKeySuffix?: string; disableScrollTracking?: boolean; label?: string }) {
     const relativePath = payload.filePath ? getRelativePath(payload.filePath) : ""
-    const toolbarLabel = relativePath ? `Diff · ${relativePath}` : "Diff"
-    const cacheKey = makeRenderCacheKey(toolCallId(), props.messageId, props.messageVersion, props.partVersion)
+    const toolbarLabel = options?.label || (relativePath ? `Diff · ${relativePath}` : "Diff")
+    const cacheKeyBase = makeRenderCacheKey(toolCallId(), props.messageId, props.messageVersion, props.partVersion)
+    const cacheKey = options?.cacheKeySuffix ? `${cacheKeyBase}${options.cacheKeySuffix}` : cacheKeyBase
     const diffMode = () => (preferences().diffViewMode || "split") as DiffViewMode
     const themeKey = isDark() ? "dark" : "light"
 
@@ -453,15 +536,21 @@ export default function ToolCall(props: ToolCallProps) {
         // Cache will be updated by the diff viewer component itself
         // We'll capture HTML from the rendered component
       }
-      handleScrollRendered()
+      if (!options?.disableScrollTracking) {
+        handleScrollRendered()
+      }
     }
 
     return (
       <div
         class="message-text tool-call-markdown tool-call-markdown-large tool-call-diff-shell"
-        ref={(element) => initializeScrollContainer(element)}
-        onScroll={(event) => updateScrollState(toolCallId(), event.currentTarget)}
+        ref={(element) => {
+          if (options?.disableScrollTracking) return
+          initializeScrollContainer(element)
+        }}
+        onScroll={options?.disableScrollTracking ? undefined : (event) => updateScrollState(toolCallId(), event.currentTarget)}
       >
+
         <div class="tool-call-diff-toolbar" role="group" aria-label="Diff view mode">
           <span class="tool-call-diff-toolbar-label">{toolbarLabel}</span>
           <div class="tool-call-diff-toggle">
@@ -802,11 +891,103 @@ export default function ToolCall(props: ToolCallProps) {
     return null
   }
 
+  const renderPermissionBlock = () => {
+    const permission = permissionDetails()
+    if (!permission) return null
+    const active = isPermissionActive()
+    const metadata = (permission.metadata ?? {}) as Record<string, unknown>
+    const diffValue = typeof metadata.diff === "string" ? (metadata.diff as string) : null
+    const diffPathRaw = (() => {
+      if (typeof metadata.filePath === "string") {
+        return metadata.filePath as string
+      }
+      if (typeof metadata.path === "string") {
+        return metadata.path as string
+      }
+      return undefined
+    })()
+    const diffPayload = diffValue && diffValue.trim().length > 0 ? { diffText: diffValue, filePath: diffPathRaw } : null
+
+    return (
+      <div class={`tool-call-permission ${active ? "tool-call-permission-active" : "tool-call-permission-queued"}`}>
+        <div class="tool-call-permission-header">
+          <span class="tool-call-permission-label">{active ? "Permission Required" : "Permission Queued"}</span>
+          <span class="tool-call-permission-type">{permission.type}</span>
+        </div>
+        <div class="tool-call-permission-body">
+          <div class="tool-call-permission-title">
+            <code>{permission.title}</code>
+          </div>
+          <Show when={diffPayload}>
+            {(payload) => (
+              <div class="tool-call-permission-diff">
+                {renderDiffTool(payload(), {
+                  cacheKeySuffix: "::permission",
+                  disableScrollTracking: true,
+                  label: payload().filePath ? `Requested diff · ${getRelativePath(payload().filePath || "")}` : "Requested diff",
+                })}
+              </div>
+            )}
+          </Show>
+          <Show
+            when={active}
+            fallback={<p class="tool-call-permission-queued-text">Waiting for earlier permission responses.</p>}
+          >
+            <div class="tool-call-permission-actions">
+              <div class="tool-call-permission-buttons">
+                <button
+                  type="button"
+                  class="tool-call-permission-button"
+                  disabled={permissionSubmitting()}
+                  onClick={() => handlePermissionResponse("once")}
+                >
+                  Allow Once
+                </button>
+                <button
+                  type="button"
+                  class="tool-call-permission-button"
+                  disabled={permissionSubmitting()}
+                  onClick={() => handlePermissionResponse("always")}
+                >
+                  Always Allow
+                </button>
+                <button
+                  type="button"
+                  class="tool-call-permission-button"
+                  disabled={permissionSubmitting()}
+                  onClick={() => handlePermissionResponse("reject")}
+                >
+                  Deny
+                </button>
+              </div>
+              <div class="tool-call-permission-shortcuts">
+                <kbd class="kbd">Enter</kbd>
+                <span>Allow once</span>
+                <kbd class="kbd">A</kbd>
+                <span>Always allow</span>
+                <kbd class="kbd">D</kbd>
+                <span>Deny</span>
+              </div>
+            </div>
+            <Show when={permissionError()}>
+              <div class="tool-call-permission-error">{permissionError()}</div>
+            </Show>
+          </Show>
+        </div>
+      </div>
+    )
+  }
+
   const toolName = () => props.toolCall?.tool || ""
   const status = () => props.toolCall?.state?.status || ""
 
   return (
-    <div class={`tool-call ${statusClass()}`}>
+    <div
+      ref={(element) => {
+        toolCallRootRef = element || undefined
+      }}
+      class={`tool-call ${combinedStatusClass()}`}
+    >
       <button class="tool-call-header" onClick={toggle} aria-expanded={expanded()}>
         <span class="tool-call-icon">{expanded() ? "▼" : "▶"}</span>
         <span class="tool-call-emoji">{getToolIcon(toolName())}</span>
@@ -819,7 +1000,9 @@ export default function ToolCall(props: ToolCallProps) {
           {renderToolBody()}
           {renderError()}
 
-          <Show when={status() === "pending"}>
+          {renderPermissionBlock()}
+
+          <Show when={status() === "pending" && !pendingPermission()}>
             <div class="tool-call-pending-message">
               <span class="spinner-small"></span>
               <span>Waiting for permission...</span>

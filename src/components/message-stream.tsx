@@ -615,6 +615,8 @@ export default function MessageStream(props: MessageStreamProps) {
                 <MessageItem
                   message={item.message}
                   messageInfo={item.messageInfo}
+                  instanceId={props.instanceId}
+                  sessionId={props.sessionId}
                   isQueued={item.isQueued}
                   parts={item.combinedParts}
                   onRevert={props.onRevert}
@@ -665,6 +667,8 @@ export default function MessageStream(props: MessageStreamProps) {
                   messageId={item.messageId}
                   messageVersion={item.messageVersion}
                   partVersion={item.partVersion}
+                  instanceId={props.instanceId}
+                  sessionId={props.sessionId}
                 />
               </div>
             )

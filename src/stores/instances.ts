@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js"
 import type { Instance, LogEntry } from "../types/instance"
 import type { Permission } from "@opencode-ai/sdk"
+import type { ClientPart, Message } from "../types/message"
 import { sdkManager } from "../lib/sdk-manager"
 import { sseManager } from "../lib/sse-manager"
 import {
@@ -12,6 +13,8 @@ import {
 } from "./sessions"
 import { fetchCommands, clearCommands } from "./commands"
 import { preferences, updateLastUsedBinary } from "./preferences"
+import { computeDisplayParts } from "./session-messages"
+import { withSession, setSessionPendingPermission } from "./session-state"
 import { setHasInstances } from "./ui"
 
 const [instances, setInstances] = createSignal<Map<string, Instance>>(new Map())
@@ -22,6 +25,7 @@ const [logStreamingState, setLogStreamingState] = createSignal<Map<string, boole
 // Permission queue management per instance
 const [permissionQueues, setPermissionQueues] = createSignal<Map<string, Permission[]>>(new Map())
 const [activePermissionId, setActivePermissionId] = createSignal<Map<string, string | null>>(new Map())
+const permissionSessionCounts = new Map<string, Map<string, number>>()
 interface DisconnectedInstanceInfo {
   id: string
   folder: string
@@ -141,6 +145,7 @@ function removeInstance(id: string) {
 
   removeLogContainer(id)
   clearCommands(id)
+  clearPermissionQueue(id)
 
   if (activeInstanceId() === id) {
     setActiveInstanceId(nextActiveId)
@@ -260,30 +265,73 @@ function clearLogs(id: string) {
 
 // Permission management functions
 function getPermissionQueue(instanceId: string): Permission[] {
-  return permissionQueues().get(instanceId) ?? []
+  const queue = permissionQueues().get(instanceId)
+  if (!queue) {
+    return []
+  }
+  return queue
 }
 
 function getPermissionQueueLength(instanceId: string): number {
   return getPermissionQueue(instanceId).length
 }
 
+function incrementSessionPendingCount(instanceId: string, sessionId: string): void {
+  let sessionCounts = permissionSessionCounts.get(instanceId)
+  if (!sessionCounts) {
+    sessionCounts = new Map()
+    permissionSessionCounts.set(instanceId, sessionCounts)
+  }
+  const current = sessionCounts.get(sessionId) ?? 0
+  sessionCounts.set(sessionId, current + 1)
+}
+
+function decrementSessionPendingCount(instanceId: string, sessionId: string): number {
+  const sessionCounts = permissionSessionCounts.get(instanceId)
+  if (!sessionCounts) return 0
+  const current = sessionCounts.get(sessionId) ?? 0
+  if (current <= 1) {
+    sessionCounts.delete(sessionId)
+    if (sessionCounts.size === 0) {
+      permissionSessionCounts.delete(instanceId)
+    }
+    return 0
+  }
+  const nextValue = current - 1
+  sessionCounts.set(sessionId, nextValue)
+  return nextValue
+}
+
+function clearSessionPendingCounts(instanceId: string): void {
+  const sessionCounts = permissionSessionCounts.get(instanceId)
+  if (!sessionCounts) return
+  for (const sessionId of sessionCounts.keys()) {
+    setSessionPendingPermission(instanceId, sessionId, false)
+  }
+  permissionSessionCounts.delete(instanceId)
+}
+
 function addPermissionToQueue(instanceId: string, permission: Permission): void {
+  let inserted = false
+
   setPermissionQueues((prev) => {
     const next = new Map(prev)
     const queue = next.get(instanceId) ?? []
 
-    // Check if permission already exists
-    if (queue.some(p => p.id === permission.id)) {
-      return next // Don't add duplicate
+    if (queue.some((p) => p.id === permission.id)) {
+      return next
     }
 
-    // Add to queue and sort by creation time to maintain order
     const updatedQueue = [...queue, permission].sort((a, b) => a.time.created - b.time.created)
     next.set(instanceId, updatedQueue)
+    inserted = true
     return next
   })
 
-  // Set as active if no active permission
+  if (!inserted) {
+    return
+  }
+
   setActivePermissionId((prev) => {
     const next = new Map(prev)
     if (!next.get(instanceId)) {
@@ -291,6 +339,13 @@ function addPermissionToQueue(instanceId: string, permission: Permission): void 
     }
     return next
   })
+
+  const sessionId = getPermissionSessionId(permission)
+  incrementSessionPendingCount(instanceId, sessionId)
+  setSessionPendingPermission(instanceId, sessionId, true)
+
+  const isActive = getActivePermission(instanceId)?.id === permission.id
+  attachPermissionToToolPart(instanceId, permission, isActive)
 }
 
 function getActivePermission(instanceId: string): Permission | null {
@@ -302,30 +357,53 @@ function getActivePermission(instanceId: string): Permission | null {
 }
 
 function removePermissionFromQueue(instanceId: string, permissionId: string): void {
-  let updatedQueue: Permission[] = []
+  let removedPermission: Permission | null = null
 
   setPermissionQueues((prev) => {
     const next = new Map(prev)
     const queue = next.get(instanceId) ?? []
-    updatedQueue = queue.filter(p => p.id !== permissionId)
-    if (updatedQueue.length > 0) {
-      next.set(instanceId, updatedQueue)
+    const filtered: Permission[] = []
+
+    for (const item of queue) {
+      if (item.id === permissionId) {
+        removedPermission = item
+        continue
+      }
+      filtered.push(item)
+    }
+
+    if (filtered.length > 0) {
+      next.set(instanceId, filtered)
     } else {
       next.delete(instanceId)
     }
     return next
   })
 
+  const updatedQueue = getPermissionQueue(instanceId)
+
   setActivePermissionId((prev) => {
     const next = new Map(prev)
     const activeId = next.get(instanceId)
     if (activeId === permissionId) {
-      // Set the next permission in queue as active, or null if queue is empty
-      const nextPermission = updatedQueue.length > 0 ? updatedQueue[0] : null
+      const nextPermission = updatedQueue.length > 0 ? (updatedQueue[0] as Permission) : null
       next.set(instanceId, nextPermission?.id ?? null)
     }
     return next
   })
+
+  const removed = removedPermission
+  if (removed) {
+    clearPermissionFromToolPart(instanceId, removed)
+    const removedSessionId = getPermissionSessionId(removed)
+    const remaining = decrementSessionPendingCount(instanceId, removedSessionId)
+    setSessionPendingPermission(instanceId, removedSessionId, remaining > 0)
+  }
+
+  const nextActivePermission = getActivePermission(instanceId)
+  if (nextActivePermission) {
+    attachPermissionToToolPart(instanceId, nextActivePermission, true)
+  }
 }
 
 function clearPermissionQueue(instanceId: string): void {
@@ -339,6 +417,95 @@ function clearPermissionQueue(instanceId: string): void {
     next.delete(instanceId)
     return next
   })
+  clearSessionPendingCounts(instanceId)
+}
+
+function getPermissionSessionId(permission: Permission): string {
+  return (permission as any).sessionID
+}
+
+function findToolPartForPermission(message: Message, permission: Permission): ClientPart | null {
+  const expectedCallId = permission.callID
+  for (const part of message.parts) {
+    if (part.type !== "tool") continue
+    const toolCallId = (part as any).callID
+    if (expectedCallId) {
+      if (toolCallId === expectedCallId) {
+        return part as ClientPart
+      }
+      if (!toolCallId && (part.id === expectedCallId || part.messageID === permission.messageID)) {
+        return part as ClientPart
+      }
+      continue
+    }
+
+    if ((toolCallId && toolCallId === permission.id) || part.id === permission.id || part.messageID === permission.messageID) {
+      return part as ClientPart
+    }
+  }
+  return null
+}
+
+function mutateToolPartPermission(
+  instanceId: string,
+  permission: Permission,
+  mutator: (part: ClientPart, message: Message) => boolean,
+): void {
+  const permissionSessionId = getPermissionSessionId(permission)
+  withSession(instanceId, permissionSessionId, (session) => {
+    const message = session.messages.find((msg) => msg.id === permission.messageID)
+    if (!message) return
+    const targetPart = findToolPartForPermission(message, permission)
+    if (!targetPart) return
+
+    const changed = mutator(targetPart, message)
+    if (!changed) return
+
+    const nextPartVersion = typeof targetPart.version === "number" ? targetPart.version + 1 : 1
+    targetPart.version = nextPartVersion
+    message.version = (message.version ?? 0) + 1
+    message.displayParts = computeDisplayParts(message, preferences().showThinkingBlocks)
+  })
+}
+
+function attachPermissionToToolPart(instanceId: string, permission: Permission, active: boolean): void {
+  mutateToolPartPermission(instanceId, permission, (part) => {
+    const existing = part.pendingPermission
+    if (existing && existing.permission.id === permission.id && existing.active === active) {
+      return false
+    }
+    part.pendingPermission = { permission, active }
+    return true
+  })
+}
+
+function clearPermissionFromToolPart(instanceId: string, permission: Permission): void {
+  mutateToolPartPermission(instanceId, permission, (part) => {
+    if (!part.pendingPermission || part.pendingPermission.permission.id !== permission.id) {
+      return false
+    }
+    delete part.pendingPermission
+    return true
+  })
+}
+
+function refreshPermissionsForSession(instanceId: string, sessionId: string): void {
+  const queue = getPermissionQueue(instanceId)
+  if (queue.length === 0) {
+    setSessionPendingPermission(instanceId, sessionId, false)
+    return
+  }
+
+  const activeId = activePermissionId().get(instanceId)
+
+  for (const permission of queue) {
+    if (getPermissionSessionId(permission) !== sessionId) continue
+    const isActive = permission.id === activeId
+    attachPermissionToToolPart(instanceId, permission, isActive)
+  }
+
+  const pendingCount = permissionSessionCounts.get(instanceId)?.get(sessionId) ?? 0
+  setSessionPendingPermission(instanceId, sessionId, pendingCount > 0)
 }
 
 async function sendPermissionResponse(
@@ -422,6 +589,7 @@ export {
   getActivePermission,
   removePermissionFromQueue,
   clearPermissionQueue,
+  refreshPermissionsForSession,
   sendPermissionResponse,
   disconnectedInstance,
   acknowledgeDisconnectedInstance,

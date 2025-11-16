@@ -15,7 +15,7 @@ import type {
 
 import { showToastNotification, ToastVariant } from "../lib/notifications"
 import { preferences } from "./preferences"
-import { instances, addPermissionToQueue, removePermissionFromQueue } from "./instances"
+import { instances, addPermissionToQueue, removePermissionFromQueue, refreshPermissionsForSession } from "./instances"
 import {
   sessions,
   setSessions,
@@ -211,6 +211,7 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
     })
 
     updateSessionInfo(instanceId, part.sessionID)
+    refreshPermissionsForSession(instanceId, part.sessionID)
   } else if (event.type === "message.updated") {
     const info = event.properties?.info
     if (!info) return
@@ -308,6 +309,7 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
     })
 
     updateSessionInfo(instanceId, info.sessionID)
+    refreshPermissionsForSession(instanceId, info.sessionID)
   }
 }
 

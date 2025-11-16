@@ -194,6 +194,11 @@
   --session-status-dot: var(--session-status-idle-fg);
 }
 
+.status-indicator.session-status.session-permission {
+  color: var(--session-status-permission-fg);
+  --session-status-dot: var(--session-status-permission-fg);
+}
+
 .status-indicator.session-status .status-dot {
   background-color: var(--session-status-dot);
 }
@@ -213,6 +218,10 @@
 
 .status-indicator.session-status.session-idle.session-status-list {
   background-color: var(--session-status-idle-bg);
+}
+
+.status-indicator.session-status.session-permission.session-status-list {
+  background-color: var(--session-status-permission-bg);
 }
 
 .status-indicator.session-status-list {

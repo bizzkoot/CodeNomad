@@ -6,6 +6,8 @@ import MessagePart from "./message-part"
 interface MessageItemProps {
   message: Message
   messageInfo?: MessageInfo
+  instanceId: string
+  sessionId: string
   isQueued?: boolean
   parts?: ClientPart[]
   onRevert?: (messageId: string) => void
@@ -139,7 +141,14 @@ export default function MessageItem(props: MessageItemProps) {
           </div>
         </Show>
 
-        <For each={messageParts()}>{(part) => <MessagePart part={part} messageType={props.message.type} />}</For>
+        <For each={messageParts()}>{(part) => (
+          <MessagePart
+            part={part}
+            messageType={props.message.type}
+            instanceId={props.instanceId}
+            sessionId={props.sessionId}
+          />
+        )}</For>
       </div>
 
       <Show when={props.message.status === "sending"}>

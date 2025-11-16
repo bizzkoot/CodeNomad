@@ -127,6 +127,13 @@ function setSessionCompactionState(instanceId: string, sessionId: string, isComp
   })
 }
 
+function setSessionPendingPermission(instanceId: string, sessionId: string, pending: boolean): void {
+  withSession(instanceId, sessionId, (session) => {
+    if (session.pendingPermission === pending) return
+    session.pendingPermission = pending
+  })
+}
+
 function setActiveSession(instanceId: string, sessionId: string): void {
   setActiveSessionId((prev) => {
     const next = new Map(prev)
@@ -237,7 +244,9 @@ export {
   pruneDraftPrompts,
   withSession,
   setSessionCompactionState,
+  setSessionPendingPermission,
   setActiveSession,
+
   setActiveParentSession,
   clearActiveParentSession,
   getActiveSession,

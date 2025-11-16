@@ -28,6 +28,7 @@ export interface Session extends Omit<import("@opencode-ai/sdk").Session, 'proje
   messages: Message[]  // Client-specific field
   messagesInfo: Map<string, MessageInfo>  // Client-specific field
   version: string  // Include version from SDK Session
+  pendingPermission?: boolean  // Indicates if session is waiting on user permission
 }
 
 // Adapter function to convert SDK Session to client Session

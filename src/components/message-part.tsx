@@ -11,6 +11,8 @@ type ToolCallPart = Extract<ClientPart, { type: "tool" }>
 interface MessagePartProps {
   part: ClientPart
   messageType?: "user" | "assistant"
+  instanceId: string
+  sessionId: string
 }
 export default function MessagePart(props: MessagePartProps) {
   const { isDark } = useTheme()
@@ -71,7 +73,12 @@ export default function MessagePart(props: MessagePartProps) {
       </Match>
 
       <Match when={partType() === "tool"}>
-        <ToolCall toolCall={props.part as ToolCallPart} toolCallId={props.part?.id} />
+        <ToolCall
+          toolCall={props.part as ToolCallPart}
+          toolCallId={props.part?.id}
+          instanceId={props.instanceId}
+          sessionId={props.sessionId}
+        />
       </Match>
 
 

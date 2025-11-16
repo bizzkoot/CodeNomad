@@ -208,9 +208,13 @@ const SessionList: Component<SessionListProps> = (props) => {
     const title = () => session()?.title || "Untitled"
     const status = () => getSessionStatus(props.instanceId, rowProps.sessionId)
     const statusLabel = () => formatSessionStatus(status())
+    const pendingPermission = () => Boolean(session()?.pendingPermission)
+    const statusClassName = () => (pendingPermission() ? "session-permission" : `session-${status()}`)
+    const statusText = () => (pendingPermission() ? "Needs Permission" : statusLabel())
  
     return (
-      <div class="session-list-item group">
+       <div class="session-list-item group">
+
         <button
           class={`session-item-base ${isActive() ? "session-item-active" : "session-item-inactive"}`}
           onClick={() => selectSession(rowProps.sessionId)}
@@ -239,9 +243,9 @@ const SessionList: Component<SessionListProps> = (props) => {
             </Show>
           </div>
           <div class="session-item-row session-item-meta">
-            <span class={`status-indicator session-status session-status-list session-${status()}`}>
+            <span class={`status-indicator session-status session-status-list ${statusClassName()}`}>
               <span class="status-dot" />
-              {statusLabel()}
+              {statusText()}
             </span>
             <div class="session-item-actions">
               <span
