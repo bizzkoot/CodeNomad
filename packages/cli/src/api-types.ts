@@ -103,6 +103,8 @@ export interface WorkspaceFileResponse {
   contents: string
 }
 
+export type WorkspaceFileSearchResponse = FileSystemEntry[]
+
 export interface InstanceData {
   messageHistory: string[]
 }
@@ -112,6 +114,7 @@ export interface BinaryRecord {
   path: string
   label: string
   version?: string
+
   /** Indicates that this binary will be picked when workspaces omit an explicit choice. */
   isDefault: boolean
   lastValidatedAt?: string

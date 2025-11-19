@@ -19,6 +19,16 @@ const WorkspaceFileContentQuerySchema = z.object({
   path: z.string(),
 })
 
+const WorkspaceFileSearchQuerySchema = z.object({
+  q: z.string().trim().min(1, "Query is required"),
+  limit: z.coerce.number().int().positive().max(200).optional(),
+  type: z.enum(["all", "file", "directory"]).optional(),
+  refresh: z
+    .string()
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === "true")),
+})
+
 export function registerWorkspaceRoutes(app: FastifyInstance, deps: RouteDeps) {
   app.get("/api/workspaces", async () => {
     return deps.workspaceManager.list()
@@ -59,6 +69,22 @@ export function registerWorkspaceRoutes(app: FastifyInstance, deps: RouteDeps) {
 
   app.get<{
     Params: { id: string }
+    Querystring: { q?: string; limit?: string; type?: "all" | "file" | "directory"; refresh?: string }
+  }>("/api/workspaces/:id/files/search", async (request, reply) => {
+    try {
+      const query = WorkspaceFileSearchQuerySchema.parse(request.query ?? {})
+      return deps.workspaceManager.searchFiles(request.params.id, query.q, {
+        limit: query.limit,
+        type: query.type,
+        refresh: query.refresh,
+      })
+    } catch (error) {
+      return handleWorkspaceError(error, reply)
+    }
+  })
+
+  app.get<{
+    Params: { id: string }
     Querystring: { path?: string }
   }>("/api/workspaces/:id/files/content", async (request, reply) => {
     try {
@@ -69,6 +95,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance, deps: RouteDeps) {
     }
   })
 }
+
 
 function handleWorkspaceError(error: unknown, reply: FastifyReply) {
   if (error instanceof Error && error.message === "Workspace not found") {

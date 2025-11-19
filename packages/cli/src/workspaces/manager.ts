@@ -3,6 +3,8 @@ import { EventBus } from "../events/bus"
 import { ConfigStore } from "../config/store"
 import { BinaryRegistry } from "../config/binaries"
 import { FileSystemBrowser } from "../filesystem/browser"
+import { searchWorkspaceFiles, WorkspaceFileSearchOptions } from "../filesystem/search"
+import { clearWorkspaceSearchCache } from "../filesystem/search-cache"
 import { WorkspaceDescriptor, WorkspaceFileResponse, FileSystemEntry } from "../api-types"
 import { WorkspaceRuntime } from "./runtime"
 import { Logger } from "../logger"
@@ -43,6 +45,11 @@ export class WorkspaceManager {
     return browser.list(relativePath)
   }
 
+  searchFiles(workspaceId: string, query: string, options?: WorkspaceFileSearchOptions): FileSystemEntry[] {
+    const workspace = this.requireWorkspace(workspaceId)
+    return searchWorkspaceFiles(workspace.path, query, options)
+  }
+
   readFile(workspaceId: string, relativePath: string): WorkspaceFileResponse {
     const workspace = this.requireWorkspace(workspaceId)
     const browser = new FileSystemBrowser({ rootDir: workspace.path })
@@ -55,13 +62,16 @@ export class WorkspaceManager {
   }
 
   async create(folder: string, name?: string): Promise<WorkspaceDescriptor> {
+ 
     const id = `${Date.now().toString(36)}`
     const binary = this.options.binaryRegistry.resolveDefault()
     const workspacePath = path.isAbsolute(folder) ? folder : path.resolve(this.options.rootDir, folder)
+    clearWorkspaceSearchCache(workspacePath)
 
     this.options.logger.info({ workspaceId: id, folder: workspacePath, binary: binary.path }, "Creating workspace")
 
     const proxyPath = `/workspaces/${id}/instance`
+
 
     const descriptor: WorkspaceRecord = {
       id,
@@ -120,6 +130,7 @@ export class WorkspaceManager {
     }
 
     this.workspaces.delete(id)
+    clearWorkspaceSearchCache(workspace.path)
     if (!wasRunning) {
       this.options.eventBus.publish({ type: "workspace.stopped", workspaceId: id })
     }

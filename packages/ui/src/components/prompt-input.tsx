@@ -573,7 +573,14 @@ export default function PromptInput(props: PromptInputProps) {
     setAtPosition(null)
   }
 
-  function handlePickerSelect(item: { type: "agent"; agent: Agent } | { type: "file"; file: { path: string; isGitFile: boolean } }) {
+  function handlePickerSelect(
+    item:
+      | { type: "agent"; agent: Agent }
+      | {
+          type: "file"
+          file: { path: string; relativePath?: string; isGitFile: boolean; isDirectory?: boolean }
+        },
+  ) {
     if (item.type === "agent") {
       const agentName = item.agent.name
       const existingAttachments = attachments()
@@ -605,25 +612,26 @@ export default function PromptInput(props: PromptInputProps) {
         }, 0)
       }
     } else if (item.type === "file") {
-      const path = item.file.path
-      const isFolder = path.endsWith("/")
-      const filename = path.split("/").pop() || path
+      const displayPath = item.file.path
+      const relativePath = item.file.relativePath ?? displayPath
+      const isFolder = item.file.isDirectory ?? displayPath.endsWith("/")
 
       if (isFolder) {
         const currentPrompt = prompt()
         const pos = atPosition()
         const cursorPos = textareaRef?.selectionStart || 0
+        const folderMention = relativePath === "." || relativePath === "" ? "/" : displayPath
 
         if (pos !== null) {
           const before = currentPrompt.substring(0, pos + 1)
           const after = currentPrompt.substring(cursorPos)
-          const newPrompt = before + path + after
+          const newPrompt = before + folderMention + after
           setPrompt(newPrompt)
-          setSearchQuery(path)
+          setSearchQuery(folderMention)
 
           setTimeout(() => {
             if (textareaRef) {
-              const newCursorPos = pos + 1 + path.length
+              const newCursorPos = pos + 1 + folderMention.length
               textareaRef.setSelectionRange(newCursorPos, newCursorPos)
             }
           }, 0)
@@ -632,11 +640,20 @@ export default function PromptInput(props: PromptInputProps) {
         return
       }
 
+      const normalizedPath = relativePath.replace(/\/+$/, "") || relativePath
+      const pathSegments = normalizedPath.split("/")
+      const filename = (() => {
+        const candidate = pathSegments[pathSegments.length - 1] || normalizedPath
+        return candidate === "." ? "/" : candidate
+      })()
+
       const existingAttachments = attachments()
-      const alreadyAttached = existingAttachments.some((att) => att.source.type === "file" && att.source.path === path)
+      const alreadyAttached = existingAttachments.some(
+        (att) => att.source.type === "file" && att.source.path === normalizedPath,
+      )
 
       if (!alreadyAttached) {
-        const attachment = createFileAttachment(path, filename, "text/plain", undefined, props.instanceFolder)
+        const attachment = createFileAttachment(normalizedPath, filename, "text/plain", undefined, props.instanceFolder)
         addAttachment(props.instanceId, props.sessionId, attachment)
       }
 

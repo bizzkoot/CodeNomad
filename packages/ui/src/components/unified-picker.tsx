@@ -3,11 +3,65 @@ import type { Agent } from "../types/session"
 import type { OpencodeClient } from "@opencode-ai/sdk/client"
 import { cliApi } from "../lib/api-client"
 
+const SEARCH_RESULT_LIMIT = 100
+const SEARCH_DEBOUNCE_MS = 200
+
+type LoadingState = "idle" | "listing" | "search"
+
 interface FileItem {
   path: string
+  relativePath: string
   added?: number
   removed?: number
   isGitFile: boolean
+  isDirectory: boolean
+}
+
+function formatDisplayPath(basePath: string, isDirectory: boolean) {
+  if (!isDirectory) {
+    return basePath
+  }
+  const trimmed = basePath.replace(/\/+$/, "")
+  return trimmed.length > 0 ? `${trimmed}/` : "./"
+}
+
+function isRootPath(value: string) {
+  return value === "." || value === "./" || value === "/"
+}
+
+function normalizeRelativePath(basePath: string, isDirectory: boolean) {
+  if (isRootPath(basePath)) {
+    return "."
+  }
+  const withoutPrefix = basePath.replace(/^\.\/+/, "")
+  if (isDirectory) {
+    const trimmed = withoutPrefix.replace(/\/+$/, "")
+    return trimmed || "."
+  }
+  return withoutPrefix
+}
+
+function normalizeQuery(rawQuery: string) {
+  const trimmed = rawQuery.trim()
+  if (!trimmed) {
+    return ""
+  }
+  if (trimmed === "." || trimmed === "./") {
+    return ""
+  }
+  return trimmed.replace(/^(\.\/)+/, "").replace(/^\/+/, "")
+}
+
+function mapEntriesToFileItems(entries: { path: string; type: "file" | "directory" }[]): FileItem[] {
+  return entries.map((entry) => {
+    const isDirectory = entry.type === "directory"
+    return {
+      path: formatDisplayPath(entry.path, isDirectory),
+      relativePath: normalizeRelativePath(entry.path, isDirectory),
+      isDirectory,
+      isGitFile: false,
+    }
+  })
 }
 
 type PickerItem = { type: "agent"; agent: Agent } | { type: "file"; file: FileItem }
@@ -27,61 +81,181 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
   const [files, setFiles] = createSignal<FileItem[]>([])
   const [filteredAgents, setFilteredAgents] = createSignal<Agent[]>([])
   const [selectedIndex, setSelectedIndex] = createSignal(0)
-  const [loading, setLoading] = createSignal(false)
+  const [loadingState, setLoadingState] = createSignal<LoadingState>("idle")
   const [allFiles, setAllFiles] = createSignal<FileItem[]>([])
   const [isInitialized, setIsInitialized] = createSignal(false)
-
+  const [cachedWorkspaceId, setCachedWorkspaceId] = createSignal<string | null>(null)
+ 
   let containerRef: HTMLDivElement | undefined
   let scrollContainerRef: HTMLDivElement | undefined
-
-  async function fetchFiles(searchQuery: string) {
-    setLoading(true)
+  let lastWorkspaceId: string | null = null
+  let lastQuery = ""
+  let inflightWorkspaceId: string | null = null
+  let inflightSnapshotPromise: Promise<FileItem[]> | null = null
+  let activeRequestId = 0
+  let queryDebounceTimer: ReturnType<typeof setTimeout> | null = null
+ 
+  function resetScrollPosition() {
+    setTimeout(() => {
+      if (scrollContainerRef) {
+        scrollContainerRef.scrollTop = 0
+      }
+    }, 0)
+  }
+ 
+  function applyFileResults(nextFiles: FileItem[]) {
+    setFiles(nextFiles)
+    setSelectedIndex(0)
+    resetScrollPosition()
+  }
+ 
+  async function fetchWorkspaceSnapshot(workspaceId: string): Promise<FileItem[]> {
+    if (inflightWorkspaceId === workspaceId && inflightSnapshotPromise) {
+      return inflightSnapshotPromise
+    }
+ 
+    inflightWorkspaceId = workspaceId
+    inflightSnapshotPromise = cliApi
+      .listWorkspaceFiles(workspaceId)
+      .then((entries) => mapEntriesToFileItems(entries))
+      .then((snapshot) => {
+        setAllFiles(snapshot)
+        setCachedWorkspaceId(workspaceId)
+        return snapshot
+      })
+      .catch((error) => {
+        console.error(`[UnifiedPicker] Failed to load workspace files:`, error)
+        setAllFiles([])
+        setCachedWorkspaceId(null)
+        throw error
+      })
+      .finally(() => {
+        if (inflightWorkspaceId === workspaceId) {
+          inflightWorkspaceId = null
+          inflightSnapshotPromise = null
+        }
+      })
+ 
+    return inflightSnapshotPromise
+  }
+ 
+  async function ensureWorkspaceSnapshot(workspaceId: string) {
+    if (cachedWorkspaceId() === workspaceId && allFiles().length > 0) {
+      return allFiles()
+    }
+ 
+    return fetchWorkspaceSnapshot(workspaceId)
+  }
+ 
+  async function loadFilesForQuery(rawQuery: string, workspaceId: string) {
+    const normalizedQuery = normalizeQuery(rawQuery)
+    const requestId = ++activeRequestId
+    const hasCachedSnapshot =
+      !normalizedQuery && cachedWorkspaceId() === workspaceId && allFiles().length > 0
+    const mode: LoadingState = normalizedQuery ? "search" : hasCachedSnapshot ? "idle" : "listing"
+    if (mode !== "idle") {
+      setLoadingState(mode)
+    } else {
+      setLoadingState("idle")
+    }
 
     try {
-      if (allFiles().length === 0) {
-        const entries = await cliApi.listWorkspaceFiles(props.workspaceId)
-        const scannedFiles: FileItem[] = entries.map<FileItem>((entry) => ({
-          path: entry.path,
-          isGitFile: false,
-        }))
-        setAllFiles(scannedFiles)
+      if (!normalizedQuery) {
+        const snapshot = await ensureWorkspaceSnapshot(workspaceId)
+        if (!shouldApplyResults(requestId, workspaceId)) {
+          return
+        }
+        applyFileResults(snapshot)
+        return
       }
 
-      const filteredFiles = searchQuery.trim()
-        ? allFiles().filter((f) => f.path.toLowerCase().includes(searchQuery.toLowerCase()))
-        : allFiles()
-
-      setFiles(filteredFiles)
-      setSelectedIndex(0)
-
-      setTimeout(() => {
-        if (scrollContainerRef) {
-          scrollContainerRef.scrollTop = 0
-        }
-      }, 0)
+      const results = await cliApi.searchWorkspaceFiles(workspaceId, normalizedQuery, {
+        limit: SEARCH_RESULT_LIMIT,
+      })
+      if (!shouldApplyResults(requestId, workspaceId)) {
+        return
+      }
+      applyFileResults(mapEntriesToFileItems(results))
     } catch (error) {
-      console.error(`[UnifiedPicker] Failed to fetch files:`, error)
-      setFiles([])
+      if (workspaceId === props.workspaceId) {
+        console.error(`[UnifiedPicker] Failed to fetch files:`, error)
+        if (shouldApplyResults(requestId, workspaceId)) {
+          applyFileResults([])
+        }
+      }
     } finally {
-      setLoading(false)
+      if (shouldFinalizeRequest(requestId, workspaceId)) {
+        setLoadingState("idle")
+      }
     }
   }
 
-  let lastQuery = ""
+  function clearQueryDebounce() {
+    if (queryDebounceTimer) {
+      clearTimeout(queryDebounceTimer)
+      queryDebounceTimer = null
+    }
+  }
+
+  function scheduleLoadFilesForQuery(rawQuery: string, workspaceId: string, immediate = false) {
+    clearQueryDebounce()
+    const normalizedQuery = normalizeQuery(rawQuery)
+    const shouldDebounce = !immediate && normalizedQuery.length > 0
+    if (shouldDebounce) {
+      queryDebounceTimer = setTimeout(() => {
+        queryDebounceTimer = null
+        void loadFilesForQuery(rawQuery, workspaceId)
+      }, SEARCH_DEBOUNCE_MS)
+      return
+    }
+    void loadFilesForQuery(rawQuery, workspaceId)
+  }
+
+  function shouldApplyResults(requestId: number, workspaceId: string) {
+    return props.open && workspaceId === props.workspaceId && requestId === activeRequestId
+  }
+
+ 
+  function shouldFinalizeRequest(requestId: number, workspaceId: string) {
+    return workspaceId === props.workspaceId && requestId === activeRequestId
+  }
+ 
+  function resetPickerState() {
+    clearQueryDebounce()
+    setFiles([])
+    setAllFiles([])
+    setCachedWorkspaceId(null)
+    setIsInitialized(false)
+    setSelectedIndex(0)
+    setLoadingState("idle")
+    lastWorkspaceId = null
+    lastQuery = ""
+    activeRequestId = 0
+  }
+
+  onCleanup(() => {
+    clearQueryDebounce()
+  })
 
   createEffect(() => {
-    if (props.open && !isInitialized()) {
-      setIsInitialized(true)
-      fetchFiles(props.searchQuery)
-      lastQuery = props.searchQuery
+    if (!props.open) {
+      resetPickerState()
       return
     }
 
-    if (props.open && props.searchQuery !== lastQuery) {
+    const workspaceChanged = lastWorkspaceId !== props.workspaceId
+    const queryChanged = lastQuery !== props.searchQuery
+
+    if (!isInitialized() || workspaceChanged || queryChanged) {
+      setIsInitialized(true)
+      lastWorkspaceId = props.workspaceId
       lastQuery = props.searchQuery
-      fetchFiles(props.searchQuery)
+      const shouldSkipDebounce = workspaceChanged || normalizeQuery(props.searchQuery).length === 0
+      scheduleLoadFilesForQuery(props.searchQuery, props.workspaceId, shouldSkipDebounce)
     }
   })
+
+
 
   createEffect(() => {
     if (!props.open) return
@@ -154,8 +328,19 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
 
   const agentCount = () => filteredAgents().length
   const fileCount = () => files().length
-
+  const isLoading = () => loadingState() !== "idle"
+  const loadingMessage = () => {
+    if (loadingState() === "search") {
+      return "Searching..."
+    }
+    if (loadingState() === "listing") {
+      return "Loading workspace..."
+    }
+    return ""
+  }
+ 
   return (
+
     <Show when={props.open}>
       <div
         ref={containerRef}
@@ -164,8 +349,8 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
         <div class="dropdown-header">
           <div class="dropdown-header-title">
             Select Agent or File
-            <Show when={loading()}>
-              <span class="ml-2">Loading...</span>
+            <Show when={isLoading()}>
+              <span class="ml-2">{loadingMessage()}</span>
             </Show>
           </div>
         </div>
@@ -236,8 +421,10 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
             </div>
             <For each={files()}>
               {(file) => {
-                const itemIndex = allItems().findIndex((item) => item.type === "file" && item.file.path === file.path)
-                const isFolder = file.path.endsWith("/")
+                const itemIndex = allItems().findIndex(
+                  (item) => item.type === "file" && item.file.relativePath === file.relativePath,
+                )
+                const isFolder = file.isDirectory
                 return (
                   <div
                     class={`dropdown-item py-1.5 ${
