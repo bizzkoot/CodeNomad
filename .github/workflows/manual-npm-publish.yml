@@ -36,7 +36,8 @@ jobs:
 
       - name: Set publish metadata
         run: |
-          echo "VERSION=$(node -p \"require('./package.json').version\")" >> "$GITHUB_ENV"
+          VERSION=$(node -p "require('./package.json').version")
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "DIST_TAG=dev" >> "$GITHUB_ENV"
 
       - name: Publish server package with provenance
