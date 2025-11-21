@@ -24,7 +24,7 @@ env:
 
 jobs:
   build-macos:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       VERSION: ${{ inputs.version }}
@@ -68,7 +68,7 @@ jobs:
           done
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       VERSION: ${{ inputs.version }}
@@ -106,7 +106,7 @@ jobs:
           }
 
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       VERSION: ${{ inputs.version }}
@@ -150,7 +150,7 @@ jobs:
           done
 
   build-tauri-macos:
-    runs-on: macos-13
+    runs-on: macos-15-intel
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       VERSION: ${{ inputs.version }}
@@ -210,7 +210,7 @@ jobs:
           done
 
   build-tauri-macos-arm64:
-    runs-on: macos-14
+    runs-on: macos-26
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       VERSION: ${{ inputs.version }}
@@ -269,70 +269,8 @@ jobs:
             gh release upload "$TAG" "$file" --clobber
           done
 
-  build-tauri-windows:
-    runs-on: windows-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      VERSION: ${{ inputs.version }}
-      TAG: ${{ inputs.tag }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Setup Rust (Tauri)
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-binstall
-        run: curl -L https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-        shell: bash
-
-      - name: Install tauri-cli
-        run: cargo binstall tauri-cli --version 2.0.0-beta.20 --no-confirm
-        shell: bash
-
-      - name: Set workspace versions
-        run: npm version ${{ env.VERSION }} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
-        shell: bash
-
-      - name: Install dependencies
-        run: npm ci --workspaces
-
-      - name: Ensure rollup native binary
-        run: npm install @rollup/rollup-win32-x64-msvc --no-save
-
-      - name: Build Windows bundle (Tauri)
-        run: npm run build --workspace @codenomad/tauri-app
-
-      - name: Package Tauri artifacts (Windows)
-        shell: pwsh
-        run: |
-          $bundleRoot = "packages/tauri-app/target/release/bundle"
-          $artifactDir = "packages/tauri-app/release-tauri"
-          if (Test-Path $artifactDir) { Remove-Item $artifactDir -Recurse -Force }
-          New-Item -ItemType Directory -Path $artifactDir | Out-Null
-          Get-ChildItem -Path $bundleRoot -Recurse -File | Where-Object { $_.Extension -in '.exe', '.msi' } | ForEach-Object {
-            $ext = $_.Extension.TrimStart('.')
-            $dest = Join-Path $artifactDir ("CodeNomad-Tauri-$env:VERSION-windows-x64.$ext")
-            Copy-Item $_.FullName $dest -Force
-          }
-
-      - name: Upload Tauri release assets (Windows)
-        shell: pwsh
-        run: |
-          if (Test-Path "packages/tauri-app/release-tauri") {
-            Get-ChildItem -Path "packages/tauri-app/release-tauri" -File | ForEach-Object {
-              gh release upload $env:TAG $_.FullName --clobber
-            }
-          }
-
   build-tauri-linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       VERSION: ${{ inputs.version }}
@@ -462,7 +400,7 @@ jobs:
           done
 
   build-linux-rpm:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       VERSION: ${{ inputs.version }}

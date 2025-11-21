@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "cargo tauri dev",
-    "prebuild": "npm run build --prefix ../server && rm -rf src-tauri/resources/server && mkdir -p src-tauri/resources/server && rsync -a ../server/dist ../server/public ../server/node_modules ../server/package.json src-tauri/resources/server/",
+    "prebuild": "node ./scripts/prebuild.js",
     "build": "cargo tauri build"
   }
 }
