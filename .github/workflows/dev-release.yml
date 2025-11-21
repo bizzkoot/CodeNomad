@@ -74,7 +74,7 @@ jobs:
           cache: npm
 
       - name: Set workspace versions
-        run: npm pkg set version=${VERSION} --workspaces --include-workspace-root
+        run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
         run: npm ci --workspaces
