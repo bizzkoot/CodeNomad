@@ -59,7 +59,8 @@
     "extraResources": [
       {
         "from": "electron/resources",
-        "to": ""
+        "to": "",
+        "filter": ["!icon.icns", "!icon.ico", "!icon.png"]
       }
     ],
     "mac": {
