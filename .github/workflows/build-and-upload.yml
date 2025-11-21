@@ -206,6 +206,63 @@ jobs:
             gh release upload "$TAG" "$file" --clobber
           done
 
+  build-tauri-macos-arm64:
+    runs-on: macos-14
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Rust (Tauri)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install tauri-cli
+        run: cargo install tauri-cli --version 2.0.0-beta.20
+
+      - name: Set workspace versions
+        run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-darwin-arm64 --no-save
+
+      - name: Build macOS bundle (Tauri, arm64)
+        run: npm run build --workspace @codenomad/tauri-app
+
+      - name: Package Tauri artifacts (macOS arm64)
+        run: |
+          set -euo pipefail
+          BUNDLE_ROOT="packages/tauri-app/target/release/bundle"
+          ARTIFACT_DIR="packages/tauri-app/release-tauri"
+          rm -rf "$ARTIFACT_DIR"
+          mkdir -p "$ARTIFACT_DIR"
+          if [ -d "$BUNDLE_ROOT/macos/CodeNomad.app" ]; then
+            ditto -ck --sequesterRsrc --keepParent "$BUNDLE_ROOT/macos/CodeNomad.app" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-macos-arm64.zip"
+          fi
+          if [ -f "$BUNDLE_ROOT/dmg/CodeNomad.dmg" ]; then
+            cp "$BUNDLE_ROOT/dmg/CodeNomad.dmg" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-macos-arm64.dmg"
+          fi
+
+      - name: Upload Tauri release assets (macOS arm64)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in packages/tauri-app/release-tauri/*; do
+            [ -f "$file" ] || continue
+            gh release upload "$TAG" "$file" --clobber
+          done
+
   build-tauri-windows:
     runs-on: windows-latest
     env:
@@ -318,6 +375,68 @@ jobs:
           done
 
       - name: Upload Tauri release assets (Linux)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in packages/tauri-app/release-tauri/*; do
+            [ -f "$file" ] || continue
+            gh release upload "$TAG" "$file" --clobber
+          done
+
+  build-tauri-linux-arm64:
+    runs-on: ubuntu-22.04-arm64
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Rust (Tauri)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install tauri-cli
+        run: cargo install tauri-cli --version 2.0.0-beta.20
+
+      - name: Install Tauri Linux dependencies (arm64)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Set workspace versions
+        run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-linux-arm64-gnu --no-save
+
+      - name: Build Linux bundle (Tauri arm64)
+        run: npm run build --workspace @codenomad/tauri-app
+
+      - name: Package Tauri artifacts (Linux arm64)
+        run: |
+          set -euo pipefail
+          BUNDLE_ROOT="packages/tauri-app/target/release/bundle"
+          ARTIFACT_DIR="packages/tauri-app/release-tauri"
+          rm -rf "$ARTIFACT_DIR"
+          mkdir -p "$ARTIFACT_DIR"
+          shopt -s nullglob globstar
+          for file in "$BUNDLE_ROOT"/**/*.{AppImage,deb,rpm,tar.gz}; do
+            [ -f "$file" ] || continue
+            ext="${file##*.}"
+            cp "$file" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-arm64.${ext}"
+          done
+
+      - name: Upload Tauri release assets (Linux arm64)
         run: |
           set -euo pipefail
           shopt -s nullglob
