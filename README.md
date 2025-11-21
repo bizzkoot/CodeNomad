@@ -26,10 +26,16 @@ _Browser support via CodeNomad Server._
 Choose the way that fits your workflow:
 
 ### 🖥️ Desktop App (Recommended)
-The best experience. A native application with global shortcuts, deeper system integration, and a dedicated window.
+The best experience. A native application (Electron-based) with global shortcuts, deeper system integration, and a dedicated window.
 
 - **Download**: Grab the latest installer for macOS, Windows, or Linux from the [Releases Page](https://github.com/shantur/CodeNomad/releases).
 - **Run**: Install and launch like any other app.
+
+### 🦀 Tauri App (Experimental)
+We are also working on a lightweight, high-performance version built with [Tauri](https://tauri.app). It is currently in active development.
+
+- **Download**: Experimental builds are available on the [Releases Page](https://github.com/shantur/CodeNomad/releases).
+- **Source**: Check out `packages/tauri-app` if you're interested in contributing.
 
 ### 💻 CodeNomad Server
 Run CodeNomad as a local server and access it via your web browser. Perfect for remote development (SSH/VPN) or running as a service.
