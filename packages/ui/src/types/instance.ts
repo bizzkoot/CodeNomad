@@ -39,5 +39,7 @@ export interface Instance {
   client: OpencodeClient | null
   metadata?: InstanceMetadata
   binaryPath?: string
+  binaryLabel?: string
+  binaryVersion?: string
   environmentVariables?: Record<string, string>
 }

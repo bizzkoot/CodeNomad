@@ -37,7 +37,10 @@ export class WorkspaceRuntime {
     const env = { ...process.env, ...(options.environment ?? {}) }
 
     return new Promise((resolve, reject) => {
-      this.logger.info({ workspaceId: options.workspaceId, folder: options.folder }, "Launching OpenCode process")
+      this.logger.info(
+        { workspaceId: options.workspaceId, folder: options.folder, binary: options.binaryPath },
+        "Launching OpenCode process",
+      )
       const child = spawn(options.binaryPath, args, {
         cwd: options.folder,
         env,

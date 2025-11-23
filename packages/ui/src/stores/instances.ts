@@ -52,7 +52,9 @@ function workspaceDescriptorToInstance(descriptor: WorkspaceDescriptor): Instanc
     error: descriptor.error,
     client: existing?.client ?? null,
     metadata: existing?.metadata,
-    binaryPath: descriptor.binaryLabel,
+    binaryPath: descriptor.binaryId ?? descriptor.binaryLabel ?? existing?.binaryPath,
+    binaryLabel: descriptor.binaryLabel,
+    binaryVersion: descriptor.binaryVersion ?? existing?.binaryVersion,
     environmentVariables: existing?.environmentVariables ?? preferences().environmentVariables ?? {},
   }
 }

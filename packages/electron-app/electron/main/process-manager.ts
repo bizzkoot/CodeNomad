@@ -263,47 +263,32 @@ export class CliProcessManager extends EventEmitter {
   private resolveCliEntry(options: StartOptions): CliEntryResolution {
     if (options.dev) {
       const tsxPath = this.resolveTsx()
-      const sourceCandidates = [
-        path.resolve(app.getAppPath(), "..", "server", "src", "index.ts"),
-        path.resolve(app.getAppPath(), "..", "packages", "server", "src", "index.ts"),
-        path.resolve(process.cwd(), "packages", "server", "src", "index.ts"),
-      ]
-      const sourceEntry = sourceCandidates.find((candidate) => existsSync(candidate))
-      if (tsxPath && sourceEntry) {
-        return { entry: sourceEntry, runner: "tsx", runnerPath: tsxPath }
+      if (!tsxPath) {
+        throw new Error("tsx is required to run the CLI in development mode. Please install dependencies.")
       }
+      const devEntry = this.resolveDevEntry()
+      return { entry: devEntry, runner: "tsx", runnerPath: tsxPath }
     }
-
-    const dist = this.tryResolveDist()
-    if (dist) {
-      return { entry: dist, runner: "node" }
-    }
-
-    throw new Error("Unable to locate CodeNomad CLI build (dist/bin.js). Please build @neuralnomads/codenomad.")
+ 
+    const distEntry = this.resolveProdEntry()
+    return { entry: distEntry, runner: "node" }
   }
-
+ 
   private resolveTsx(): string | null {
-    try {
-      const resolved = nodeRequire.resolve("tsx/dist/cli.js")
-      if (resolved && existsSync(resolved)) {
-        return resolved
-      }
-    } catch {
-      return null
-    }
-    return null
-  }
-
-  private tryResolveDist(): string | null {
     const candidates: Array<string | (() => string)> = [
-      () => nodeRequire.resolve("@neuralnomads/codenomad/dist/bin.js"),
-      () => nodeRequire.resolve("@neuralnomads/codenomad/dist/bin.js", { paths: [app.getAppPath()] }),
-      path.join(app.getAppPath(), "node_modules", "@neuralnomads", "codenomad", "dist", "bin.js"),
-      path.resolve(app.getAppPath(), "..", "server", "dist", "bin.js"),
-      path.resolve(app.getAppPath(), "..", "packages", "server", "dist", "bin.js"),
-      path.join(process.resourcesPath, "app.asar.unpacked", "node_modules", "@neuralnomads", "codenomad", "dist", "bin.js"),
+      () => nodeRequire.resolve("tsx/cli"),
+      () => nodeRequire.resolve("tsx/dist/cli.mjs"),
+      () => nodeRequire.resolve("tsx/dist/cli.cjs"),
+      path.resolve(process.cwd(), "node_modules", "tsx", "dist", "cli.mjs"),
+      path.resolve(process.cwd(), "node_modules", "tsx", "dist", "cli.cjs"),
+      path.resolve(process.cwd(), "..", "node_modules", "tsx", "dist", "cli.mjs"),
+      path.resolve(process.cwd(), "..", "node_modules", "tsx", "dist", "cli.cjs"),
+      path.resolve(process.cwd(), "..", "..", "node_modules", "tsx", "dist", "cli.mjs"),
+      path.resolve(process.cwd(), "..", "..", "node_modules", "tsx", "dist", "cli.cjs"),
+      path.resolve(app.getAppPath(), "..", "node_modules", "tsx", "dist", "cli.mjs"),
+      path.resolve(app.getAppPath(), "..", "node_modules", "tsx", "dist", "cli.cjs"),
     ]
-
+ 
     for (const candidate of candidates) {
       try {
         const resolved = typeof candidate === "function" ? candidate() : candidate
@@ -314,7 +299,28 @@ export class CliProcessManager extends EventEmitter {
         continue
       }
     }
-
+ 
     return null
   }
+ 
+  private resolveDevEntry(): string {
+    const entry = path.resolve(process.cwd(), "..", "server", "src", "index.ts")
+    if (!existsSync(entry)) {
+      throw new Error(`Dev CLI entry not found at ${entry}. Run npm run dev:electron from the repository root after installing dependencies.`)
+    }
+    return entry
+  }
+ 
+  private resolveProdEntry(): string {
+    try {
+      const entry = nodeRequire.resolve("@neuralnomads/codenomad/dist/bin.js")
+      if (existsSync(entry)) {
+        return entry
+      }
+    } catch {
+      // fall through to error below
+    }
+    throw new Error("Unable to locate CodeNomad CLI build (dist/bin.js). Run npm run build --workspace @neuralnomads/codenomad.")
+  }
 }
+

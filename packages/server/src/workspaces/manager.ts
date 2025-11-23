@@ -1,4 +1,5 @@
 import path from "path"
+import { spawnSync } from "child_process"
 import { EventBus } from "../events/bus"
 import { ConfigStore } from "../config/store"
 import { BinaryRegistry } from "../config/binaries"
@@ -65,10 +66,11 @@ export class WorkspaceManager {
  
     const id = `${Date.now().toString(36)}`
     const binary = this.options.binaryRegistry.resolveDefault()
+    const resolvedBinaryPath = this.resolveBinaryPath(binary.path)
     const workspacePath = path.isAbsolute(folder) ? folder : path.resolve(this.options.rootDir, folder)
     clearWorkspaceSearchCache(workspacePath)
 
-    this.options.logger.info({ workspaceId: id, folder: workspacePath, binary: binary.path }, "Creating workspace")
+    this.options.logger.info({ workspaceId: id, folder: workspacePath, binary: resolvedBinaryPath }, "Creating workspace")
 
     const proxyPath = `/workspaces/${id}/instance`
 
@@ -79,14 +81,20 @@ export class WorkspaceManager {
       name,
       status: "starting",
       proxyPath,
-      binaryId: binary.id,
+      binaryId: resolvedBinaryPath,
       binaryLabel: binary.label,
       binaryVersion: binary.version,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }
 
+    if (!descriptor.binaryVersion) {
+      descriptor.binaryVersion = this.detectBinaryVersion(resolvedBinaryPath)
+    }
+
     this.workspaces.set(id, descriptor)
+
+
     this.options.eventBus.publish({ type: "workspace.created", workspace: descriptor })
 
     const environment = this.options.configStore.get().preferences.environmentVariables ?? {}
@@ -95,7 +103,7 @@ export class WorkspaceManager {
       const { pid, port } = await this.runtime.launch({
         workspaceId: id,
         folder: workspacePath,
-        binaryPath: binary.path,
+        binaryPath: resolvedBinaryPath,
         environment,
         onExit: (info) => this.handleProcessExit(info.workspaceId, info),
       })
@@ -159,6 +167,70 @@ export class WorkspaceManager {
       throw new Error("Workspace not found")
     }
     return workspace
+  }
+
+  private resolveBinaryPath(identifier: string): string {
+    if (!identifier) {
+      return identifier
+    }
+
+    const looksLikePath = identifier.includes("/") || identifier.includes("\\") || identifier.startsWith(".")
+    if (path.isAbsolute(identifier) || looksLikePath) {
+      return identifier
+    }
+
+    const locator = process.platform === "win32" ? "where" : "which"
+
+    try {
+      const result = spawnSync(locator, [identifier], { encoding: "utf8" })
+      if (result.status === 0 && result.stdout) {
+        const resolved = result.stdout
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .find((line) => line.length > 0)
+
+        if (resolved) {
+          this.options.logger.debug({ identifier, resolved }, "Resolved binary path from system PATH")
+          return resolved
+        }
+      } else if (result.error) {
+        this.options.logger.warn({ identifier, err: result.error }, "Failed to resolve binary path via locator command")
+      }
+    } catch (error) {
+      this.options.logger.warn({ identifier, err: error }, "Failed to resolve binary path from system PATH")
+    }
+
+    return identifier
+  }
+
+  private detectBinaryVersion(resolvedPath: string): string | undefined {
+    if (!resolvedPath) {
+      return undefined
+    }
+
+    try {
+      const result = spawnSync(resolvedPath, ["--version"], { encoding: "utf8" })
+      if (result.status === 0 && result.stdout) {
+        const line = result.stdout.split(/\r?\n/).find((entry) => entry.trim().length > 0)
+        if (line) {
+          const normalized = line.trim()
+          const versionMatch = normalized.match(/([0-9]+\.[0-9]+\.[0-9A-Za-z.-]+)/)
+          if (versionMatch) {
+            const version = versionMatch[1]
+            this.options.logger.debug({ binary: resolvedPath, version }, "Detected binary version")
+            return version
+          }
+          this.options.logger.debug({ binary: resolvedPath, reported: normalized }, "Binary reported version string")
+          return normalized
+        }
+      } else if (result.error) {
+        this.options.logger.warn({ binary: resolvedPath, err: result.error }, "Failed to read binary version")
+      }
+    } catch (error) {
+      this.options.logger.warn({ binary: resolvedPath, err: error }, "Failed to detect binary version")
+    }
+
+    return undefined
   }
 
   private handleProcessExit(workspaceId: string, info: { code: number | null; requested: boolean }) {

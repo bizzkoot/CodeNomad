@@ -31,9 +31,8 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
   // Update selected binary when preferences change
   createEffect(() => {
     const lastUsed = preferences().lastUsedBinary
-    if (lastUsed && lastUsed !== selectedBinary()) {
-      setSelectedBinary(lastUsed)
-    }
+    if (!lastUsed) return
+    setSelectedBinary((current) => (current === lastUsed ? current : lastUsed))
   })
 
 

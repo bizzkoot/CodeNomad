@@ -48,6 +48,7 @@ const InstanceInfo: Component<InstanceInfoProps> = (props) => {
   const [isLoadingMetadata, setIsLoadingMetadata] = createSignal(true)
 
   const metadata = () => props.instance.metadata
+  const binaryVersion = () => props.instance.binaryVersion || metadata()?.version
   const mcpServers = () => {
     const status = metadata()?.mcpStatus
     return status ? parseMcpStatus(status) : []
@@ -104,11 +105,12 @@ const InstanceInfo: Component<InstanceInfoProps> = (props) => {
           ...(lspStatus ? { lspStatus } : {}),
         }
 
-        if (!nextMetadata.version) {
-          nextMetadata.version = "0.15.8"
+        if (!nextMetadata.version && instance.binaryVersion) {
+          nextMetadata.version = instance.binaryVersion
         }
 
         updateInstance(instanceId, { metadata: nextMetadata })
+
       } catch (error) {
         if (!cancelled) {
           console.error("Failed to load instance metadata:", error)
@@ -173,13 +175,13 @@ const InstanceInfo: Component<InstanceInfoProps> = (props) => {
           )}
         </Show>
 
-        <Show when={metadata()?.version}>
+        <Show when={binaryVersion()}>
           <div>
             <div class="text-xs font-medium text-muted uppercase tracking-wide mb-1">
               OpenCode Version
             </div>
             <div class="text-xs px-2 py-1.5 rounded border bg-surface-secondary border-base text-primary">
-              v{metadata()?.version}
+              v{binaryVersion()}
             </div>
           </div>
         </Show>
