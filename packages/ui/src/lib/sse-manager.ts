@@ -59,6 +59,9 @@ class SSEManager {
       const payload = event as InstanceStatusPayload
       this.updateConnectionStatus(payload.instanceId, payload.status)
       if (payload.status === "disconnected") {
+        if (payload.reason === "workspace stopped") {
+          return
+        }
         const reason = payload.reason ?? "Instance disconnected"
         void this.onConnectionLost?.(payload.instanceId, reason)
       }

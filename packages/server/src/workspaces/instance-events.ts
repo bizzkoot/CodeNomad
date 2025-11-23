@@ -24,8 +24,8 @@ export class InstanceEventBridge {
   constructor(private readonly options: InstanceEventBridgeOptions) {
     const bus = this.options.eventBus
     bus.on("workspace.started", (event) => this.startStream(event.workspace.id))
-    bus.on("workspace.stopped", (event) => this.stopStream(event.workspaceId))
-    bus.on("workspace.error", (event) => this.stopStream(event.workspace.id))
+    bus.on("workspace.stopped", (event) => this.stopStream(event.workspaceId, "workspace stopped"))
+    bus.on("workspace.error", (event) => this.stopStream(event.workspace.id, "workspace error"))
   }
 
   shutdown() {
@@ -59,14 +59,14 @@ export class InstanceEventBridge {
     this.streams.set(workspaceId, { controller, task })
   }
 
-  private stopStream(workspaceId: string) {
+  private stopStream(workspaceId: string, reason?: string) {
     const active = this.streams.get(workspaceId)
     if (!active) {
       return
     }
     active.controller.abort()
     this.streams.delete(workspaceId)
-    this.publishStatus(workspaceId, "disconnected")
+    this.publishStatus(workspaceId, "disconnected", reason)
   }
 
   private async runStream(workspaceId: string, signal: AbortSignal) {
