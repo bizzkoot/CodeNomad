@@ -337,9 +337,6 @@ jobs:
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-linux-x64-gnu --no-save
 
-      - name: Bundle server assets for Tauri
-        run: npm run bundle:server --workspace @codenomad/tauri-app
-
       - name: Build Linux bundle (Tauri)
         run: npm run build --workspace @codenomad/tauri-app
 
