@@ -33,6 +33,7 @@ import Kbd from "./kbd"
 import { useConfig } from "../stores/preferences"
 import { getSessionInfo, computeDisplayParts, sessions, setActiveSession, setActiveParentSession } from "../stores/sessions"
 import { setActiveInstanceId } from "../stores/instances"
+import { showCommandPalette } from "../stores/command-palette"
 
 const codeNomadLogo = new URL("../images/CodeNomad-Icon.png", import.meta.url).href
 const SCROLL_OFFSET = 64
@@ -186,6 +187,9 @@ export default function MessageStream(props: MessageStreamProps) {
 
   const scrollStateKey = () => makeScrollKey(props.instanceId, props.sessionId)
   const connectionStatus = () => sseManager.getStatus(props.instanceId)
+  const handleCommandPaletteClick = () => {
+    showCommandPalette(props.instanceId)
+  }
 
   function createToolSignature(message: Message, toolPart: ClientPart, toolIndex: number, messageInfo?: MessageInfo): string {
     const messageId = message.id
@@ -552,11 +556,28 @@ export default function MessageStream(props: MessageStreamProps) {
         <div class="connection-status-text connection-status-info flex items-center gap-2 text-sm font-medium">
           <span>{formattedSessionInfo()}</span>
         </div>
-        <div class="connection-status-text connection-status-shortcut flex items-center gap-2 text-sm font-medium">
-          <span>Command Palette</span>
-          <Kbd shortcut="cmd+shift+p" />
+        <div class="connection-status-text connection-status-shortcut">
+          <div class="connection-status-shortcut-action">
+            <button
+              type="button"
+              class="connection-status-button"
+              onClick={handleCommandPaletteClick}
+              aria-label="Open command palette"
+            >
+              Command Palette
+            </button>
+            <span class="connection-status-shortcut-hint">
+              <Kbd shortcut="cmd+shift+p" />
+            </span>
+          </div>
         </div>
         <div class="connection-status-meta flex items-center justify-end gap-3">
+
+
+
+
+
+
           <Show when={connectionStatus() === "connected"}>
             <span class="status-indicator connected">
               <span class="status-dot" />
