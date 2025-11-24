@@ -7,7 +7,6 @@ import { createFileAttachment, createTextAttachment, createAgentAttachment } fro
 import type { Attachment } from "../types/attachment"
 import type { Agent } from "../types/session"
 import Kbd from "./kbd"
-import HintRow from "./hint-row"
 import { getActiveInstance } from "../stores/instances"
 import { agents, getSessionDraftPrompt, setSessionDraftPrompt, clearSessionDraftPrompt } from "../stores/sessions"
 import { showAlertDialog } from "../stores/alerts"
@@ -777,6 +776,7 @@ export default function PromptInput(props: PromptInputProps) {
   }
 
   const shellHint = () => (mode() === "shell" ? { key: "Esc", text: "to exit shell mode" } : { key: "!", text: "for shell mode" })
+  const shouldShowOverlay = () => prompt().length === 0
 
   const instance = () => getActiveInstance()
 
@@ -884,28 +884,62 @@ export default function PromptInput(props: PromptInputProps) {
               </For>
             </div>
           </Show>
-          <textarea
-            ref={textareaRef}
-            class={`prompt-input ${mode() === "shell" ? "shell-mode" : ""}`}
-            placeholder={
-              mode() === "shell"
-                ? "Run a shell command (Esc to exit)..."
-                : "Type your message, @file, @agent, or paste images and text..."
-            }
-            value={prompt()}
-            onInput={handleInput}
-            onKeyDown={handleKeyDown}
-            onPaste={handlePaste}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            disabled={props.disabled}
-            rows={4}
-            style={attachments().length > 0 ? { "padding-top": "8px" } : {}}
-            spellcheck={false}
-            autocorrect="off"
-            autoCapitalize="off"
-            autocomplete="off"
-          />
+          <div class="prompt-input-field">
+            <textarea
+              ref={textareaRef}
+              class={`prompt-input ${mode() === "shell" ? "shell-mode" : ""}`}
+              placeholder={
+                mode() === "shell"
+                  ? "Run a shell command (Esc to exit)..."
+                  : "Type your message, @file, @agent, or paste images and text..."
+              }
+              value={prompt()}
+              onInput={handleInput}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              disabled={props.disabled}
+              rows={4}
+              style={attachments().length > 0 ? { "padding-top": "8px" } : {}}
+              spellcheck={false}
+              autocorrect="off"
+              autoCapitalize="off"
+              autocomplete="off"
+            />
+            <Show when={shouldShowOverlay()}>
+              <div class={`prompt-input-overlay ${mode() === "shell" ? "shell-mode" : ""}`}>
+                <Show
+                  when={props.escapeInDebounce}
+                  fallback={
+                    <>
+                      <span class="prompt-overlay-text">
+                        <Kbd>Enter</Kbd> for new line • <Kbd shortcut="cmd+enter" /> to send • <Kbd>@</Kbd> for files/agents • <Kbd>↑↓</Kbd> for history
+                      </span>
+                      <Show when={attachments().length > 0}>
+                        <span class="prompt-overlay-text prompt-overlay-muted">• {attachments().length} file(s) attached</span>
+                      </Show>
+                      <span class="prompt-overlay-text">
+                        • <Kbd>{shellHint().key}</Kbd> {shellHint().text}
+                      </span>
+                      <Show when={mode() === "shell"}>
+                        <span class="prompt-overlay-shell-active">Shell mode active</span>
+                      </Show>
+                    </>
+                  }
+                >
+                  <>
+                    <span class="prompt-overlay-text prompt-overlay-warning">
+                      Press <Kbd>Esc</Kbd> again to abort session
+                    </span>
+                    <Show when={mode() === "shell"}>
+                      <span class="prompt-overlay-shell-active">Shell mode active</span>
+                    </Show>
+                  </>
+                </Show>
+              </div>
+            </Show>
+          </div>
         </div>
 
         <button
@@ -924,33 +958,6 @@ export default function PromptInput(props: PromptInputProps) {
             </svg>
           </Show>
         </button>
-      </div>
-      <div class="prompt-input-hints">
-        <div class="flex justify-between w-full gap-4">
-          <HintRow>
-            <Show
-              when={props.escapeInDebounce}
-              fallback={
-                <>
-                  <Kbd>Enter</Kbd> for new line • <Kbd shortcut="cmd+enter" /> to send • <Kbd>@</Kbd> for files/agents • <Kbd>↑↓</Kbd> for history
-                  <Show when={attachments().length > 0}>
-                    <span class="ml-2 text-xs" style="color: var(--text-muted);">• {attachments().length} file(s) attached</span>
-                  </Show>
-                  <span class="ml-2">
-                    • <Kbd>{shellHint().key}</Kbd> {shellHint().text}
-                  </span>
-                </>
-              }
-            >
-              <span class="font-medium" style="color: var(--status-warning);">
-                Press <Kbd>Esc</Kbd> again to abort session
-              </span>
-            </Show>
-          </HintRow>
-          <Show when={mode() === "shell"}>
-            <HintRow>Shell mode active</HintRow>
-          </Show>
-        </div>
       </div>
     </div>
   )
