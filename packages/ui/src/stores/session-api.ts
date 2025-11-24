@@ -8,9 +8,11 @@ import {
   activeSessionId,
   agents,
   clearSessionDraftPrompt,
+  getChildSessions,
+  isBlankSession,
   messagesLoaded,
-  providers,
   pruneDraftPrompts,
+  providers,
   setActiveSessionId,
   setAgents,
   setMessagesLoaded,
@@ -228,6 +230,10 @@ async function createSession(instanceId: string, agent?: string): Promise<Sessio
       return next
     })
 
+    getSessionIndex(instanceId, session.id)
+
+    await cleanupBlankSessions(instanceId, session.id)
+
     return session
   } catch (error) {
     console.error("Failed to create session:", error)
@@ -398,6 +404,27 @@ async function deleteSession(instanceId: string, sessionId: string): Promise<voi
       }
       return next
     })
+  }
+}
+
+async function cleanupBlankSessions(instanceId: string, excludeSessionId?: string): Promise<void> {
+  const instanceSessions = sessions().get(instanceId)
+  if (!instanceSessions) return
+
+  const deletionPromises: Promise<void>[] = []
+
+  for (const [sessionId, session] of instanceSessions) {
+    if (sessionId === excludeSessionId) continue
+    if (!isBlankSession(session, instanceId)) continue
+
+    deletionPromises.push(deleteSession(instanceId, sessionId).catch((error) => {
+      console.error(`Failed to delete blank session ${sessionId}:`, error)
+    }))
+  }
+
+  if (deletionPromises.length > 0) {
+    console.log(`Cleaning up ${deletionPromises.length} blank sessions`)
+    await Promise.all(deletionPromises)
   }
 }
 

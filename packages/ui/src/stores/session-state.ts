@@ -221,6 +221,49 @@ function getSessionInfo(instanceId: string, sessionId: string): SessionInfo | un
   return sessionInfoByInstance().get(instanceId)?.get(sessionId)
 }
 
+function isBlankSession(session: Session, instanceId: string): boolean {
+  if (session.parentId === null) {
+    // Parent session is only blank if actually blank AND has no children
+
+    const sessionInfo = getSessionInfo(instanceId, session.id)
+    const hasChildren = getChildSessions(instanceId, session.id).length > 0
+    
+    // Only consider blank if we have loaded info, it shows 0 tokens, and no children
+    return sessionInfo !== undefined && sessionInfo.tokens === 0 && !hasChildren
+  } else if (session.title?.includes("subagent")) {
+    // Subagent
+
+    const loadedSet = messagesLoaded().get(instanceId) || new Set()
+    if (!loadedSet.has(session.id)) return false
+
+    if (session.messages.length === 0) return true
+
+    const hasStreamingMessage = session.messages.some((msg) => msg.status === "streaming")
+    const isWaitingForPermission = session.pendingPermission === true
+
+    // If streaming or waiting for permission, not blank
+    if (hasStreamingMessage || isWaitingForPermission) return false
+
+    // Check if last message was a tool call
+    const lastMessage = session.messages[session.messages.length - 1]
+    const lastMessageWasToolCall = lastMessage.parts.some((part) => part.type === "tool")
+
+    // Subagent is blank if last message was NOT a tool call
+    return !lastMessageWasToolCall
+  } else if (session.revert?.messageID) {
+    // Fork
+    const loadedSet = messagesLoaded().get(instanceId) || new Set()
+    if (!loadedSet.has(session.id)) return false
+
+    if (session.messages.length === 0) return true
+
+    const lastMessage = session.messages[session.messages.length - 1]
+    return lastMessage.id === session.revert.messageID
+  }
+
+  return false // default to not saying it's blank, just to be safe
+}
+
 export {
   sessions,
   setSessions,
@@ -259,4 +302,5 @@ export {
   isSessionBusy,
   isSessionMessagesLoading,
   getSessionInfo,
+  isBlankSession,
 }
