@@ -80,9 +80,11 @@ function parseCliOptions(argv: string[]): CliOptions {
 
   const resolvedRoot = parsed.workspaceRoot ?? parsed.root ?? process.cwd()
 
+  const normalizedHost = resolveHost(parsed.host)
+
   return {
     port: parsed.port,
-    host: parsed.host,
+    host: normalizedHost,
     rootDir: resolvedRoot,
     configPath: parsed.config,
     unrestrictedRoot: Boolean(parsed.unrestrictedRoot),
@@ -100,6 +102,13 @@ function parsePort(input: string): number {
     throw new InvalidArgumentError("Port must be an integer between 0 and 65535")
   }
   return value
+}
+
+function resolveHost(input: string | undefined): string {
+  if (input && input.trim() === "0.0.0.0") {
+    return "0.0.0.0"
+  }
+  return DEFAULT_HOST
 }
 
 async function main() {
