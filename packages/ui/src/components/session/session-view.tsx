@@ -144,26 +144,30 @@ export const SessionView: Component<SessionViewProps> = (props) => {
         </div>
       }
     >
-      {(s) => (
-        <div class="session-view">
-          <MessageStreamV2
-            instanceId={props.instanceId}
-            sessionId={s().id}
-            loading={messagesLoading()}
-            onRevert={handleRevert}
-            onFork={handleFork}
-          />
+      {(sessionAccessor) => {
+        const activeSession = sessionAccessor()
+        if (!activeSession) return null
+        return (
+          <div class="session-view">
+            <MessageStreamV2
+              instanceId={props.instanceId}
+              sessionId={activeSession.id}
+              loading={messagesLoading()}
+              onRevert={handleRevert}
+              onFork={handleFork}
+            />
 
-          <PromptInput
-            instanceId={props.instanceId}
-            instanceFolder={props.instanceFolder}
-            sessionId={s().id}
-            onSend={handleSendMessage}
-            onRunShell={handleRunShell}
-            escapeInDebounce={props.escapeInDebounce}
-          />
-        </div>
-      )}
+            <PromptInput
+              instanceId={props.instanceId}
+              instanceFolder={props.instanceFolder}
+              sessionId={activeSession.id}
+              onSend={handleSendMessage}
+              onRunShell={handleRunShell}
+              escapeInDebounce={props.escapeInDebounce}
+            />
+          </div>
+        )
+      }}
     </Show>
   )
 }
