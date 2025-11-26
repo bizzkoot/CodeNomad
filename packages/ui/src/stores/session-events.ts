@@ -121,10 +121,6 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
 
     applyPartUpdateV2(instanceId, part)
 
-    withSession(instanceId, sessionId, () => {
-      /* trigger reactivity for legacy consumers */
-    })
-
     updateSessionInfo(instanceId, sessionId)
     refreshPermissionsForSession(instanceId, sessionId)
   } else if (event.type === "message.updated") {
@@ -164,10 +160,6 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
     }
 
     upsertMessageInfoV2(instanceId, info, { status: "complete", bumpRevision: true })
-
-    withSession(instanceId, sessionId, () => {
-      /* ensure reactivity for legacy session observers */
-    })
 
     updateSessionInfo(instanceId, sessionId)
     refreshPermissionsForSession(instanceId, sessionId)

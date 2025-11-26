@@ -1,3 +1,4 @@
+import { batch } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import type { SetStoreFunction } from "solid-js/store"
 import type { ClientPart, MessageInfo } from "../../types/message"
@@ -361,22 +362,24 @@ export function createInstanceMessageStore(instanceId: string): InstanceMessageS
       }
     }
 
-    setState("messages", (prev) => ({ ...prev, ...nextMessages }))
-    setState("messageInfoVersion", (prev) => ({ ...prev, ...nextMessageInfoVersion }))
-    setState("pendingParts", () => nextPendingParts)
-    setState("permissions", "byMessage", (prev) => ({ ...prev, ...nextPermissionsByMessage }))
+    batch(() => {
+      setState("messages", () => nextMessages)
+      setState("messageInfoVersion", () => nextMessageInfoVersion)
+      setState("pendingParts", () => nextPendingParts)
+      setState("permissions", "byMessage", () => nextPermissionsByMessage)
 
-    if (usageState) {
-      setState("usage", sessionId, usageState)
-    }
+      if (usageState) {
+        setState("usage", sessionId, usageState)
+      }
 
-    setState("sessions", sessionId, (session) => ({
-      ...session,
-      messageIds: incomingIds,
-      updatedAt: Date.now(),
-    }))
+      setState("sessions", sessionId, (session) => ({
+        ...session,
+        messageIds: incomingIds,
+        updatedAt: Date.now(),
+      }))
 
-    bumpSessionRevision(sessionId)
+      bumpSessionRevision(sessionId)
+    })
   }
 
   function insertMessageIntoSession(sessionId: string, messageId: string) {
