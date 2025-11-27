@@ -16,6 +16,9 @@ import { useScrollCache } from "../lib/hooks/use-scroll-cache"
 import { setActiveInstanceId } from "../stores/instances"
 
 const SCROLL_SCOPE = "session"
+const SCROLL_DIRECTION_THRESHOLD = 10
+const USER_SCROLL_INTENT_WINDOW_MS = 600
+const SCROLL_INTENT_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"])
 
 const TOOL_ICON = "🔧"
 const codeNomadLogo = new URL("../images/CodeNomad-Icon.png", import.meta.url).href
@@ -527,21 +530,49 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
   const [showScrollTopButton, setShowScrollTopButton] = createSignal(false)
   const [showScrollBottomButton, setShowScrollBottomButton] = createSignal(false)
   let containerRef: HTMLDivElement | undefined
-  let resizeObserver: ResizeObserver | null = null
-  let lastScrollHeight = 0
-  let autoScrollLocked = true
+  let lastKnownScrollTop = 0
+  let pendingScrollFrame: number | null = null
+  let userScrollIntentUntil = 0
+  let detachScrollIntentListeners: (() => void) | undefined
 
-  function setAutoScrollState(enabled: boolean) {
-    autoScrollLocked = enabled
-    setAutoScroll(enabled)
+  function markUserScrollIntent() {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now()
+    userScrollIntentUntil = now + USER_SCROLL_INTENT_WINDOW_MS
   }
 
-  function lockAutoScroll() {
-    setAutoScrollState(true)
+  function hasUserScrollIntent() {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now()
+    return now <= userScrollIntentUntil
   }
 
-  function unlockAutoScroll() {
-    setAutoScrollState(false)
+  function attachScrollIntentListeners(element: HTMLDivElement | undefined) {
+    if (detachScrollIntentListeners) {
+      detachScrollIntentListeners()
+      detachScrollIntentListeners = undefined
+    }
+    if (!element) return
+    const handlePointerIntent = () => markUserScrollIntent()
+    const handleKeyIntent = (event: KeyboardEvent) => {
+      if (SCROLL_INTENT_KEYS.has(event.key)) {
+        markUserScrollIntent()
+      }
+    }
+    element.addEventListener("wheel", handlePointerIntent, { passive: true })
+    element.addEventListener("pointerdown", handlePointerIntent)
+    element.addEventListener("touchstart", handlePointerIntent, { passive: true })
+    element.addEventListener("keydown", handleKeyIntent)
+    detachScrollIntentListeners = () => {
+      element.removeEventListener("wheel", handlePointerIntent)
+      element.removeEventListener("pointerdown", handlePointerIntent)
+      element.removeEventListener("touchstart", handlePointerIntent)
+      element.removeEventListener("keydown", handleKeyIntent)
+    }
+  }
+
+  function setContainerRef(element: HTMLDivElement | null) {
+    containerRef = element || undefined
+    lastKnownScrollTop = containerRef?.scrollTop ?? 0
+    attachScrollIntentListeners(containerRef)
   }
 
   function isNearBottom(element: HTMLDivElement, offset = 48) {
@@ -559,113 +590,29 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
     setShowScrollTopButton(hasItems && !isNearTop(element))
   }
  
-  function detachResizeObserver() {
-    if (resizeObserver) {
-      resizeObserver.disconnect()
-      resizeObserver = null
-    }
-  }
- 
-  function handleResizeEvent() {
+  function scrollToBottom(immediate = false) {
     if (!containerRef) return
-    const currentHeight = containerRef.scrollHeight
-    const heightDecreased = currentHeight < lastScrollHeight
-    lastScrollHeight = currentHeight
-    if (heightDecreased && shouldMaintainAutoScroll()) {
-      containerRef.scrollTop = Math.max(currentHeight - containerRef.clientHeight, 0)
-      lockAutoScroll()
-      queueAutoScroll(true)
-      return
-    }
-    if (shouldMaintainAutoScroll()) {
-      queueAutoScroll(true)
-    } else {
-      updateScrollIndicators(containerRef)
-      scheduleScrollPersist()
-    }
-  }
- 
-  function attachResizeObserver(element: HTMLDivElement | undefined) {
-    detachResizeObserver()
-    if (!element) return
-    resizeObserver = new ResizeObserver(() => {
-      handleResizeEvent()
-    })
-    resizeObserver.observe(element)
-  }
- 
-  function setContainerRef(element: HTMLDivElement | null) {
-    containerRef = element || undefined
-    if (containerRef) {
-      lastScrollHeight = containerRef.scrollHeight
-    }
-    attachResizeObserver(containerRef)
-  }
- 
-  function shouldMaintainAutoScroll() {
-    return autoScrollLocked
-  }
-
- 
-  function applyScrollToBottom(immediate: boolean, options?: { preserveAuto?: boolean }) {
-    if (!containerRef) return
-    const preserveAuto = options?.preserveAuto ?? false
-    if (preserveAuto && !shouldMaintainAutoScroll()) {
-      return
-    }
-    if (!preserveAuto) {
-      lockAutoScroll()
-    }
     const behavior = immediate ? "auto" : "smooth"
-    containerRef.scrollTo({ top: containerRef.scrollHeight, behavior })
     requestAnimationFrame(() => {
       if (!containerRef) return
-      if (preserveAuto && !shouldMaintainAutoScroll()) {
-        updateScrollIndicators(containerRef)
-        scheduleScrollPersist()
-        return
-      }
-      if (!isNearBottom(containerRef)) {
-        containerRef.scrollTo({ top: containerRef.scrollHeight, behavior: "auto" })
-      }
+      containerRef.scrollTo({ top: containerRef.scrollHeight, behavior })
+      setAutoScroll(true)
+      lastKnownScrollTop = containerRef.scrollTop
       updateScrollIndicators(containerRef)
       scheduleScrollPersist()
     })
-  }
- 
-  function scrollToBottom(immediate = false) {
-    applyScrollToBottom(immediate, { preserveAuto: false })
   }
  
   function scrollToTop(immediate = false) {
     if (!containerRef) return
     const behavior = immediate ? "auto" : "smooth"
-    unlockAutoScroll()
-    containerRef.scrollTo({ top: 0, behavior })
+    setAutoScroll(false)
     requestAnimationFrame(() => {
       if (!containerRef) return
+      containerRef.scrollTo({ top: 0, behavior })
+      lastKnownScrollTop = containerRef.scrollTop
       updateScrollIndicators(containerRef)
       scheduleScrollPersist()
-    })
-  }
- 
-  let pendingAutoScrollId: number | null = null
- 
-  function cancelPendingAutoScroll() {
-    if (pendingAutoScrollId !== null) {
-      cancelAnimationFrame(pendingAutoScrollId)
-      pendingAutoScrollId = null
-    }
-  }
- 
-  function queueAutoScroll(immediate = true) {
-    cancelPendingAutoScroll()
-    if (!shouldMaintainAutoScroll()) {
-      return
-    }
-    pendingAutoScrollId = requestAnimationFrame(() => {
-      pendingAutoScrollId = null
-      applyScrollToBottom(immediate, { preserveAuto: true })
     })
   }
  
@@ -675,24 +622,37 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
     pendingScrollPersist = requestAnimationFrame(() => {
       pendingScrollPersist = null
       if (!containerRef) return
-      lastScrollHeight = containerRef.scrollHeight
       scrollCache.persist(containerRef, { atBottomOffset: 48 })
     })
   }
 
+
  
   function handleScroll(event: Event) {
     if (!containerRef) return
-    updateScrollIndicators(containerRef)
-    if (event.isTrusted) {
-      const atBottom = isNearBottom(containerRef)
-      if (!atBottom) {
-        unlockAutoScroll()
-      } else {
-        lockAutoScroll()
-      }
+    if (pendingScrollFrame !== null) {
+      cancelAnimationFrame(pendingScrollFrame)
     }
-    scheduleScrollPersist()
+    const isUserScroll = hasUserScrollIntent()
+    pendingScrollFrame = requestAnimationFrame(() => {
+      pendingScrollFrame = null
+      if (!containerRef) return
+      const previousTop = lastKnownScrollTop
+      const currentTop = containerRef.scrollTop
+      const movingUp = currentTop < previousTop - SCROLL_DIRECTION_THRESHOLD
+      const movingDown = currentTop > previousTop + SCROLL_DIRECTION_THRESHOLD
+      lastKnownScrollTop = currentTop
+      const atBottom = isNearBottom(containerRef)
+      if (isUserScroll) {
+        if (movingUp && !atBottom && autoScroll()) {
+          setAutoScroll(false)
+        } else if (movingDown && atBottom && !autoScroll()) {
+          setAutoScroll(true)
+        }
+      }
+      updateScrollIndicators(containerRef)
+      scheduleScrollPersist()
+    })
   }
  
   createEffect(() => {
@@ -702,10 +662,10 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
       fallback: () => scrollToBottom(true),
       onApplied: (snapshot) => {
         if (snapshot) {
-          setAutoScrollState(snapshot.atBottom)
+          setAutoScroll(snapshot.atBottom)
         } else {
           const atBottom = isNearBottom(target)
-          setAutoScrollState(atBottom)
+          setAutoScroll(atBottom)
         }
         updateScrollIndicators(target)
       },
@@ -722,7 +682,7 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
     }
     previousToken = token
     if (autoScroll()) {
-      queueAutoScroll(true)
+      scrollToBottom(true)
     }
   })
 
@@ -730,17 +690,22 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
     if (messageRecords().length === 0) {
       setShowScrollTopButton(false)
       setShowScrollBottomButton(false)
-      lockAutoScroll()
-      cancelPendingAutoScroll()
+      setAutoScroll(true)
     }
   })
  
   onCleanup(() => {
-    detachResizeObserver()
-    cancelPendingAutoScroll()
+    if (pendingScrollFrame !== null) {
+      cancelAnimationFrame(pendingScrollFrame)
+      pendingScrollFrame = null
+    }
     if (pendingScrollPersist !== null) {
       cancelAnimationFrame(pendingScrollPersist)
       pendingScrollPersist = null
+    }
+    if (detachScrollIntentListeners) {
+      detachScrollIntentListeners()
+      detachScrollIntentListeners = undefined
     }
     if (containerRef) {
       scrollCache.persist(containerRef, { atBottomOffset: 48 })
