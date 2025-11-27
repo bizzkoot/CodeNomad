@@ -172,7 +172,7 @@
 }
 
 .message-step-meta-inline {
-  @apply flex flex-wrap gap-2 text-[11px];
+  @apply inline-flex flex-wrap items-center gap-2 text-[11px] font-medium;
   color: var(--message-assistant-border);
 }
 

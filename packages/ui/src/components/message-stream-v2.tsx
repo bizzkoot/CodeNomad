@@ -3,6 +3,7 @@ import MessageItem from "./message-item"
 import ToolCall from "./tool-call"
 import Kbd from "./kbd"
 import type { MessageInfo, ClientPart } from "../types/message"
+import { partHasRenderableText } from "../types/message"
 import { getSessionInfo, sessions, setActiveParentSession, setActiveSession } from "../stores/sessions"
 import { showCommandPalette } from "../stores/command-palette"
 import { messageStoreBus } from "../stores/message-v2/bus"
@@ -120,6 +121,7 @@ interface ContentDisplayItem {
   parts: ClientPart[]
   messageInfo?: MessageInfo
   isQueued: boolean
+  showAgentMeta?: boolean
 }
 
 interface ToolDisplayItem {
@@ -144,6 +146,7 @@ type ReasoningDisplayItem = {
   key: string
   part: ClientPart
   messageInfo?: MessageInfo
+  showAgentMeta?: boolean
 }
 
 type MessageBlockItem = ContentDisplayItem | ToolDisplayItem | StepDisplayItem | ReasoningDisplayItem
@@ -280,11 +283,16 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
       const items: MessageBlockItem[] = []
       let segmentIndex = 0
       let pendingParts: ClientPart[] = []
+      let agentMetaAttached = record.role !== "assistant"
 
       const flushContent = () => {
         if (pendingParts.length === 0) return
         const segmentKey = makeInstanceCacheKey(instanceId, `${record.id}:segment:${segmentIndex}`)
         segmentIndex += 1
+        const shouldShowAgentMeta =
+          record.role === "assistant" &&
+          !agentMetaAttached &&
+          pendingParts.some((part) => partHasRenderableText(part))
         let cached = messageItemCache.get(segmentKey)
         if (!cached) {
           cached = {
@@ -294,6 +302,7 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
             parts: pendingParts.slice(),
             messageInfo,
             isQueued,
+            showAgentMeta: shouldShowAgentMeta,
           }
           messageItemCache.set(segmentKey, cached)
         } else {
@@ -301,6 +310,10 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
           cached.parts = pendingParts.slice()
           cached.messageInfo = messageInfo
           cached.isQueued = isQueued
+          cached.showAgentMeta = shouldShowAgentMeta
+        }
+        if (shouldShowAgentMeta) {
+          agentMetaAttached = true
         }
         items.push(cached)
         usedMessageKeys.add(segmentKey)
@@ -341,8 +354,6 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
 
         if (part.type === "step-start") {
           flushContent()
-          const key = makeInstanceCacheKey(instanceId, `${record.id}:${part.id ?? partIndex}:${part.type}`)
-          items.push({ type: part.type, key, part, messageInfo })
           return
         }
 
@@ -359,7 +370,11 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
           flushContent()
           if (showThinking && reasoningHasRenderableContent(part)) {
             const key = makeInstanceCacheKey(instanceId, `${record.id}:${part.id ?? partIndex}:reasoning`)
-            items.push({ type: "reasoning", key, part, messageInfo })
+            const showAgentMeta = record.role === "assistant" && !agentMetaAttached
+            if (showAgentMeta) {
+              agentMetaAttached = true
+            }
+            items.push({ type: "reasoning", key, part, messageInfo, showAgentMeta })
           }
           return
         }
@@ -622,6 +637,7 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
                         instanceId={props.instanceId}
                         sessionId={props.sessionId}
                         isQueued={(item as ContentDisplayItem).isQueued}
+                        showAgentMeta={(item as ContentDisplayItem).showAgentMeta}
                         onRevert={props.onRevert}
                         onFork={props.onFork}
                       />
@@ -699,6 +715,7 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
                         messageInfo={(item as ReasoningDisplayItem).messageInfo}
                         instanceId={props.instanceId}
                         sessionId={props.sessionId}
+                        showAgentMeta={(item as ReasoningDisplayItem).showAgentMeta}
                       />
                     </Match>
                   </Switch>
@@ -868,6 +885,7 @@ interface ReasoningCardProps {
   messageInfo?: MessageInfo
   instanceId: string
   sessionId: string
+  showAgentMeta?: boolean
 }
 
 function ReasoningCard(props: ReasoningCardProps) {
@@ -877,6 +895,21 @@ function ReasoningCard(props: ReasoningCardProps) {
     const value = props.messageInfo?.time?.created ?? (props.part as any)?.time?.start ?? Date.now()
     const date = new Date(value)
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  }
+
+  const agentIdentifier = () => {
+    const info = props.messageInfo
+    if (!info || info.role !== "assistant") return ""
+    return info.mode || ""
+  }
+
+  const modelIdentifier = () => {
+    const info = props.messageInfo
+    if (!info || info.role !== "assistant") return ""
+    const modelID = info.modelID || ""
+    const providerID = info.providerID || ""
+    if (modelID && providerID) return `${providerID}/${modelID}`
+    return modelID
   }
 
   const reasoningText = () => {
@@ -925,7 +958,15 @@ function ReasoningCard(props: ReasoningCardProps) {
         aria-expanded={expanded()}
         aria-label={expanded() ? "Collapse thinking" : "Expand thinking"}
       >
-        <span class="message-reasoning-label">Thinking</span>
+        <span class="message-reasoning-label flex flex-wrap items-center gap-2">
+          <span>Thinking</span>
+          <Show when={props.showAgentMeta && (agentIdentifier() || modelIdentifier())}>
+            <span class="message-step-meta-inline">
+              <Show when={agentIdentifier()}>{(value) => <span class="font-medium text-[var(--message-assistant-border)]">Agent: {value()}</span>}</Show>
+              <Show when={modelIdentifier()}>{(value) => <span class="font-medium text-[var(--message-assistant-border)]">Model: {value()}</span>}</Show>
+            </span>
+          </Show>
+        </span>
         <span class="message-reasoning-meta">
           <span class="message-reasoning-indicator">{expanded() ? "Hide" : "View"}</span>
           <span class="message-reasoning-time">{timestamp()}</span>

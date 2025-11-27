@@ -14,6 +14,7 @@ interface MessageItemProps {
   orderedParts: ClientPart[]
   onRevert?: (messageId: string) => void
   onFork?: (messageId?: string) => void
+  showAgentMeta?: boolean
 }
 
 export default function MessageItem(props: MessageItemProps) {
@@ -166,17 +167,26 @@ export default function MessageItem(props: MessageItemProps) {
 
   return (
 
-    <div class={containerClass()}>
-      <div class={`flex justify-between items-center gap-2.5 ${isUser() ? "pb-0.5" : "pb-0"}`}>
-        <div class="flex flex-col">
-          <Show when={isUser()}>
-            <span class="font-semibold text-xs text-[var(--message-user-border)]">You</span>
-          </Show>
-          <Show when={!isUser()}>
-            <span class="text-xs text-[var(--message-assistant-border)]">Assistant</span>
-          </Show>
-        </div>
-        <div class="flex items-center gap-2">
+      <div class={containerClass()}>
+        <div class={`flex justify-between items-center gap-2.5 ${isUser() ? "pb-0.5" : "pb-0"}`}>
+          <div class="flex flex-col">
+            <Show when={isUser()}>
+              <span class="font-semibold text-xs text-[var(--message-user-border)]">You</span>
+            </Show>
+            <Show when={!isUser()}>
+              <div class="flex flex-wrap items-center gap-2 text-xs text-[var(--message-assistant-border)]">
+                <span class="font-semibold">Assistant</span>
+                <Show when={props.showAgentMeta && (agentIdentifier() || modelIdentifier())}>
+                  <span class="message-step-meta-inline">
+                    <Show when={agentIdentifier()}>{(value) => <span class="font-medium text-[var(--message-assistant-border)]">Agent: {value()}</span>}</Show>
+                    <Show when={modelIdentifier()}>{(value) => <span class="font-medium text-[var(--message-assistant-border)]">Model: {value()}</span>}</Show>
+                  </span>
+                </Show>
+              </div>
+            </Show>
+          </div>
+          <div class="flex items-center gap-2">
+
           <Show when={isUser() && props.onRevert}>
             <button
               class="bg-transparent border border-[var(--border-base)] text-[var(--text-muted)] cursor-pointer px-3 py-0.5 rounded text-xs font-semibold leading-none transition-all duration-200 flex items-center justify-center h-6 hover:bg-[var(--surface-hover)] hover:border-[var(--accent-primary)] hover:text-[var(--accent-primary)] active:scale-95"
