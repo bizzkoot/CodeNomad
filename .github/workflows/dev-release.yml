@@ -57,7 +57,9 @@ jobs:
     secrets: inherit
 
   publish-server:
-    needs: prepare-dev
+    needs:
+      - prepare-dev 
+      - build-and-upload
     uses: ./.github/workflows/manual-npm-publish.yml
     with:
       version: ${{ needs.prepare-dev.outputs.version }}
