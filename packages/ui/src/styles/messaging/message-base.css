@@ -6,7 +6,27 @@
 .assistant-message {
   /* gap: 0.25rem; */
   padding: 0.6rem 0.65rem;
+  margin-top: 0;
+  margin-bottom: 0;
 }
+
+.message-item-base:not(.assistant-message) {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.message-step-start {
+  background-color: var(--message-assistant-bg);
+  border-left: 4px solid var(--message-assistant-border);
+  margin-top: 0.5rem;
+}
+
+.message-step-finish {
+  background-color: var(--message-assistant-bg);
+  border-left: 4px solid var(--message-assistant-border);
+  margin-bottom: 0.5rem;
+}
+
 
 .message-queued-badge {
   @apply inline-block font-bold px-3 py-1 rounded mb-3 text-xs tracking-wide;
@@ -101,3 +121,90 @@
 .reasoning-label {
   font-weight: var(--font-weight-medium);
 }
+
+.message-step-card {
+  @apply flex flex-col gap-2 px-3 py-2;
+  color: inherit;
+  border-radius: 0;
+}
+
+.message-step-start {
+  background-color: var(--message-assistant-bg);
+  border-left: 4px solid var(--message-assistant-border);
+}
+
+.message-step-finish {
+  background-color: var(--message-assistant-bg);
+  border-left: 4px solid var(--message-assistant-border);
+}
+
+.message-step-heading {
+  @apply flex flex-wrap items-center gap-2 text-xs;
+  color: var(--text-muted);
+}
+
+.message-step-title {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  @apply flex items-center justify-between w-full;
+}
+
+.message-step-title-left {
+  @apply flex items-center gap-2 text-[var(--text-muted)];
+}
+
+.message-step-title-left span:last-child {
+  @apply font-medium text-[11px];
+}
+
+.message-step-time {
+  @apply text-[11px] text-[var(--text-muted)] font-normal ml-auto;
+}
+
+.message-step-meta-inline {
+  @apply flex flex-wrap gap-2 text-[11px];
+  color: var(--message-assistant-border);
+}
+
+
+.message-step-reason {
+  @apply text-[11px] font-medium;
+  color: var(--text-muted);
+}
+
+.message-step-finish-spacer {
+  @apply mt-4;
+}
+
+.reasoning-card-header {
+  @apply flex items-center justify-between;
+}
+
+.reasoning-card-header-right {
+  @apply flex items-center gap-2;
+}
+
+.reasoning-card-toggle {
+  @apply inline-flex items-center justify-center rounded border border-[var(--border-base)] text-[var(--text-muted)] bg-transparent px-3 py-0.5 text-xs font-semibold;
+}
+
+.reasoning-card-toggle:hover {
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.reasoning-card-time {
+  @apply text-[11px] text-[var(--text-muted)];
+}
+
+.reasoning-card-body {
+  @apply pt-1;
+}
+
+.reasoning-card-text {
+  @apply whitespace-pre-wrap break-words leading-[1.1] text-[var(--text-muted)] text-sm;
+  font-family: inherit;
+  background: transparent;
+  border: none;
+}
+

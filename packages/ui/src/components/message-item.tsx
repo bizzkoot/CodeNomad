@@ -1,9 +1,7 @@
-import { For, Show, createMemo } from "solid-js"
+import { For, Show } from "solid-js"
 import type { MessageInfo, ClientPart } from "../types/message"
 import { partHasRenderableText } from "../types/message"
 import type { MessageRecord } from "../stores/message-v2/types"
-import { formatTokenTotal } from "../lib/formatters"
-import { preferences } from "../stores/preferences"
 import MessagePart from "./message-part"
 
 interface MessageItemProps {
@@ -20,7 +18,6 @@ interface MessageItemProps {
 
 export default function MessageItem(props: MessageItemProps) {
   const isUser = () => props.record.role === "user"
-  const showUsageMetrics = () => preferences().showUsageMetrics ?? true
   const timestamp = () => {
     const createdTime = props.messageInfo?.time?.created ?? props.record.createdAt
     const date = new Date(createdTime)
@@ -140,49 +137,15 @@ export default function MessageItem(props: MessageItemProps) {
     }
   }
 
+  if (!isUser() && !hasContent()) {
+    return null
+  }
+
   const containerClass = () =>
     isUser()
       ? "message-item-base bg-[var(--message-user-bg)] border-l-4 border-[var(--message-user-border)]"
       : "message-item-base assistant-message bg-[var(--message-assistant-bg)] border-l-4 border-[var(--message-assistant-border)]"
 
-  const statChipClass =
-    "inline-flex items-center gap-1 rounded-full border border-[var(--border-base)] px-2 py-0.5 text-[10px]"
-  const statLabelClass = "uppercase text-[9px] tracking-wide text-[var(--text-muted)]"
-  const statValueClass = "font-semibold text-[var(--text-primary)]"
-
-  const usageStats = createMemo(() => {
-    const info = props.messageInfo
-    if (!info || info.role !== "assistant" || !info.tokens) {
-      return null
-    }
-    if (!showUsageMetrics()) {
-      return null
-    }
-
-    const tokens = info.tokens
-    const input = tokens.input ?? 0
-    const output = tokens.output ?? 0
-    const reasoning = tokens.reasoning ?? 0
-    if (input === 0 && output === 0 && reasoning === 0) {
-      return null
-    }
-
-    return {
-      input,
-      output,
-      reasoning,
-      cacheRead: tokens.cache?.read ?? 0,
-      cacheWrite: tokens.cache?.write ?? 0,
-      cost: info.cost ?? 0,
-    }
-  })
-
-  const formatCostValue = (value: number) => {
-    if (!value) return "$0.00"
-    if (value < 0.01) return `$${value.toPrecision(2)}`
-    return `$${value.toFixed(2)}`
-  }
- 
   const agentIdentifier = () => {
     if (isUser()) return ""
     const info = props.messageInfo
@@ -199,21 +162,18 @@ export default function MessageItem(props: MessageItemProps) {
     if (modelID && providerID) return `${providerID}/${modelID}`
     return modelID
   }
- 
+
+
   return (
 
     <div class={containerClass()}>
-      <div class="flex justify-between items-center gap-2.5 pb-0.5">
+      <div class={`flex justify-between items-center gap-2.5 ${isUser() ? "pb-0.5" : "pb-0"}`}>
         <div class="flex flex-col">
           <Show when={isUser()}>
             <span class="font-semibold text-xs text-[var(--message-user-border)]">You</span>
           </Show>
-
           <Show when={!isUser()}>
-            <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-[var(--message-assistant-border)]">
-              <Show when={agentIdentifier()}>{(value) => <span>Agent: {value()}</span>}</Show>
-              <Show when={modelIdentifier()}>{(value) => <span>Model: {value()}</span>}</Show>
-            </div>
+            <span class="font-semibold text-xs text-[var(--message-assistant-border)]">Assistant</span>
           </Show>
         </div>
         <div class="flex items-center gap-2">
@@ -267,94 +227,61 @@ export default function MessageItem(props: MessageItemProps) {
             />
           )}
         </For>
-      </div>
 
-
-      <Show when={fileAttachments().length > 0}>
-        <div class="message-attachments">
-          <For each={fileAttachments()}>
-            {(attachment) => {
-              const name = getAttachmentName(attachment)
-              const isImage = isImageAttachment(attachment)
-              return (
-                <div class={`attachment-chip ${isImage ? "attachment-chip-image" : ""}`} title={name}>
-                  <Show when={isImage} fallback={
-                    <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                      />
-                    </svg>
-                  }>
-                    <img src={attachment.url} alt={name} class="h-5 w-5 rounded object-cover" />
-                  </Show>
-                  <span class="truncate max-w-[180px]">{name}</span>
-                  <button
-                    type="button"
-                    onClick={() => void handleAttachmentDownload(attachment)}
-                    class="attachment-download"
-                    aria-label={`Download ${name}`}
-                  >
-                    <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12l4 4 4-4m-4-8v12" />
-                    </svg>
-                  </button>
-                  <Show when={isImage}>
-                    <div class="attachment-chip-preview">
-                      <img src={attachment.url} alt={name} />
-                    </div>
-                  </Show>
-                </div>
-              )
-            }}
-          </For>
-        </div>
-      </Show>
-
-      <Show when={usageStats()}>
-        {(usage) => (
-          <div class="mt-3 flex flex-wrap items-center gap-1 text-[10px] text-[var(--text-muted)]">
-            <div class={statChipClass}>
-              <span class={statLabelClass}>Input</span>
-              <span class={statValueClass}>{formatTokenTotal(usage().input)}</span>
-            </div>
-            <div class={statChipClass}>
-              <span class={statLabelClass}>Output</span>
-              <span class={statValueClass}>{formatTokenTotal(usage().output)}</span>
-            </div>
-            <div class={statChipClass}>
-              <span class={statLabelClass}>Reasoning</span>
-              <span class={statValueClass}>{formatTokenTotal(usage().reasoning)}</span>
-            </div>
-            <div class={statChipClass}>
-              <span class={statLabelClass}>Cache Read</span>
-              <span class={statValueClass}>{formatTokenTotal(usage().cacheRead)}</span>
-            </div>
-            <div class={statChipClass}>
-              <span class={statLabelClass}>Cache Write</span>
-              <span class={statValueClass}>{formatTokenTotal(usage().cacheWrite)}</span>
-            </div>
-            <div class={statChipClass}>
-              <span class={statLabelClass}>Cost</span>
-              <span class={statValueClass}>{formatCostValue(usage().cost)}</span>
-            </div>
+        <Show when={fileAttachments().length > 0}>
+          <div class="message-attachments">
+            <For each={fileAttachments()}>
+              {(attachment) => {
+                const name = getAttachmentName(attachment)
+                const isImage = isImageAttachment(attachment)
+                return (
+                  <div class={`attachment-chip ${isImage ? "attachment-chip-image" : ""}`} title={name}>
+                    <Show when={isImage} fallback={
+                      <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                        />
+                      </svg>
+                    }>
+                      <img src={attachment.url} alt={name} class="h-5 w-5 rounded object-cover" />
+                    </Show>
+                    <span class="truncate max-w-[180px]">{name}</span>
+                    <button
+                      type="button"
+                      onClick={() => void handleAttachmentDownload(attachment)}
+                      class="attachment-download"
+                      aria-label={`Download ${name}`}
+                    >
+                      <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12l4 4 4-4m-4-8v12" />
+                      </svg>
+                    </button>
+                    <Show when={isImage}>
+                      <div class="attachment-chip-preview">
+                        <img src={attachment.url} alt={name} />
+                      </div>
+                    </Show>
+                  </div>
+                )
+              }}
+            </For>
           </div>
-        )}
-      </Show>
-      <Show when={props.record.status === "sending"}>
+        </Show>
 
+        <Show when={props.record.status === "sending"}>
+          <div class="message-sending">
+            <span class="generating-spinner">●</span> Sending...
+          </div>
+        </Show>
 
-        <div class="message-sending">
-          <span class="generating-spinner">●</span> Sending...
-        </div>
-      </Show>
-
-      <Show when={props.record.status === "error"}>
-        <div class="message-error">⚠ Message failed to send</div>
-      </Show>
+        <Show when={props.record.status === "error"}>
+          <div class="message-error">⚠ Message failed to send</div>
+        </Show>
+      </div>
     </div>
   )
 }

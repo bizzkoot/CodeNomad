@@ -33,6 +33,38 @@ export default function MessagePart(props: MessagePartProps) {
     return ""
   }
 
+  function reasoningSegmentHasText(segment: unknown): boolean {
+    if (typeof segment === "string") {
+      return segment.trim().length > 0
+    }
+    if (segment && typeof segment === "object") {
+      const candidate = segment as { text?: unknown; value?: unknown; content?: unknown[] }
+      if (typeof candidate.text === "string" && candidate.text.trim().length > 0) {
+        return true
+      }
+      if (typeof candidate.value === "string" && candidate.value.trim().length > 0) {
+        return true
+      }
+      if (Array.isArray(candidate.content)) {
+        return candidate.content.some((entry) => reasoningSegmentHasText(entry))
+      }
+    }
+    return false
+  }
+
+  const hasReasoningContent = () => {
+    if (props.part?.type !== "reasoning") {
+      return false
+    }
+    if (reasoningSegmentHasText((props.part as any).text)) {
+      return true
+    }
+    if (Array.isArray((props.part as any).content)) {
+      return (props.part as any).content.some((entry: unknown) => reasoningSegmentHasText(entry))
+    }
+    return false
+  }
+
   const createTextPartForMarkdown = (): TextPart => {
     const part = props.part
     if ((part.type === "text" || part.type === "reasoning") && typeof part.text === "string") {
@@ -83,23 +115,7 @@ export default function MessagePart(props: MessagePartProps) {
 
 
 
-      <Match when={partType() === "reasoning"}>
-        <Show when={preferences().showThinkingBlocks && partHasRenderableText(props.part)}>
-          <div class="message-reasoning">
-            <div class="reasoning-container">
-              <div class="reasoning-header" onClick={handleReasoningClick}>
-                <span class="reasoning-icon">{isReasoningExpanded() ? "▼" : "▶"}</span>
-                <span class="reasoning-label">Reasoning</span>
-              </div>
-              <Show when={isReasoningExpanded()}>
-                <div class={`${textContainerClass()} mt-2`}>
-                  <Markdown part={createTextPartForMarkdown()} isDark={isDark()} size={isAssistantMessage() ? "tight" : "base"} />
-                </div>
-              </Show>
-            </div>
-          </div>
-        </Show>
-      </Match>
+
     </Switch>
   )
 }

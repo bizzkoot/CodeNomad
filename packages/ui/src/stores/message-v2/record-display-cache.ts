@@ -1,13 +1,8 @@
 import type { ClientPart } from "../../types/message"
-import { partHasRenderableText } from "../../types/message"
 import type { MessageRecord } from "./types"
-
-export type ToolCallPart = Extract<ClientPart, { type: "tool" }>
 
 export interface RecordDisplayData {
   orderedParts: ClientPart[]
-  textAndReasoningParts: ClientPart[]
-  toolParts: ToolCallPart[]
 }
 
 interface RecordDisplayCacheEntry {
@@ -17,47 +12,26 @@ interface RecordDisplayCacheEntry {
 
 const recordDisplayCache = new Map<string, RecordDisplayCacheEntry>()
 
-function makeCacheKey(instanceId: string, messageId: string, showThinking: boolean) {
-  return `${instanceId}:${messageId}:${showThinking ? 1 : 0}`
+function makeCacheKey(instanceId: string, messageId: string) {
+  return `${instanceId}:${messageId}`
 }
 
-function isToolPart(part: ClientPart): part is ToolCallPart {
-  return part.type === "tool"
-}
-
-export function buildRecordDisplayData(instanceId: string, record: MessageRecord, showThinking: boolean): RecordDisplayData {
-  const cacheKey = makeCacheKey(instanceId, record.id, showThinking)
+export function buildRecordDisplayData(instanceId: string, record: MessageRecord): RecordDisplayData {
+  const cacheKey = makeCacheKey(instanceId, record.id)
   const cached = recordDisplayCache.get(cacheKey)
   if (cached && cached.revision === record.revision) {
     return cached.data
   }
 
   const orderedParts: ClientPart[] = []
-  const textAndReasoningParts: ClientPart[] = []
-  const toolParts: ToolCallPart[] = []
 
   for (const partId of record.partIds) {
     const entry = record.parts[partId]
     if (!entry?.data) continue
-    const part = entry.data
-    orderedParts.push(part)
-
-    if (isToolPart(part)) {
-      toolParts.push(part)
-      continue
-    }
-
-    if (part.type === "text" && !part.synthetic && partHasRenderableText(part)) {
-      textAndReasoningParts.push(part)
-      continue
-    }
-
-    if (part.type === "reasoning" && showThinking && partHasRenderableText(part)) {
-      textAndReasoningParts.push(part)
-    }
+    orderedParts.push(entry.data)
   }
 
-  const data = { orderedParts, textAndReasoningParts, toolParts }
+  const data: RecordDisplayData = { orderedParts }
   recordDisplayCache.set(cacheKey, { revision: record.revision, data })
   return data
 }

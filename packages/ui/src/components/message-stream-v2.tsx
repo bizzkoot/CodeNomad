@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, createEffect, onCleanup } from "solid-js"
+import { For, Match, Show, Switch, createMemo, createSignal, createEffect, onCleanup } from "solid-js"
 import MessageItem from "./message-item"
 import ToolCall from "./tool-call"
 import Kbd from "./kbd"
@@ -7,7 +7,7 @@ import { getSessionInfo, sessions, setActiveParentSession, setActiveSession } fr
 import { showCommandPalette } from "../stores/command-palette"
 import { messageStoreBus } from "../stores/message-v2/bus"
 import type { MessageRecord } from "../stores/message-v2/types"
-import { buildRecordDisplayData, clearRecordDisplayCacheForInstance, type ToolCallPart } from "../stores/message-v2/record-display-cache"
+import { buildRecordDisplayData, clearRecordDisplayCacheForInstance } from "../stores/message-v2/record-display-cache"
 import { useConfig } from "../stores/preferences"
 import { sseManager } from "../lib/sse-manager"
 import { formatTokenTotal } from "../lib/formatters"
@@ -19,8 +19,10 @@ const SCROLL_SCOPE = "session"
 const TOOL_ICON = "🔧"
 const codeNomadLogo = new URL("../images/CodeNomad-Icon.png", import.meta.url).href
 
-const messageItemCache = new Map<string, MessageDisplayItem>()
+const messageItemCache = new Map<string, ContentDisplayItem>()
 const toolItemCache = new Map<string, ToolDisplayItem>()
+
+type ToolCallPart = Extract<ClientPart, { type: "tool" }>
 
 type ToolState = import("@opencode-ai/sdk").ToolState
 type ToolStateRunning = import("@opencode-ai/sdk").ToolStateRunning
@@ -111,11 +113,11 @@ interface MessageStreamV2Props {
   onFork?: (messageId?: string) => void
 }
 
-interface MessageDisplayItem {
-  type: "message"
+interface ContentDisplayItem {
+  type: "content"
+  key: string
   record: MessageRecord
-  combinedParts: ClientPart[]
-  orderedParts: ClientPart[]
+  parts: ClientPart[]
   messageInfo?: MessageInfo
   isQueued: boolean
 }
@@ -130,27 +132,30 @@ interface ToolDisplayItem {
   partVersion: number
 }
 
-interface MessageDisplayBlock {
-  record: MessageRecord
-  messageItem: MessageDisplayItem | null
-  toolItems: ToolDisplayItem[]
+interface StepDisplayItem {
+  type: "step-start" | "step-finish"
+  key: string
+  part: ClientPart
+  messageInfo?: MessageInfo
 }
 
-function hasRenderableContent(record: MessageRecord, combinedParts: ClientPart[], info?: MessageInfo): boolean {
-  if (record.role !== "assistant" && record.role !== "user") {
-    return false
-  }
-  if (record.role !== "assistant" || combinedParts.length > 0) {
-    return true
-  }
-  if (info && info.role === "assistant" && info.error) {
-    return true
-  }
-  return record.status === "error"
+type ReasoningDisplayItem = {
+  type: "reasoning"
+  key: string
+  part: ClientPart
+  messageInfo?: MessageInfo
+}
+
+type MessageBlockItem = ContentDisplayItem | ToolDisplayItem | StepDisplayItem | ReasoningDisplayItem
+
+interface MessageDisplayBlock {
+  record: MessageRecord
+  items: MessageBlockItem[]
 }
 
 export default function MessageStreamV2(props: MessageStreamV2Props) {
   const { preferences } = useConfig()
+  const showUsagePreference = () => preferences().showUsageMetrics ?? true
   const store = createMemo(() => messageStoreBus.getOrCreate(props.instanceId))
   const messageIds = createMemo(() => store().getSessionMessageIds(props.sessionId))
   const messageRecords = createMemo(() =>
@@ -217,9 +222,42 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
     return -1
   })
 
+  function reasoningHasRenderableContent(part: ClientPart): boolean {
+    if (!part || part.type !== "reasoning") {
+      return false
+    }
+    const checkSegment = (segment: unknown): boolean => {
+      if (typeof segment === "string") {
+        return segment.trim().length > 0
+      }
+      if (segment && typeof segment === "object") {
+        const candidate = segment as { text?: unknown; value?: unknown; content?: unknown[] }
+        if (typeof candidate.text === "string" && candidate.text.trim().length > 0) {
+          return true
+        }
+        if (typeof candidate.value === "string" && candidate.value.trim().length > 0) {
+          return true
+        }
+        if (Array.isArray(candidate.content)) {
+          return candidate.content.some((entry) => checkSegment(entry))
+        }
+      }
+      return false
+    }
+
+    if (checkSegment((part as any).text)) {
+      return true
+    }
+    if (Array.isArray((part as any).content)) {
+      return (part as any).content.some((entry: unknown) => checkSegment(entry))
+    }
+    return false
+  }
+
   const displayBlocks = createMemo<MessageDisplayBlock[]>(() => {
     const infoMap = messageInfoMap()
     const showThinking = preferences().showThinkingBlocks
+    const showUsageMetrics = showUsagePreference()
     const revert = revertTarget()
     const instanceId = props.instanceId
     const blocks: MessageDisplayBlock[] = []
@@ -234,71 +272,99 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
         break
       }
 
-      const { orderedParts, textAndReasoningParts, toolParts } = buildRecordDisplayData(instanceId, record, showThinking)
+      const { orderedParts } = buildRecordDisplayData(instanceId, record)
       const messageInfo = infoMap.get(record.id)
-      const recordCacheKey = makeInstanceCacheKey(instanceId, record.id)
       const recordIndex = indexMap.get(record.id) ?? 0
       const isQueued = record.role === "user" && (assistantIndex === -1 || recordIndex > assistantIndex)
 
-      let messageItem: MessageDisplayItem | null = null
-      if (hasRenderableContent(record, textAndReasoningParts, messageInfo)) {
-        let cached = messageItemCache.get(recordCacheKey)
+      const items: MessageBlockItem[] = []
+      let segmentIndex = 0
+      let pendingParts: ClientPart[] = []
+
+      const flushContent = () => {
+        if (pendingParts.length === 0) return
+        const segmentKey = makeInstanceCacheKey(instanceId, `${record.id}:segment:${segmentIndex}`)
+        segmentIndex += 1
+        let cached = messageItemCache.get(segmentKey)
         if (!cached) {
           cached = {
-            type: "message",
+            type: "content",
+            key: segmentKey,
             record,
-            combinedParts: textAndReasoningParts,
-            orderedParts,
+            parts: pendingParts.slice(),
             messageInfo,
             isQueued,
           }
-          messageItemCache.set(recordCacheKey, cached)
+          messageItemCache.set(segmentKey, cached)
         } else {
           cached.record = record
-          cached.combinedParts = textAndReasoningParts
-          cached.orderedParts = orderedParts
+          cached.parts = pendingParts.slice()
           cached.messageInfo = messageInfo
           cached.isQueued = isQueued
         }
-        messageItem = cached
-        usedMessageKeys.add(recordCacheKey)
+        items.push(cached)
+        usedMessageKeys.add(segmentKey)
+        pendingParts = []
       }
 
-      const toolItems: ToolDisplayItem[] = []
-      toolParts.forEach((toolPart, toolIndex) => {
-        const partVersion = typeof toolPart.version === "number" ? toolPart.version : 0
-        const messageVersion = record.revision
-        const key = `${record.id}:${toolPart.id ?? toolIndex}`
-        const cacheKey = makeInstanceCacheKey(instanceId, key)
-        let toolItem = toolItemCache.get(cacheKey)
-        if (!toolItem) {
-          toolItem = {
-            type: "tool",
-            key,
-            toolPart,
-            messageInfo,
-            messageId: record.id,
-            messageVersion,
-            partVersion,
+      orderedParts.forEach((part, partIndex) => {
+        if (part.type === "tool") {
+          flushContent()
+          const partVersion = typeof part.version === "number" ? part.version : 0
+          const messageVersion = record.revision
+          const key = `${record.id}:${part.id ?? partIndex}`
+          const cacheKey = makeInstanceCacheKey(instanceId, key)
+          let toolItem = toolItemCache.get(cacheKey)
+          if (!toolItem) {
+            toolItem = {
+              type: "tool",
+              key,
+              toolPart: part as ToolCallPart,
+              messageInfo,
+              messageId: record.id,
+              messageVersion,
+              partVersion,
+            }
+            toolItemCache.set(cacheKey, toolItem)
+          } else {
+            toolItem.key = key
+            toolItem.toolPart = part as ToolCallPart
+            toolItem.messageInfo = messageInfo
+            toolItem.messageId = record.id
+            toolItem.messageVersion = messageVersion
+            toolItem.partVersion = partVersion
           }
-          toolItemCache.set(cacheKey, toolItem)
-        } else {
-          toolItem.key = key
-          toolItem.toolPart = toolPart
-          toolItem.messageInfo = messageInfo
-          toolItem.messageId = record.id
-          toolItem.messageVersion = messageVersion
-          toolItem.partVersion = partVersion
+          items.push(toolItem)
+          usedToolKeys.add(cacheKey)
+          return
         }
-        toolItems.push(toolItem)
-        usedToolKeys.add(cacheKey)
+
+        if (part.type === "step-start" || part.type === "step-finish") {
+          flushContent()
+          const key = makeInstanceCacheKey(instanceId, `${record.id}:${part.id ?? partIndex}:${part.type}`)
+          items.push({ type: part.type, key, part, messageInfo })
+          return
+        }
+
+        if (part.type === "reasoning") {
+          flushContent()
+          if (showThinking && reasoningHasRenderableContent(part)) {
+            const key = makeInstanceCacheKey(instanceId, `${record.id}:${part.id ?? partIndex}:reasoning`)
+            items.push({ type: "reasoning", key, part, messageInfo })
+          }
+          return
+        }
+
+        pendingParts.push(part)
       })
 
-      if (!messageItem && toolItems.length === 0) {
+      flushContent()
+
+      if (items.length === 0) {
         continue
       }
 
-      blocks.push({ record, messageItem, toolItems })
+      blocks.push({ record, items })
     }
 
     for (const key of messageItemCache.keys()) {
@@ -322,10 +388,18 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
       return `${revisionValue}:empty`
     }
     const lastBlock = blocks[blocks.length - 1]
-    const lastTool = lastBlock.toolItems[lastBlock.toolItems.length - 1]
-    const tailSignature = lastTool
-      ? `tool:${lastTool.key}:${lastTool.partVersion}`
-      : `msg:${lastBlock.record.id}:${lastBlock.record.revision}`
+    const lastItem = lastBlock.items[lastBlock.items.length - 1]
+    let tailSignature: string
+    if (!lastItem) {
+      tailSignature = `msg:${lastBlock.record.id}:${lastBlock.record.revision}`
+    } else if (lastItem.type === "tool") {
+      tailSignature = `tool:${lastItem.key}:${lastItem.partVersion}`
+    } else if (lastItem.type === "content") {
+      tailSignature = `content:${lastItem.key}:${lastBlock.record.revision}`
+    } else {
+      const version = typeof lastItem.part.version === "number" ? lastItem.part.version : 0
+      tailSignature = `step:${lastItem.key}:${version}`
+    }
     return `${revisionValue}:${tailSignature}`
   })
 
@@ -527,68 +601,99 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
         <For each={displayBlocks()}>
           {(block) => (
             <div class="message-stream-block" data-message-id={block.record.id}>
-              <Show when={block.messageItem} keyed>
-                {(message) => (
-                  <MessageItem
-                    record={message.record}
-                    messageInfo={message.messageInfo}
-                    combinedParts={message.combinedParts}
-                    orderedParts={message.orderedParts}
-                    instanceId={props.instanceId}
-                    sessionId={props.sessionId}
-                    isQueued={message.isQueued}
-                    onRevert={props.onRevert}
-                    onFork={props.onFork}
-                  />
-                )}
-              </Show>
+              <For each={block.items}>
+                {(item) => (
+                  <Switch>
+                    <Match when={item.type === "content"}>
+                      <MessageItem
+                        record={(item as ContentDisplayItem).record}
+                        messageInfo={(item as ContentDisplayItem).messageInfo}
+                        combinedParts={(item as ContentDisplayItem).parts}
+                        orderedParts={(item as ContentDisplayItem).parts}
+                        instanceId={props.instanceId}
+                        sessionId={props.sessionId}
+                        isQueued={(item as ContentDisplayItem).isQueued}
+                        onRevert={props.onRevert}
+                        onFork={props.onFork}
+                      />
+                    </Match>
+                    <Match when={item.type === "tool"}>
+                      {(() => {
+                        const toolItem = item as ToolDisplayItem
+                        const toolState = toolItem.toolPart.state as ToolState | undefined
+                        const hasToolState =
+                          Boolean(toolState) &&
+                          (isToolStateRunning(toolState) || isToolStateCompleted(toolState) || isToolStateError(toolState))
+                        const taskSessionId = hasToolState ? extractTaskSessionId(toolState) : ""
+                        const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId) : null
+                        const handleGoToTaskSession = (event: MouseEvent) => {
+                          event.preventDefault()
+                          event.stopPropagation()
+                          if (!taskLocation) return
+                          navigateToTaskSession(taskLocation)
+}
 
-              <For each={block.toolItems}>
-                {(item) => {
-                  const toolState = item.toolPart.state as ToolState | undefined
-                  const hasToolState =
-                    Boolean(toolState) && (isToolStateRunning(toolState) || isToolStateCompleted(toolState) || isToolStateError(toolState))
-                  const taskSessionId = hasToolState ? extractTaskSessionId(toolState) : ""
-                  const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId) : null
-                  const handleGoToTaskSession = (event: MouseEvent) => {
-                    event.preventDefault()
-                    event.stopPropagation()
-                    if (!taskLocation) return
-                    navigateToTaskSession(taskLocation)
-                  }
 
-                  return (
-                    <div class="tool-call-message" data-key={item.key}>
-                      <div class="tool-call-header-label">
-                        <div class="tool-call-header-meta">
-                          <span class="tool-call-icon">{TOOL_ICON}</span>
-                          <span>Tool Call</span>
-                          <span class="tool-name">{item.toolPart.tool || "unknown"}</span>
-                        </div>
-                        <Show when={taskSessionId}>
-                          <button
-                            class="tool-call-header-button"
-                            type="button"
-                            disabled={!taskLocation}
-                            onClick={handleGoToTaskSession}
-                            title={!taskLocation ? "Session not available yet" : "Go to session"}
-                          >
-                            Go to Session
-                          </button>
-                        </Show>
-                      </div>
-                      <ToolCall
-                        toolCall={item.toolPart}
-                        toolCallId={item.key}
-                        messageId={item.messageId}
-                        messageVersion={item.messageVersion}
-                        partVersion={item.partVersion}
+
+                        return (
+                          <div class="tool-call-message" data-key={toolItem.key}>
+                            <div class="tool-call-header-label">
+                              <div class="tool-call-header-meta">
+                                <span class="tool-call-icon">{TOOL_ICON}</span>
+                                <span>Tool Call</span>
+                                <span class="tool-name">{toolItem.toolPart.tool || "unknown"}</span>
+                              </div>
+                              <Show when={taskSessionId}>
+                                <button
+                                  class="tool-call-header-button"
+                                  type="button"
+                                  disabled={!taskLocation}
+                                  onClick={handleGoToTaskSession}
+                                  title={!taskLocation ? "Session not available yet" : "Go to session"}
+                                >
+                                  Go to Session
+                                </button>
+                              </Show>
+                            </div>
+                            <ToolCall
+                              toolCall={toolItem.toolPart}
+                              toolCallId={toolItem.key}
+                              messageId={toolItem.messageId}
+                              messageVersion={toolItem.messageVersion}
+                              partVersion={toolItem.partVersion}
+                              instanceId={props.instanceId}
+                              sessionId={props.sessionId}
+                            />
+                          </div>
+                        )
+                      })()}
+                    </Match>
+                    <Match when={item.type === "step-start"}>
+                      <StepCard
+                        kind="start"
+                        part={(item as StepDisplayItem).part}
+                        messageInfo={(item as StepDisplayItem).messageInfo}
+                        showAgentMeta
+                      />
+                    </Match>
+                    <Match when={item.type === "step-finish"}>
+                      <StepCard
+                        kind="finish"
+                        part={(item as StepDisplayItem).part}
+                        messageInfo={(item as StepDisplayItem).messageInfo}
+                        showUsage={showUsagePreference()}
+                      />
+                    </Match>
+                    <Match when={item.type === "reasoning"}>
+                      <ReasoningCard
+                        part={(item as ReasoningDisplayItem).part}
+                        messageInfo={(item as ReasoningDisplayItem).messageInfo}
                         instanceId={props.instanceId}
                         sessionId={props.sessionId}
                       />
-                    </div>
-                  )
-                }}
+                    </Match>
+                  </Switch>
+                )}
               </For>
             </div>
           )}
@@ -621,6 +726,209 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
               </span>
             </button>
           </Show>
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+interface StepCardProps {
+  kind: "start" | "finish"
+  part: ClientPart
+  messageInfo?: MessageInfo
+  showAgentMeta?: boolean
+  showUsage?: boolean
+}
+
+function StepCard(props: StepCardProps) {
+  const snapshot = () => {
+    const value = (props.part as { snapshot?: string }).snapshot
+    return typeof value === "string" ? value : ""
+  }
+
+  const reason = () => {
+    if (props.kind !== "finish") return ""
+    const value = (props.part as { reason?: string }).reason
+    return typeof value === "string" ? value : ""
+  }
+
+  const timestamp = () => {
+    const value = props.messageInfo?.time?.created ?? (props.part as any)?.time?.start ?? Date.now()
+    const date = new Date(value)
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  }
+
+  const agentIdentifier = () => {
+    if (!props.showAgentMeta) return ""
+    const info = props.messageInfo
+    if (!info || info.role !== "assistant") return ""
+    return info.mode || ""
+  }
+
+  const modelIdentifier = () => {
+    if (!props.showAgentMeta) return ""
+    const info = props.messageInfo
+    if (!info || info.role !== "assistant") return ""
+    const modelID = info.modelID || ""
+    const providerID = info.providerID || ""
+    if (modelID && providerID) return `${providerID}/${modelID}`
+    return modelID
+  }
+
+  const usageStats = () => {
+    if (props.kind !== "finish" || !props.showUsage) {
+      return null
+    }
+    const info = props.messageInfo
+    if (!info || info.role !== "assistant" || !info.tokens) {
+      return null
+    }
+    const tokens = info.tokens
+    const input = tokens.input ?? 0
+    const output = tokens.output ?? 0
+    const reasoningTokens = tokens.reasoning ?? 0
+    if (input === 0 && output === 0 && reasoningTokens === 0) {
+      return null
+    }
+    return {
+      input,
+      output,
+      reasoning: reasoningTokens,
+      cacheRead: tokens.cache?.read ?? 0,
+      cacheWrite: tokens.cache?.write ?? 0,
+      cost: info.cost ?? 0,
+    }
+  }
+
+  return (
+    <div class={`message-step-card ${props.kind === "start" ? "message-step-start" : "message-step-finish"}`}>
+      <div class="message-step-heading">
+        <div class="message-step-title">
+          <div class="message-step-title-left">
+            <Show when={props.kind === "start" && props.showAgentMeta && (agentIdentifier() || modelIdentifier())}>
+              <span class="message-step-meta-inline">
+                <Show when={agentIdentifier()}>{(value) => <span>Agent: {value()}</span>}</Show>
+                <Show when={modelIdentifier()}>{(value) => <span>Model: {value()}</span>}</Show>
+              </span>
+            </Show>
+            <span>{props.kind === "start" ? "Step started" : "Step finished"}</span>
+          </div>
+          <span class="message-step-time">{timestamp()}</span>
+        </div>
+        <Show when={props.kind === "finish" && reason()}>{(value) => <span class="message-step-reason">{value()}</span>}</Show>
+      </div>
+      <Show when={usageStats()}>
+        {(usage) => (
+          <div class="mt-3 flex flex-wrap items-center gap-1 text-[10px] text-[var(--text-muted)]">
+            <div class="inline-flex items-center gap-1 rounded-full border border-[var(--border-base)] px-2 py-0.5 text-[10px]">
+              <span class="uppercase text-[9px] tracking-wide text-[var(--text-muted)]">Input</span>
+              <span class="font-semibold text-[var(--text-primary)]">{formatTokenTotal(usage().input)}</span>
+            </div>
+            <div class="inline-flex items-center gap-1 rounded-full border border-[var(--border-base)] px-2 py-0.5 text-[10px]">
+              <span class="uppercase text-[9px] tracking-wide text-[var(--text-muted)]">Output</span>
+              <span class="font-semibold text-[var(--text-primary)]">{formatTokenTotal(usage().output)}</span>
+            </div>
+            <div class="inline-flex items-center gap-1 rounded-full border border-[var(--border-base)] px-2 py-0.5 text-[10px]">
+              <span class="uppercase text-[9px] tracking-wide text-[var(--text-muted)]">Reasoning</span>
+              <span class="font-semibold text-[var(--text-primary)]">{formatTokenTotal(usage().reasoning)}</span>
+            </div>
+            <div class="inline-flex items-center gap-1 rounded-full border border-[var(--border-base)] px-2 py-0.5 text-[10px]">
+              <span class="uppercase text-[9px] tracking-wide text-[var(--text-muted)]">Cache Read</span>
+              <span class="font-semibold text-[var(--text-primary)]">{formatTokenTotal(usage().cacheRead)}</span>
+            </div>
+            <div class="inline-flex items-center gap-1 rounded-full border border-[var(--border-base)] px-2 py-0.5 text-[10px]">
+              <span class="uppercase text-[9px] tracking-wide text-[var(--text-muted)]">Cache Write</span>
+              <span class="font-semibold text-[var(--text-primary)]">{formatTokenTotal(usage().cacheWrite)}</span>
+            </div>
+            <div class="inline-flex items-center gap-1 rounded-full border border-[var(--border-base)] px-2 py-0.5 text-[10px]">
+              <span class="uppercase text-[9px] tracking-wide text-[var(--text-muted)]">Cost</span>
+              <span class="font-semibold text-[var(--text-primary)]">{formatCostValue(usage().cost)}</span>
+            </div>
+          </div>
+        )}
+      </Show>
+      <Show when={props.kind === "finish" && !props.showUsage}>
+        <div class="message-step-finish-spacer" aria-hidden="true" />
+      </Show>
+    </div>
+  )
+}
+
+function formatCostValue(value: number) {
+  if (!value) return "$0.00"
+  if (value < 0.01) return `$${value.toPrecision(2)}`
+  return `$${value.toFixed(2)}`
+}
+
+interface ReasoningCardProps {
+  part: ClientPart
+  messageInfo?: MessageInfo
+  instanceId: string
+  sessionId: string
+}
+
+function ReasoningCard(props: ReasoningCardProps) {
+  const [expanded, setExpanded] = createSignal(false)
+
+  const timestamp = () => {
+    const value = props.messageInfo?.time?.created ?? (props.part as any)?.time?.start ?? Date.now()
+    const date = new Date(value)
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  }
+
+  const reasoningText = () => {
+    const part = props.part as any
+    if (!part) return ""
+
+    const stringifySegment = (segment: unknown): string => {
+      if (typeof segment === "string") {
+        return segment
+      }
+      if (segment && typeof segment === "object") {
+        const obj = segment as { text?: unknown; value?: unknown; content?: unknown[] }
+        const pieces: string[] = []
+        if (typeof obj.text === "string") {
+          pieces.push(obj.text)
+        }
+        if (typeof obj.value === "string") {
+          pieces.push(obj.value)
+        }
+        if (Array.isArray(obj.content)) {
+          pieces.push(obj.content.map((entry) => stringifySegment(entry)).join("\n"))
+        }
+        return pieces.filter((piece) => piece && piece.trim().length > 0).join("\n")
+      }
+      return ""
+    }
+
+    const textValue = stringifySegment(part.text)
+    if (textValue.trim().length > 0) {
+      return textValue
+    }
+    if (Array.isArray(part.content)) {
+      return part.content.map((entry: unknown) => stringifySegment(entry)).join("\n")
+    }
+    return ""
+  }
+
+  const toggle = () => setExpanded((prev) => !prev)
+
+  return (
+    <div class="message-item-base assistant-message bg-[var(--message-assistant-bg)] border-l-4 border-[var(--message-assistant-border)]">
+      <div class="reasoning-card-header">
+        <div class="flex flex-col">
+          <span class="font-semibold text-xs text-[var(--message-assistant-border)]">Thinking</span>
+        </div>
+        <div class="reasoning-card-header-right">
+          <button type="button" class="reasoning-card-toggle" onClick={toggle} aria-expanded={expanded()} aria-label={expanded() ? "Collapse thinking" : "Expand thinking"}>
+            {expanded() ? "Collapse" : "Expand"}
+          </button>
+          <span class="reasoning-card-time">{timestamp()}</span>
+        </div>
+      </div>
+      <Show when={expanded()}>
+        <div class="reasoning-card-body">
+          <pre class="reasoning-card-text">{reasoningText() || ""}</pre>
         </div>
       </Show>
     </div>
