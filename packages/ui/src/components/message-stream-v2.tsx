@@ -838,106 +838,14 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
 
         <For each={displayBlocks()}>
           {(block) => (
-            <div class="message-stream-block" data-message-id={block.record.id}>
-              <For each={block.items}>
-                {(item) => (
-                  <Switch>
-                    <Match when={item.type === "content"}>
-                      <MessageItem
-                        record={(item as ContentDisplayItem).record}
-                        messageInfo={(item as ContentDisplayItem).messageInfo}
-                        combinedParts={(item as ContentDisplayItem).parts}
-                        orderedParts={(item as ContentDisplayItem).parts}
-                        instanceId={props.instanceId}
-                        sessionId={props.sessionId}
-                        isQueued={(item as ContentDisplayItem).isQueued}
-                        showAgentMeta={(item as ContentDisplayItem).showAgentMeta}
-                        onRevert={props.onRevert}
-                        onFork={props.onFork}
-                      />
-                    </Match>
-                    <Match when={item.type === "tool"}>
-                      {(() => {
-                        const toolItem = item as ToolDisplayItem
-                        const toolState = toolItem.toolPart.state as ToolState | undefined
-                        const hasToolState =
-                          Boolean(toolState) &&
-                          (isToolStateRunning(toolState) || isToolStateCompleted(toolState) || isToolStateError(toolState))
-                        const taskSessionId = hasToolState ? extractTaskSessionId(toolState) : ""
-                        const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId) : null
-                        const handleGoToTaskSession = (event: MouseEvent) => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          if (!taskLocation) return
-                          navigateToTaskSession(taskLocation)
-}
-
-
-
-                        return (
-                          <div class="tool-call-message" data-key={toolItem.key}>
-                            <div class="tool-call-header-label">
-                              <div class="tool-call-header-meta">
-                                <span class="tool-call-icon">{TOOL_ICON}</span>
-                                <span>Tool Call</span>
-                                <span class="tool-name">{toolItem.toolPart.tool || "unknown"}</span>
-                              </div>
-                              <Show when={taskSessionId}>
-                                <button
-                                  class="tool-call-header-button"
-                                  type="button"
-                                  disabled={!taskLocation}
-                                  onClick={handleGoToTaskSession}
-                                  title={!taskLocation ? "Session not available yet" : "Go to session"}
-                                >
-                                  Go to Session
-                                </button>
-                              </Show>
-                            </div>
-                            <ToolCall
-                              toolCall={toolItem.toolPart}
-                              toolCallId={toolItem.key}
-                              messageId={toolItem.messageId}
-                              messageVersion={toolItem.messageVersion}
-                              partVersion={toolItem.partVersion}
-                              instanceId={props.instanceId}
-                              sessionId={props.sessionId}
-                            />
-                          </div>
-                        )
-                      })()}
-                    </Match>
-                    <Match when={item.type === "step-start"}>
-                      <StepCard
-                        kind="start"
-                        part={(item as StepDisplayItem).part}
-                        messageInfo={(item as StepDisplayItem).messageInfo}
-                        showAgentMeta
-                      />
-                    </Match>
-                    <Match when={item.type === "step-finish"}>
-                      <StepCard
-                        kind="finish"
-                        part={(item as StepDisplayItem).part}
-                        messageInfo={(item as StepDisplayItem).messageInfo}
-                        showUsage={showUsagePreference()}
-                        borderColor={(item as StepDisplayItem).accentColor}
-                      />
-                    </Match>
-                    <Match when={item.type === "reasoning"}>
-                      <ReasoningCard
-                        part={(item as ReasoningDisplayItem).part}
-                        messageInfo={(item as ReasoningDisplayItem).messageInfo}
-                        instanceId={props.instanceId}
-                        sessionId={props.sessionId}
-                        showAgentMeta={(item as ReasoningDisplayItem).showAgentMeta}
-                        defaultExpanded={(item as ReasoningDisplayItem).defaultExpanded}
-                      />
-                    </Match>
-                  </Switch>
-                )}
-              </For>
-            </div>
+            <MessageBlock
+              block={block}
+              instanceId={props.instanceId}
+              sessionId={props.sessionId}
+              showUsagePreference={showUsagePreference}
+              onRevert={props.onRevert}
+              onFork={props.onFork}
+            />
           )}
         </For>
       </div>
@@ -970,6 +878,117 @@ export default function MessageStreamV2(props: MessageStreamV2Props) {
           </Show>
         </div>
       </Show>
+    </div>
+  )
+}
+
+interface MessageBlockProps {
+  block: MessageDisplayBlock
+  instanceId: string
+  sessionId: string
+  showUsagePreference: () => boolean
+  onRevert?: (messageId: string) => void
+  onFork?: (messageId?: string) => void
+}
+
+function MessageBlock(props: MessageBlockProps) {
+  return (
+    <div class="message-stream-block" data-message-id={props.block.record.id}>
+      <For each={props.block.items}>
+        {(item) => (
+          <Switch>
+            <Match when={item.type === "content"}>
+              <MessageItem
+                record={(item as ContentDisplayItem).record}
+                messageInfo={(item as ContentDisplayItem).messageInfo}
+                combinedParts={(item as ContentDisplayItem).parts}
+                orderedParts={(item as ContentDisplayItem).parts}
+                instanceId={props.instanceId}
+                sessionId={props.sessionId}
+                isQueued={(item as ContentDisplayItem).isQueued}
+                showAgentMeta={(item as ContentDisplayItem).showAgentMeta}
+                onRevert={props.onRevert}
+                onFork={props.onFork}
+              />
+            </Match>
+            <Match when={item.type === "tool"}>
+              {(() => {
+                const toolItem = item as ToolDisplayItem
+                const toolState = toolItem.toolPart.state as ToolState | undefined
+                const hasToolState =
+                  Boolean(toolState) && (isToolStateRunning(toolState) || isToolStateCompleted(toolState) || isToolStateError(toolState))
+                const taskSessionId = hasToolState ? extractTaskSessionId(toolState) : ""
+                const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId) : null
+                const handleGoToTaskSession = (event: MouseEvent) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  if (!taskLocation) return
+                  navigateToTaskSession(taskLocation)
+                }
+
+                return (
+                  <div class="tool-call-message" data-key={toolItem.key}>
+                    <div class="tool-call-header-label">
+                      <div class="tool-call-header-meta">
+                        <span class="tool-call-icon">{TOOL_ICON}</span>
+                        <span>Tool Call</span>
+                        <span class="tool-name">{toolItem.toolPart.tool || "unknown"}</span>
+                      </div>
+                      <Show when={taskSessionId}>
+                        <button
+                          class="tool-call-header-button"
+                          type="button"
+                          disabled={!taskLocation}
+                          onClick={handleGoToTaskSession}
+                          title={!taskLocation ? "Session not available yet" : "Go to session"}
+                        >
+                          Go to Session
+                        </button>
+                      </Show>
+                    </div>
+                    <ToolCall
+                      toolCall={toolItem.toolPart}
+                      toolCallId={toolItem.key}
+                      messageId={toolItem.messageId}
+                      messageVersion={toolItem.messageVersion}
+                      partVersion={toolItem.partRevision}
+                      instanceId={props.instanceId}
+                      sessionId={props.sessionId}
+                    />
+                  </div>
+                )
+              })()}
+            </Match>
+            <Match when={item.type === "step-start"}>
+              <StepCard
+                kind="start"
+                part={(item as StepDisplayItem).part}
+                messageInfo={(item as StepDisplayItem).messageInfo}
+                showAgentMeta
+              />
+            </Match>
+            <Match when={item.type === "step-finish"}>
+              <StepCard
+                kind="finish"
+                part={(item as StepDisplayItem).part}
+                messageInfo={(item as StepDisplayItem).messageInfo}
+                showUsage={props.showUsagePreference()}
+                borderColor={(item as StepDisplayItem).accentColor}
+              />
+            </Match>
+            <Match when={item.type === "reasoning"}>
+              <ReasoningCard
+                part={(item as ReasoningDisplayItem).part}
+                messageInfo={(item as ReasoningDisplayItem).messageInfo}
+                instanceId={props.instanceId}
+                sessionId={props.sessionId}
+                showAgentMeta={(item as ReasoningDisplayItem).showAgentMeta}
+                defaultExpanded={(item as ReasoningDisplayItem).defaultExpanded}
+              />
+            </Match>
+          </Switch>
+        )}
+      </For>
     </div>
   )
 }

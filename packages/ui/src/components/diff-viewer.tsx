@@ -1,6 +1,7 @@
 import { createMemo, Show, createEffect, onCleanup } from "solid-js"
 import { DiffView, DiffModeEnum } from "@git-diff-view/solid"
 import type { DiffHighlighterLang } from "@git-diff-view/core"
+import { ErrorBoundary } from "solid-js"
 import { getLanguageFromPath } from "../lib/markdown"
 import { normalizeDiffText } from "../lib/diff-utils"
 import { setCacheEntry } from "../lib/global-cache"
@@ -154,14 +155,19 @@ export function ToolCallDiffViewer(props: ToolCallDiffViewerProps) {
               fallback={<pre class="tool-call-diff-fallback">{props.diffText}</pre>}
             >
               {(data) => (
-                <DiffView
-                  data={data()}
-                  diffViewMode={props.mode === "split" ? DiffModeEnum.Split : DiffModeEnum.Unified}
-                  diffViewTheme={props.theme}
-                  diffViewHighlight
-                  diffViewWrap={false}
-                  diffViewFontSize={13}
-                />
+                <ErrorBoundary fallback={(error) => {
+                  console.warn("Failed to render diff view", error)
+                  return <pre class="tool-call-diff-fallback">{props.diffText}</pre>
+                }}>
+                  <DiffView
+                    data={data()}
+                    diffViewMode={props.mode === "split" ? DiffModeEnum.Split : DiffModeEnum.Unified}
+                    diffViewTheme={props.theme}
+                    diffViewHighlight
+                    diffViewWrap={false}
+                    diffViewFontSize={13}
+                  />
+                </ErrorBoundary>
               )}
             </Show>
           </div>
