@@ -4,6 +4,7 @@ import type { Session, Agent, Provider } from "../types/session"
 import { deleteSession, loadMessages } from "./session-api"
 import { showToastNotification } from "../lib/notifications"
 import { messageStoreBus } from "./message-v2/bus"
+import { instances } from "./instances"
 
 export interface SessionInfo {
   cost: number
@@ -225,54 +226,63 @@ function getSessionInfo(instanceId: string, sessionId: string): SessionInfo | un
 }
 
 async function isBlankSession(session: Session, instanceId: string, fetchIfNeeded = false): Promise<boolean> {
-  const loadedSet = messagesLoaded().get(instanceId)
-  const notLoaded = !loadedSet?.has(session.id)
+  const created = session.time?.created || 0
+  const updated = session.time?.updated || 0
+  const hasChildren = getChildSessions(instanceId, session.id).length > 0
+  const isFreshSession = created === updated && !hasChildren
 
-  if (notLoaded && !fetchIfNeeded) {
-    return false
+  // Common short-circuit: fresh sessions without children
+  if (!fetchIfNeeded) {
+    return isFreshSession
   }
 
-  if (notLoaded && fetchIfNeeded) {
-    await loadMessages(instanceId, session.id)
+  // For a more thorough deep clean, we need to look at actual messages
+  
+  const instance = instances().get(instanceId)
+  if (!instance?.client) {
+    return isFreshSession
+  }
+  let messages: any[] = []
+  try {
+    const response = await instance.client.session.messages({ path: { id: session.id } })
+    messages = response.data || []
+  } catch (error) {
+    console.error(`Failed to fetch messages for session ${session.id}:`, error)
+    return isFreshSession
   }
 
-  const store = messageStoreBus.getOrCreate(instanceId)
-  const messageIds = store.getSessionMessageIds(session.id)
-  const usage = store.getSessionUsage(session.id)
-
+  // Specific logic by session type
   if (session.parentId === null) {
-    // Parent session: check tokens and children
+    // Parent: blank if no messages and no children (fresh !== blank sometimes!)
     const hasChildren = getChildSessions(instanceId, session.id).length > 0
-    const hasZeroTokens = usage ? usage.actualUsageTokens === 0 : true
-
-    return hasZeroTokens && !hasChildren
-  } else if (session.title?.includes("subagent")) {
-    // Subagent session
-    if (messageIds.length === 0) return true
-
-    // Check for streaming or tool parts in last message
-    const lastMessageId = messageIds[messageIds.length - 1]
-    const lastMessage = store.getMessage(lastMessageId)
-    if (!lastMessage) return false
-
-    const hasToolPart = Object.values(lastMessage.parts).some((part) => part.data.type === "tool")
-    const hasStreaming = messageIds.some((id) => {
-      const msg = store.getMessage(id)
-      return msg?.status === "streaming"
+    return messages.length === 0 && !hasChildren
+  } else if (session.title?.includes("subagent)")) {
+    // Subagent: "blank" (really: finished doing its job) if actually blank...
+    // ... OR no streaming, no pending perms, no tool parts
+    if (messages.length === 0) return true
+    
+    const hasStreaming = messages.some((msg) => {
+      const info = msg.info.status || msg.status
+      return info === "streaming" || info === "sending"
     })
-    const isWaitingForPermission = session.pendingPermission === true
-
-    return !hasStreaming && !isWaitingForPermission && !hasToolPart
+    
+    const lastMessage = messages[messages.length - 1]
+    const lastParts = lastMessage?.parts || []
+    const hasToolPart = lastParts.some((part: any) => 
+      part.type === "tool" || part.data?.type === "tool"
+    )
+    
+    return !hasStreaming && !session.pendingPermission && !hasToolPart
   } else {
-    // Fork session
-    if (messageIds.length === 0) return true
-
-    const lastMessageId = messageIds[messageIds.length - 1]
-    const revert = store.getSessionRevert(session.id)
-
-    return lastMessageId === revert?.messageID
+    // Fork: blank if somehow has no messages or at revert point
+    if (messages.length === 0) return true
+  
+    const lastMessage = messages[messages.length - 1]
+    const lastInfo = lastMessage?.info || lastMessage
+    return lastInfo?.id === session.revert?.messageID
   }
 }
+
 
 async function cleanupBlankSessions(instanceId: string, excludeSessionId?: string, fetchIfNeeded = false): Promise<void> {
   const instanceSessions = sessions().get(instanceId)
