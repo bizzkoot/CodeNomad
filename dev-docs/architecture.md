@@ -35,7 +35,7 @@ CodeNomad is a cross-platform desktop application built with Electron that provi
 │  │  │  UI Components                             │  │  │
 │  │  │  - InstanceTabs                            │  │  │
 │  │  │  - SessionTabs                             │  │  │
-│  │  │  - MessageStreamV2                        │  │  │
+│  │  │  - MessageSection                        │  │  │
 │  │  │  - PromptInput                             │  │  │
 │  │  └────────────────────────────────────────────┘  │  │
 │  └──────────────────────────────────────────────────┘  │

@@ -1,4 +1,3 @@
-/* Message stream container + status */
 .message-stream-container {
   @apply relative flex-1 min-h-0 flex flex-col overflow-hidden;
 }
@@ -64,18 +63,6 @@
   }
 }
 
-.message-stream {
-  @apply flex-1 min-h-0 overflow-y-auto flex flex-col gap-0.5;
-  background-color: var(--surface-base);
-  color: inherit;
-}
-
-.message-stream-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.0625rem;
-}
-
 .message-scroll-button-wrapper {
   position: absolute;
   right: 1rem;
@@ -111,28 +98,4 @@
 .message-scroll-icon {
   font-size: var(--font-size-lg);
   color: var(--accent-primary);
-}
-
-.virtual-item-wrapper {
-  width: 100%;
-}
-
-.virtual-item-placeholder,
-.message-stream-placeholder {
-  display: block;
-  width: 100%;
-  position: relative;
-  background-color: transparent;
-}
-
-.virtual-item-content {
-  width: 100%;
-  position: relative;
-}
-
-.virtual-item-content-hidden {
-  position: absolute;
-  inset: 0;
-  visibility: hidden;
-  pointer-events: none;
 }

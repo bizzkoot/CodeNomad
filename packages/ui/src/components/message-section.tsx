@@ -1,0 +1,412 @@
+import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import Kbd from "./kbd"
+import MessageBlockList from "./message-block-list"
+import MessageListHeader from "./message-list-header"
+import { useConfig } from "../stores/preferences"
+import { getSessionInfo } from "../stores/sessions"
+import { showCommandPalette } from "../stores/command-palette"
+import { messageStoreBus } from "../stores/message-v2/bus"
+import { useScrollCache } from "../lib/hooks/use-scroll-cache"
+import { sseManager } from "../lib/sse-manager"
+import { formatTokenTotal } from "../lib/formatters"
+import type { InstanceMessageStore } from "../stores/message-v2/instance-store"
+
+const SCROLL_SCOPE = "session"
+const USER_SCROLL_INTENT_WINDOW_MS = 600
+const SCROLL_INTENT_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " ", "Spacebar"])
+const codeNomadLogo = new URL("../images/CodeNomad-Icon.png", import.meta.url).href
+
+function formatTokens(tokens: number): string {
+  return formatTokenTotal(tokens)
+}
+
+export interface MessageSectionProps {
+  instanceId: string
+  sessionId: string
+  loading?: boolean
+  onRevert?: (messageId: string) => void
+  onFork?: (messageId?: string) => void
+  registerScrollToBottom?: (fn: () => void) => void
+}
+
+export default function MessageSection(props: MessageSectionProps) {
+  const { preferences } = useConfig()
+  const showUsagePreference = () => preferences().showUsageMetrics ?? true
+  const store = createMemo<InstanceMessageStore>(() => messageStoreBus.getOrCreate(props.instanceId))
+  const messageIds = createMemo(() => store().getSessionMessageIds(props.sessionId))
+
+  const sessionRevision = createMemo(() => store().getSessionRevision(props.sessionId))
+  const usageSnapshot = createMemo(() => store().getSessionUsage(props.sessionId))
+  const sessionInfo = createMemo(() =>
+    getSessionInfo(props.instanceId, props.sessionId) ?? {
+      cost: 0,
+      contextWindow: 0,
+      isSubscriptionModel: false,
+      inputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      actualUsageTokens: 0,
+      modelOutputLimit: 0,
+      contextAvailableTokens: null,
+    },
+  )
+
+  const tokenStats = createMemo(() => {
+    const usage = usageSnapshot()
+    const info = sessionInfo()
+    return {
+      used: usage?.actualUsageTokens ?? info.actualUsageTokens ?? 0,
+      avail: info.contextAvailableTokens,
+    }
+  })
+
+  const preferenceSignature = createMemo(() => {
+    const pref = preferences()
+    const showThinking = pref.showThinkingBlocks ? 1 : 0
+    const thinkingExpansion = pref.thinkingBlocksExpansion ?? "expanded"
+    const showUsage = (pref.showUsageMetrics ?? true) ? 1 : 0
+    return `${showThinking}|${thinkingExpansion}|${showUsage}`
+  })
+
+  const connectionStatus = () => sseManager.getStatus(props.instanceId)
+  const handleCommandPaletteClick = () => {
+    showCommandPalette(props.instanceId)
+  }
+
+  const messageIndexMap = createMemo(() => {
+    const map = new Map<string, number>()
+    const ids = messageIds()
+    ids.forEach((id, index) => map.set(id, index))
+    return map
+  })
+
+  const lastAssistantIndex = createMemo(() => {
+    const ids = messageIds()
+    const resolvedStore = store()
+    for (let index = ids.length - 1; index >= 0; index--) {
+      const record = resolvedStore.getMessage(ids[index])
+      if (record?.role === "assistant") {
+        return index
+      }
+    }
+    return -1
+  })
+
+  const changeToken = createMemo(() => String(sessionRevision()))
+
+  const scrollCache = useScrollCache({
+    instanceId: () => props.instanceId,
+    sessionId: () => props.sessionId,
+    scope: SCROLL_SCOPE,
+  })
+
+  const [scrollElement, setScrollElement] = createSignal<HTMLDivElement | undefined>()
+  const [bottomSentinel, setBottomSentinel] = createSignal<HTMLDivElement | null>(null)
+  const [autoScroll, setAutoScroll] = createSignal(true)
+  const [showScrollTopButton, setShowScrollTopButton] = createSignal(false)
+  const [showScrollBottomButton, setShowScrollBottomButton] = createSignal(false)
+
+  let containerRef: HTMLDivElement | undefined
+  let pendingScrollFrame: number | null = null
+  let pendingAnchorScroll: number | null = null
+  let pendingScrollPersist: number | null = null
+  let userScrollIntentUntil = 0
+  let detachScrollIntentListeners: (() => void) | undefined
+  let hasRestoredScroll = false
+  let suppressAutoScrollOnce = false
+
+  function markUserScrollIntent() {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now()
+    userScrollIntentUntil = now + USER_SCROLL_INTENT_WINDOW_MS
+  }
+
+  function hasUserScrollIntent() {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now()
+    return now <= userScrollIntentUntil
+  }
+
+  function attachScrollIntentListeners(element: HTMLDivElement | undefined) {
+    if (detachScrollIntentListeners) {
+      detachScrollIntentListeners()
+      detachScrollIntentListeners = undefined
+    }
+    if (!element) return
+    const handlePointerIntent = () => markUserScrollIntent()
+    const handleKeyIntent = (event: KeyboardEvent) => {
+      if (SCROLL_INTENT_KEYS.has(event.key)) {
+        markUserScrollIntent()
+      }
+    }
+    element.addEventListener("wheel", handlePointerIntent, { passive: true })
+    element.addEventListener("pointerdown", handlePointerIntent)
+    element.addEventListener("touchstart", handlePointerIntent, { passive: true })
+    element.addEventListener("keydown", handleKeyIntent)
+    detachScrollIntentListeners = () => {
+      element.removeEventListener("wheel", handlePointerIntent)
+      element.removeEventListener("pointerdown", handlePointerIntent)
+      element.removeEventListener("touchstart", handlePointerIntent)
+      element.removeEventListener("keydown", handleKeyIntent)
+    }
+  }
+
+  function setContainerRef(element: HTMLDivElement | null) {
+    containerRef = element || undefined
+    setScrollElement(containerRef)
+    attachScrollIntentListeners(containerRef)
+  }
+
+  function isNearBottom(element: HTMLDivElement, offset = 48) {
+    const { scrollTop, scrollHeight, clientHeight } = element
+    return scrollHeight - (scrollTop + clientHeight) <= offset
+  }
+
+  function isNearTop(element: HTMLDivElement, offset = 48) {
+    return element.scrollTop <= offset
+  }
+
+  function updateScrollIndicators(element: HTMLDivElement) {
+    const hasItems = messageIds().length > 0
+    setShowScrollBottomButton(hasItems && !isNearBottom(element))
+    setShowScrollTopButton(hasItems && !isNearTop(element))
+  }
+
+  function scheduleScrollPersist() {
+    if (pendingScrollPersist !== null) return
+    pendingScrollPersist = requestAnimationFrame(() => {
+      pendingScrollPersist = null
+      if (!containerRef) return
+      scrollCache.persist(containerRef, { atBottomOffset: 48 })
+    })
+  }
+
+  function scrollToBottom(immediate = false) {
+    if (!containerRef) return
+    const behavior = immediate ? "auto" : "smooth"
+    if (!immediate) {
+      suppressAutoScrollOnce = true
+    }
+    containerRef.scrollTo({ top: containerRef.scrollHeight, behavior })
+    setAutoScroll(true)
+    updateScrollIndicators(containerRef)
+    scheduleScrollPersist()
+  }
+
+  function scrollToTop(immediate = false) {
+    if (!containerRef) return
+    const behavior = immediate ? "auto" : "smooth"
+    setAutoScroll(false)
+    containerRef.scrollTo({ top: 0, behavior })
+    updateScrollIndicators(containerRef)
+    scheduleScrollPersist()
+  }
+
+  function scheduleAnchorScroll(immediate = false) {
+    if (!autoScroll()) return
+    const sentinel = bottomSentinel()
+    if (!sentinel) return
+    if (pendingAnchorScroll !== null) {
+      cancelAnimationFrame(pendingAnchorScroll)
+      pendingAnchorScroll = null
+    }
+    pendingAnchorScroll = requestAnimationFrame(() => {
+      pendingAnchorScroll = null
+      sentinel.scrollIntoView({ block: "end", inline: "nearest", behavior: immediate ? "auto" : "auto" })
+    })
+  }
+
+  function handleContentRendered() {
+    scheduleAnchorScroll()
+  }
+
+  createEffect(() => {
+    if (props.registerScrollToBottom) {
+      props.registerScrollToBottom(() => scrollToBottom(true))
+    }
+  })
+
+  function handleScroll() {
+    if (!containerRef) return
+    if (pendingScrollFrame !== null) {
+      cancelAnimationFrame(pendingScrollFrame)
+    }
+    const isUserScroll = hasUserScrollIntent()
+    pendingScrollFrame = requestAnimationFrame(() => {
+      pendingScrollFrame = null
+      if (!containerRef) return
+      const atBottom = isNearBottom(containerRef)
+
+      if (isUserScroll) {
+        if (atBottom) {
+          if (!autoScroll()) setAutoScroll(true)
+        } else if (autoScroll()) {
+          setAutoScroll(false)
+        }
+      }
+
+      updateScrollIndicators(containerRef)
+      scheduleScrollPersist()
+    })
+  }
+
+  createEffect(() => {
+    const target = containerRef
+    const loading = props.loading
+    if (!target || loading || hasRestoredScroll) return
+
+    scrollCache.restore(target, {
+      onApplied: (snapshot) => {
+        if (snapshot) {
+          setAutoScroll(snapshot.atBottom)
+        } else {
+          setAutoScroll(isNearBottom(target))
+        }
+        updateScrollIndicators(target)
+      },
+    })
+
+    hasRestoredScroll = true
+  })
+
+  let previousToken: string | undefined
+  createEffect(() => {
+    const token = changeToken()
+    const loading = props.loading
+    if (loading || !token || token === previousToken) {
+      return
+    }
+    previousToken = token
+    if (suppressAutoScrollOnce) {
+      suppressAutoScrollOnce = false
+      return
+    }
+    if (autoScroll()) {
+      scheduleAnchorScroll(true)
+    }
+  })
+
+  createEffect(() => {
+    preferenceSignature()
+    if (props.loading || !autoScroll()) {
+      return
+    }
+    if (suppressAutoScrollOnce) {
+      suppressAutoScrollOnce = false
+      return
+    }
+    scheduleAnchorScroll(true)
+  })
+
+  createEffect(() => {
+    if (messageIds().length === 0) {
+      setShowScrollTopButton(false)
+      setShowScrollBottomButton(false)
+      setAutoScroll(true)
+    }
+  })
+
+  createEffect(() => {
+    if (bottomSentinel()) {
+      scheduleAnchorScroll(true)
+    }
+  })
+
+  onCleanup(() => {
+    if (pendingScrollFrame !== null) {
+      cancelAnimationFrame(pendingScrollFrame)
+    }
+    if (pendingScrollPersist !== null) {
+      cancelAnimationFrame(pendingScrollPersist)
+    }
+    if (pendingAnchorScroll !== null) {
+      cancelAnimationFrame(pendingAnchorScroll)
+    }
+    if (detachScrollIntentListeners) {
+      detachScrollIntentListeners()
+    }
+    if (containerRef) {
+      scrollCache.persist(containerRef, { atBottomOffset: 48 })
+    }
+  })
+
+  return (
+    <div class="message-stream-container">
+      <MessageListHeader
+        usedTokens={tokenStats().used}
+        availableTokens={tokenStats().avail}
+        connectionStatus={connectionStatus()}
+        onCommandPalette={handleCommandPaletteClick}
+        formatTokens={formatTokens}
+      />
+
+      <div class="message-stream" ref={setContainerRef} onScroll={handleScroll}>
+        <Show when={!props.loading && messageIds().length === 0}>
+          <div class="empty-state">
+            <div class="empty-state-content">
+              <div class="flex flex-col items-center gap-3 mb-6">
+                <img src={codeNomadLogo} alt="CodeNomad logo" class="h-48 w-auto" loading="lazy" />
+                <h1 class="text-3xl font-semibold text-primary">CodeNomad</h1>
+              </div>
+              <h3>Start a conversation</h3>
+              <p>Type a message below or open the Command Palette:</p>
+              <ul>
+                <li>
+                  <span>Command Palette</span>
+                  <Kbd shortcut="cmd+shift+p" class="ml-2" />
+                </li>
+                <li>Ask about your codebase</li>
+                <li>
+                  Attach files with <code>@</code>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={props.loading}>
+          <div class="loading-state">
+            <div class="spinner" />
+            <p>Loading messages...</p>
+          </div>
+        </Show>
+
+        <MessageBlockList
+          instanceId={props.instanceId}
+          sessionId={props.sessionId}
+          store={store}
+          messageIds={messageIds}
+          messageIndexMap={messageIndexMap}
+          lastAssistantIndex={lastAssistantIndex}
+          showThinking={() => preferences().showThinkingBlocks}
+          thinkingDefaultExpanded={() => (preferences().thinkingBlocksExpansion ?? "expanded") === "expanded"}
+          showUsageMetrics={showUsagePreference}
+          scrollContainer={scrollElement}
+          loading={props.loading}
+          onRevert={props.onRevert}
+          onFork={props.onFork}
+          onContentRendered={handleContentRendered}
+          setBottomSentinel={setBottomSentinel}
+        />
+      </div>
+
+      <Show when={showScrollTopButton() || showScrollBottomButton()}>
+        <div class="message-scroll-button-wrapper">
+          <Show when={showScrollTopButton()}>
+            <button type="button" class="message-scroll-button" onClick={() => scrollToTop()} aria-label="Scroll to first message">
+              <span class="message-scroll-icon" aria-hidden="true">↑</span>
+            </button>
+          </Show>
+          <Show when={showScrollBottomButton()}>
+            <button
+              type="button"
+              class="message-scroll-button"
+              onClick={() => scrollToBottom()}
+              aria-label="Scroll to latest message"
+            >
+              <span class="message-scroll-icon" aria-hidden="true">↓</span>
+            </button>
+          </Show>
+        </div>
+      </Show>
+    </div>
+  )
+}

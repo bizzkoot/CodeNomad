@@ -2,7 +2,7 @@ import { Show, createMemo, createEffect, type Component } from "solid-js"
 import type { Session } from "../../types/session"
 import type { Attachment } from "../../types/attachment"
 import type { ClientPart } from "../../types/message"
-import MessageStreamV2 from "../message-stream-v2"
+import MessageSection from "../message-section"
 import { messageStoreBus } from "../../stores/message-v2/bus"
 import PromptInput from "../prompt-input"
 import { instances } from "../../stores/instances"
@@ -141,7 +141,7 @@ export const SessionView: Component<SessionViewProps> = (props) => {
         if (!activeSession) return null
         return (
           <div class="session-view">
-            <MessageStreamV2
+            <MessageSection
                instanceId={props.instanceId}
                sessionId={activeSession.id}
                loading={messagesLoading()}
