@@ -299,9 +299,7 @@ const SessionList: Component<SessionListProps> = (props) => {
  
   return (
     <div
-
-      class="session-list-container bg-surface-secondary border-r border-base flex flex-col"
-      style={{ width: `${sidebarWidth()}px` }}
+      class="session-list-container bg-surface-secondary border-r border-base flex flex-col w-full"
     >
       <div
         class="session-resize-handle"
