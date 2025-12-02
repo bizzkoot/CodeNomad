@@ -274,7 +274,6 @@ export default function VirtualItem(props: VirtualItemProps) {
         style={{
           width: "100%",
           height: shouldHideContent() ? `${placeholderHeight()}px` : undefined,
-          "min-height": hasMeasured() ? undefined : `${props.minPlaceholderHeight ?? MIN_PLACEHOLDER_HEIGHT}px`,
         }}
       >
         <div ref={setContentRef} class={contentClass()}>
