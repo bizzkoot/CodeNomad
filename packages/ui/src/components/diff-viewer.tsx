@@ -1,5 +1,6 @@
 import { createMemo, Show, createEffect, onCleanup } from "solid-js"
 import { DiffView, DiffModeEnum } from "@git-diff-view/solid"
+import { disableCache } from "@git-diff-view/core"
 import type { DiffHighlighterLang } from "@git-diff-view/core"
 import { ErrorBoundary } from "solid-js"
 import { getLanguageFromPath } from "../lib/markdown"
@@ -7,6 +8,8 @@ import { normalizeDiffText } from "../lib/diff-utils"
 import { setCacheEntry } from "../lib/global-cache"
 import type { CacheEntryParams } from "../lib/global-cache"
 import type { DiffViewMode } from "../stores/preferences"
+
+disableCache()
 
 interface ToolCallDiffViewerProps {
   diffText: string
