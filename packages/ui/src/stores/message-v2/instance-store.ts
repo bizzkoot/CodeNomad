@@ -296,9 +296,6 @@ export function createInstanceMessageStore(instanceId: string): InstanceMessageS
     ensureSessionEntry(sessionId)
 
     const incomingIds = inputs.map((item) => item.id)
-    const incomingIdSet = new Set(incomingIds)
-    const existingIds = state.sessions[sessionId]?.messageIds ?? []
-    const removedIds = existingIds.filter((id) => !incomingIdSet.has(id))
 
     const normalizedRecords: Record<string, MessageRecord> = {}
     const now = Date.now()
@@ -330,18 +327,6 @@ export function createInstanceMessageStore(instanceId: string): InstanceMessageS
     const nextPermissionsByMessage: Record<string, Record<string, PermissionEntry>> = {
       ...state.permissions.byMessage,
     }
-
-    removedIds.forEach((id) => {
-      if (nextMessages[id]?.sessionId === sessionId) {
-        delete nextMessages[id]
-        delete nextMessageInfoVersion[id]
-        delete nextPendingParts[id]
-        if (nextPermissionsByMessage[id]) {
-          delete nextPermissionsByMessage[id]
-        }
-      }
-      messageInfoCache.delete(id)
-    })
 
     Object.entries(normalizedRecords).forEach(([id, record]) => {
       nextMessages[id] = record

@@ -62,16 +62,13 @@ function findPendingMessageId(
   role: MessageRole,
 ): string | undefined {
   const messageIds = store.getSessionMessageIds(sessionId)
-  for (let i = messageIds.length - 1; i >= 0; i -= 1) {
-    const record = store.getMessage(messageIds[i])
-    if (!record) continue
-    if (record.sessionId !== sessionId) continue
-    if (record.role !== role) continue
-    if (record.status === "sending") {
-      return record.id
-    }
-  }
-  return undefined
+  const lastId = messageIds[messageIds.length - 1]
+  if (!lastId) return undefined
+  const record = store.getMessage(lastId)
+  if (!record) return undefined
+  if (record.sessionId !== sessionId) return undefined
+  if (record.role !== role) return undefined
+  return record.status === "sending" ? record.id : undefined
 }
 
 function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | MessagePartUpdatedEvent): void {
