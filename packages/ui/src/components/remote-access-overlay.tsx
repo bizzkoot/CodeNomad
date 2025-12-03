@@ -18,7 +18,7 @@ export function RemoteAccessOverlay(props: RemoteAccessOverlayProps) {
   const [meta, setMeta] = createSignal<ServerMeta | null>(null)
   const [loading, setLoading] = createSignal(false)
   const [qrCodes, setQrCodes] = createSignal<Record<string, string>>({})
-  const [expanded, setExpanded] = createSignal<Set<string>>(new Set())
+  const [expandedUrl, setExpandedUrl] = createSignal<string | null>(null)
   const [error, setError] = createSignal<string | null>(null)
 
   const addresses = createMemo<NetworkAddress[]>(() => meta()?.addresses ?? [])
@@ -45,14 +45,11 @@ export function RemoteAccessOverlay(props: RemoteAccessOverlayProps) {
   })
 
   const toggleExpanded = async (url: string) => {
-    const next = new Set(expanded())
-    if (next.has(url)) {
-      next.delete(url)
-      setExpanded(next)
+    if (expandedUrl() === url) {
+      setExpandedUrl(null)
       return
     }
-    next.add(url)
-    setExpanded(next)
+    setExpandedUrl(url)
     if (!qrCodes()[url]) {
       try {
         const dataUrl = await toDataURL(url, { margin: 1, scale: 4 })
@@ -184,7 +181,7 @@ export function RemoteAccessOverlay(props: RemoteAccessOverlayProps) {
                       <div class="remote-address-list">
                         <For each={addresses()}>
                           {(address) => {
-                            const expandedState = () => expanded().has(address.url)
+                            const expandedState = () => expandedUrl() === address.url
                             const qr = () => qrCodes()[address.url]
                             return (
                               <div class="remote-address">
