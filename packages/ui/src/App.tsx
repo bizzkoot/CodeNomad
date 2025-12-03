@@ -312,6 +312,7 @@ const App: Component = () => {
             advancedSettingsOpen={isAdvancedSettingsOpen()}
             onAdvancedSettingsOpen={() => setIsAdvancedSettingsOpen(true)}
             onAdvancedSettingsClose={() => setIsAdvancedSettingsOpen(false)}
+            onOpenRemoteAccess={() => setRemoteAccessOpen(true)}
           />
         </Show>
 

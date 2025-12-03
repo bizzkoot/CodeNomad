@@ -1,5 +1,5 @@
 import { Component, createSignal, Show, For, onMount, onCleanup, createEffect } from "solid-js"
-import { Folder, Clock, Trash2, FolderPlus, Settings, ChevronRight } from "lucide-solid"
+import { Folder, Clock, Trash2, FolderPlus, Settings, ChevronRight, Share2 } from "lucide-solid"
 import { useConfig } from "../stores/preferences"
 import AdvancedSettingsModal from "./advanced-settings-modal"
 import DirectoryBrowserDialog from "./directory-browser-dialog"
@@ -14,6 +14,7 @@ interface FolderSelectionViewProps {
   advancedSettingsOpen?: boolean
   onAdvancedSettingsOpen?: () => void
   onAdvancedSettingsClose?: () => void
+  onOpenRemoteAccess?: () => void
 }
 
 const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
@@ -229,6 +230,18 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
           class="w-full max-w-3xl h-full px-8 pb-2 flex flex-col overflow-hidden"
           aria-busy={isLoading() ? "true" : "false"}
         >
+          <Show when={props.onOpenRemoteAccess}>
+            <div class="flex justify-end mb-4">
+              <button
+                type="button"
+                class="selector-button selector-button-secondary inline-flex items-center gap-2"
+                onClick={() => props.onOpenRemoteAccess?.()}
+              >
+                <Share2 class="w-4 h-4" />
+                <span>Remote connect</span>
+              </button>
+            </div>
+          </Show>
         <div class="mb-6 text-center shrink-0">
           <div class="mb-3 flex justify-center">
             <img src={codeNomadLogo} alt="CodeNomad logo" class="h-32 w-auto sm:h-48" loading="lazy" />
