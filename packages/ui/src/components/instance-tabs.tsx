@@ -19,7 +19,7 @@ const InstanceTabs: Component<InstanceTabsProps> = (props) => {
     <div class="tab-bar tab-bar-instance">
       <div class="tab-container" role="tablist">
         <div class="tab-scroll flex items-center gap-3 overflow-x-auto w-full">
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-1 flex-1 min-w-0">
             <For each={Array.from(props.instances.entries())}>
               {([id, instance]) => (
                 <InstanceTab
@@ -38,6 +38,17 @@ const InstanceTabs: Component<InstanceTabsProps> = (props) => {
             >
               <Plus class="w-4 h-4" />
             </button>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0 ml-auto">
+            <Show when={Array.from(props.instances.entries()).length > 1}>
+              <div>
+                <KeyboardHint
+                  shortcuts={[keyboardRegistry.get("instance-prev")!, keyboardRegistry.get("instance-next")!].filter(
+                    Boolean,
+                  )}
+                />
+              </div>
+            </Show>
             <Show when={Boolean(props.onOpenRemoteAccess)}>
               <button
                 class="new-tab-button"
@@ -47,19 +58,10 @@ const InstanceTabs: Component<InstanceTabsProps> = (props) => {
               >
                 <Cast class="w-4 h-4" />
               </button>
-
             </Show>
           </div>
-          <Show when={Array.from(props.instances.entries()).length > 1}>
-            <div class="flex-shrink-0 ml-auto pl-4">
-              <KeyboardHint
-                shortcuts={[keyboardRegistry.get("instance-prev")!, keyboardRegistry.get("instance-next")!].filter(
-                  Boolean,
-                )}
-              />
-            </div>
-          </Show>
         </div>
+
       </div>
     </div>
   )
