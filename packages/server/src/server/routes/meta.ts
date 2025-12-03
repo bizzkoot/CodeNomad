@@ -59,15 +59,17 @@ function resolveAddresses(port: number, host: string): NetworkAddress[] {
     return null
   }
 
-  // Enumerate system interfaces (IPv4 only)
-  for (const entries of Object.values(interfaces)) {
-    if (!entries) continue
-    for (const entry of entries) {
-      const family = normalizeFamily(entry.family)
-      if (!family) continue
-      if (!entry.address || entry.address === "0.0.0.0") continue
-      const scope: NetworkAddress["scope"] = entry.internal ? "loopback" : "external"
-      addAddress(entry.address, scope)
+  if (host === "0.0.0.0") {
+    // Enumerate system interfaces (IPv4 only)
+    for (const entries of Object.values(interfaces)) {
+      if (!entries) continue
+      for (const entry of entries) {
+        const family = normalizeFamily(entry.family)
+        if (!family) continue
+        if (!entry.address || entry.address === "0.0.0.0") continue
+        const scope: NetworkAddress["scope"] = entry.internal ? "loopback" : "external"
+        addAddress(entry.address, scope)
+      }
     }
   }
 
