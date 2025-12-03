@@ -19,6 +19,7 @@ const PreferencesSchema = z.object({
   diagnosticsExpansion: z.enum(["expanded", "collapsed"]).default("expanded"),
   showUsageMetrics: z.boolean().default(true),
   autoCleanupBlankSessions: z.boolean().default(true),
+  listeningMode: z.enum(["local", "all"]).default("local"),
 })
 
 const RecentFolderSchema = z.object({

@@ -143,6 +143,9 @@ export function createHttpServer(deps: HttpServerDeps) {
       const serverUrl = `http://${displayHost}:${actualPort}`
 
       deps.serverMeta.httpBaseUrl = serverUrl
+      deps.serverMeta.host = deps.host
+      deps.serverMeta.port = actualPort
+      deps.serverMeta.listeningMode = deps.host === "0.0.0.0" ? "all" : "local"
       deps.logger.info({ port: actualPort, host: deps.host }, "HTTP server listening")
       console.log(`CodeNomad Server is ready at ${serverUrl}`)
 

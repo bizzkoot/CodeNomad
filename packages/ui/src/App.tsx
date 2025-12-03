@@ -7,6 +7,7 @@ import { showConfirmDialog } from "./stores/alerts"
 import InstanceTabs from "./components/instance-tabs"
 import InstanceDisconnectedModal from "./components/instance-disconnected-modal"
 import InstanceShell from "./components/instance/instance-shell"
+import { RemoteAccessOverlay } from "./components/remote-access-overlay"
 import { initMarkdown } from "./lib/markdown"
 import { useTheme } from "./lib/theme"
 import { useCommands } from "./lib/hooks/use-commands"
@@ -57,6 +58,7 @@ const App: Component = () => {
   const [escapeInDebounce, setEscapeInDebounce] = createSignal(false)
   const [launchErrorBinary, setLaunchErrorBinary] = createSignal<string | null>(null)
   const [isAdvancedSettingsOpen, setIsAdvancedSettingsOpen] = createSignal(false)
+  const [remoteAccessOpen, setRemoteAccessOpen] = createSignal(false)
 
   createEffect(() => {
     void initMarkdown(isDark()).catch(console.error)
@@ -284,6 +286,7 @@ const App: Component = () => {
                 onSelect={setActiveInstanceId}
                 onClose={handleCloseInstance}
                 onNew={handleNewInstanceRequest}
+                onOpenRemoteAccess={() => setRemoteAccessOpen(true)}
               />
 
               <Show when={activeInstance()} keyed>
@@ -338,10 +341,13 @@ const App: Component = () => {
             </div>
           </div>
         </Show>
-
+ 
+        <RemoteAccessOverlay open={remoteAccessOpen()} onClose={() => setRemoteAccessOpen(false)} />
+ 
         <AlertDialog />
-
+ 
         <Toaster
+
           position="top-right"
           gutter={16}
           toastOptions={{

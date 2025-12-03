@@ -2,7 +2,8 @@ import { spawn, type ChildProcess } from "child_process"
 import { app } from "electron"
 import { createRequire } from "module"
 import { EventEmitter } from "events"
-import { existsSync } from "fs"
+import { existsSync, readFileSync } from "fs"
+import os from "os"
 import path from "path"
 import { buildUserShellCommand, getUserShellEnv, supportsUserShell } from "./user-shell"
 
@@ -10,6 +11,7 @@ const nodeRequire = createRequire(import.meta.url)
 
 
 type CliState = "starting" | "ready" | "error" | "stopped"
+type ListeningMode = "local" | "all"
 
 export interface CliStatus {
   state: CliState
@@ -32,6 +34,36 @@ interface CliEntryResolution {
   entry: string
   runner: "node" | "tsx"
   runnerPath?: string
+}
+
+const DEFAULT_CONFIG_PATH = "~/.config/codenomad/config.json"
+
+function resolveConfigPath(configPath?: string): string {
+  const target = configPath && configPath.trim().length > 0 ? configPath : DEFAULT_CONFIG_PATH
+  if (target.startsWith("~/")) {
+    return path.join(os.homedir(), target.slice(2))
+  }
+  return path.resolve(target)
+}
+
+function resolveHostForMode(mode: ListeningMode): string {
+  return mode === "local" ? "127.0.0.1" : "0.0.0.0"
+}
+
+function readListeningModeFromConfig(): ListeningMode {
+  try {
+    const configPath = resolveConfigPath(process.env.CLI_CONFIG)
+    if (!existsSync(configPath)) return "local"
+    const content = readFileSync(configPath, "utf-8")
+    const parsed = JSON.parse(content)
+    const mode = parsed?.preferences?.listeningMode
+    if (mode === "local" || mode === "all") {
+      return mode
+    }
+  } catch (error) {
+    console.warn("[cli] failed to read listening mode from config", error)
+  }
+  return "local"
 }
 
 export declare interface CliProcessManager {
@@ -58,10 +90,12 @@ export class CliProcessManager extends EventEmitter {
     this.updateStatus({ state: "starting", port: undefined, pid: undefined, url: undefined, error: undefined })
 
     const cliEntry = this.resolveCliEntry(options)
-    const args = this.buildCliArgs(options)
+    const listeningMode = this.resolveListeningMode()
+    const host = resolveHostForMode(listeningMode)
+    const args = this.buildCliArgs(options, host)
 
     console.info(
-      `[cli] launching CodeNomad CLI (${options.dev ? "dev" : "prod"}) using ${cliEntry.runner} at ${cliEntry.entry}`,
+      `[cli] launching CodeNomad CLI (${options.dev ? "dev" : "prod"}) using ${cliEntry.runner} at ${cliEntry.entry} (host=${host})`,
     )
 
     const env = supportsUserShell() ? getUserShellEnv() : { ...process.env }
@@ -158,6 +192,10 @@ export class CliProcessManager extends EventEmitter {
     return { ...this.status }
   }
 
+  private resolveListeningMode(): ListeningMode {
+    return readListeningModeFromConfig()
+  }
+
   private handleTimeout() {
     if (this.child) {
       this.child.kill("SIGKILL")
@@ -232,8 +270,8 @@ export class CliProcessManager extends EventEmitter {
     this.emit("status", this.status)
   }
 
-  private buildCliArgs(options: StartOptions): string[] {
-    const args = ["serve", "--host", "0.0.0.0", "--port", "0"]
+  private buildCliArgs(options: StartOptions, host: string): string[] {
+    const args = ["serve", "--host", host, "--port", "0"]
 
     if (options.dev) {
       args.push("--ui-dev-server", "http://localhost:3000", "--log-level", "debug")

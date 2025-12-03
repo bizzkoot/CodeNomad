@@ -2,7 +2,7 @@ import { Component, For, Show } from "solid-js"
 import type { Instance } from "../types/instance"
 import InstanceTab from "./instance-tab"
 import KeyboardHint from "./keyboard-hint"
-import { Plus } from "lucide-solid"
+import { Plus, Share2 } from "lucide-solid"
 import { keyboardRegistry } from "../lib/keyboard-registry"
 
 interface InstanceTabsProps {
@@ -11,6 +11,7 @@ interface InstanceTabsProps {
   onSelect: (instanceId: string) => void
   onClose: (instanceId: string) => void
   onNew: () => void
+  onOpenRemoteAccess?: () => void
 }
 
 const InstanceTabs: Component<InstanceTabsProps> = (props) => {
@@ -37,6 +38,16 @@ const InstanceTabs: Component<InstanceTabsProps> = (props) => {
             >
               <Plus class="w-4 h-4" />
             </button>
+            <Show when={Boolean(props.onOpenRemoteAccess)}>
+              <button
+                class="new-tab-button"
+                onClick={() => props.onOpenRemoteAccess?.()}
+                title="Remote access"
+                aria-label="Remote access"
+              >
+                <Share2 class="w-4 h-4" />
+              </button>
+            </Show>
           </div>
           <Show when={Array.from(props.instances.entries()).length > 1}>
             <div class="flex-shrink-0 ml-auto pl-4">

@@ -180,15 +180,30 @@ export type WorkspaceEventPayload =
   | { type: "instance.event"; instanceId: string; event: InstanceStreamEvent }
   | { type: "instance.eventStatus"; instanceId: string; status: InstanceStreamStatus; reason?: string }
 
+export interface NetworkAddress {
+  ip: string
+  family: "ipv4" | "ipv6"
+  scope: "external" | "internal" | "loopback"
+  url: string
+}
+
 export interface ServerMeta {
   /** Base URL clients should target for REST calls (useful for Electron embedding). */
   httpBaseUrl: string
   /** SSE endpoint advertised to clients (`/api/events` by default). */
   eventsUrl: string
+  /** Host the server is bound to (e.g., 127.0.0.1 or 0.0.0.0). */
+  host: string
+  /** Listening mode derived from host binding. */
+  listeningMode: "local" | "all"
+  /** Actual port in use after binding. */
+  port: number
   /** Display label for the host (e.g., hostname or friendly name). */
   hostLabel: string
   /** Absolute path of the filesystem root exposed to clients. */
   workspaceRoot: string
+  /** Reachable addresses for this server, external first. */
+  addresses: NetworkAddress[]
 }
 
 export type {

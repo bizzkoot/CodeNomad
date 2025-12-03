@@ -141,8 +141,12 @@ async function main() {
   const serverMeta: ServerMeta = {
     httpBaseUrl: `http://${options.host}:${options.port}`,
     eventsUrl: `/api/events`,
+    host: options.host,
+    listeningMode: options.host === "0.0.0.0" ? "all" : "local",
+    port: options.port,
     hostLabel: options.host,
     workspaceRoot: options.rootDir,
+    addresses: [],
   }
 
   const server = createHttpServer({

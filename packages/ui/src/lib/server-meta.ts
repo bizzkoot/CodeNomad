@@ -4,8 +4,8 @@ import { serverApi } from "./api-client"
 let cachedMeta: ServerMeta | null = null
 let pendingMeta: Promise<ServerMeta> | null = null
 
-export async function getServerMeta(): Promise<ServerMeta> {
-  if (cachedMeta) {
+export async function getServerMeta(forceRefresh = false): Promise<ServerMeta> {
+  if (cachedMeta && !forceRefresh) {
     return cachedMeta
   }
   if (pendingMeta) {

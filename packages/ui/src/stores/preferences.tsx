@@ -27,6 +27,8 @@ export interface AgentModelSelections {
 export type DiffViewMode = "split" | "unified"
 export type ExpansionPreference = "expanded" | "collapsed"
 
+export type ListeningMode = "local" | "all"
+
 export interface Preferences {
   showThinkingBlocks: boolean
   thinkingBlocksExpansion: ExpansionPreference
@@ -37,10 +39,13 @@ export interface Preferences {
   toolOutputExpansion: ExpansionPreference
   diagnosticsExpansion: ExpansionPreference
   showUsageMetrics: boolean
-  autoCleanupBlankSessions?: boolean
+  autoCleanupBlankSessions: boolean
+  listeningMode: ListeningMode
 }
 
+
 export interface OpenCodeBinary {
+
   path: string
   version?: string
   lastUsed: number
@@ -66,7 +71,9 @@ const defaultPreferences: Preferences = {
   diagnosticsExpansion: "expanded",
   showUsageMetrics: true,
   autoCleanupBlankSessions: true,
+  listeningMode: "local",
 }
+
 
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true
@@ -101,10 +108,12 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
     diagnosticsExpansion: sanitized.diagnosticsExpansion ?? defaultPreferences.diagnosticsExpansion,
     showUsageMetrics: sanitized.showUsageMetrics ?? defaultPreferences.showUsageMetrics,
     autoCleanupBlankSessions: sanitized.autoCleanupBlankSessions ?? defaultPreferences.autoCleanupBlankSessions,
+    listeningMode: sanitized.listeningMode ?? defaultPreferences.listeningMode,
   }
 }
 
 const [internalConfig, setInternalConfig] = createSignal<ConfigData>(buildFallbackConfig())
+
 const config = createMemo<DeepReadonly<ConfigData>>(() => internalConfig())
 const [isConfigLoaded, setIsConfigLoaded] = createSignal(false)
 const preferences = createMemo<Preferences>(() => internalConfig().preferences)
@@ -260,6 +269,11 @@ function updatePreferences(updates: Partial<Preferences>): void {
   })
 }
 
+function setListeningMode(mode: ListeningMode): void {
+  if (preferences().listeningMode === mode) return
+  updatePreferences({ listeningMode: mode })
+}
+
 function setDiffViewMode(mode: DiffViewMode): void {
   if (preferences().diffViewMode === mode) return
   updatePreferences({ diffViewMode: mode })
@@ -399,6 +413,7 @@ interface ConfigContextValue {
   setToolOutputExpansion: typeof setToolOutputExpansion
   setDiagnosticsExpansion: typeof setDiagnosticsExpansion
   setThinkingBlocksExpansion: typeof setThinkingBlocksExpansion
+  setListeningMode: typeof setListeningMode
   addRecentFolder: typeof addRecentFolder
   removeRecentFolder: typeof removeRecentFolder
   addOpenCodeBinary: typeof addOpenCodeBinary
@@ -432,6 +447,7 @@ const configContextValue: ConfigContextValue = {
   setToolOutputExpansion,
   setDiagnosticsExpansion,
   setThinkingBlocksExpansion,
+  setListeningMode,
   addRecentFolder,
   removeRecentFolder,
   addOpenCodeBinary,
@@ -502,8 +518,11 @@ export {
   setToolOutputExpansion,
   setDiagnosticsExpansion,
   setThinkingBlocksExpansion,
+  setListeningMode,
   themePreference,
   setThemePreference,
   recordWorkspaceLaunch,
  }
+ 
+
 

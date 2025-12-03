@@ -1,9 +1,12 @@
+use dirs::home_dir;
 use parking_lot::Mutex;
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::VecDeque;
+use std::env;
 use std::ffi::OsStr;
+use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -38,6 +41,66 @@ fn navigate_main(app: &AppHandle, url: &str) {
         }
     } else {
         log_line("main window not found for navigation");
+    }
+}
+
+const DEFAULT_CONFIG_PATH: &str = "~/.config/codenomad/config.json";
+
+#[derive(Debug, Deserialize)]
+struct PreferencesConfig {
+    #[serde(rename = "listeningMode")]
+    listening_mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AppConfig {
+    preferences: Option<PreferencesConfig>,
+}
+
+fn resolve_config_path() -> PathBuf {
+    let raw = env::var("CLI_CONFIG")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_string());
+    expand_home(&raw)
+}
+
+fn expand_home(path: &str) -> PathBuf {
+    if path.starts_with("~/") {
+        if let Some(home) = home_dir().or_else(|| env::var("HOME").ok().map(PathBuf::from)) {
+            return home.join(path.trim_start_matches("~/"));
+        }
+    }
+    PathBuf::from(path)
+}
+
+fn resolve_listening_mode() -> String {
+    let path = resolve_config_path();
+    if let Ok(content) = fs::read_to_string(path) {
+        if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
+            if let Some(mode) = config
+                .preferences
+                .as_ref()
+                .and_then(|prefs| prefs.listening_mode.as_ref())
+            {
+                if mode == "local" {
+                    return "local".to_string();
+                }
+                if mode == "all" {
+                    return "all".to_string();
+                }
+            }
+        }
+    }
+    "local".to_string()
+}
+
+fn resolve_listening_host() -> String {
+    let mode = resolve_listening_mode();
+    if mode == "local" {
+        "127.0.0.1".to_string()
+    } else {
+        "0.0.0.0".to_string()
     }
 }
 
@@ -178,11 +241,12 @@ impl CliProcessManager {
     ) -> anyhow::Result<()> {
         log_line("resolving CLI entry");
         let resolution = CliEntry::resolve(&app, dev)?;
+        let host = resolve_listening_host();
         log_line(&format!(
-            "resolved CLI entry runner={:?} entry={}",
-            resolution.runner, resolution.entry
+            "resolved CLI entry runner={:?} entry={} host={}",
+            resolution.runner, resolution.entry, host
         ));
-        let args = resolution.build_args(dev);
+        let args = resolution.build_args(dev, &host);
         log_line(&format!("CLI args: {:?}", args));
         if dev {
             log_line("development mode: will prefer tsx + source if present");
@@ -480,11 +544,11 @@ impl CliEntry {
         ))
     }
 
-    fn build_args(&self, dev: bool) -> Vec<String> {
+    fn build_args(&self, dev: bool, host: &str) -> Vec<String> {
         let mut args = vec![
             "serve".to_string(),
             "--host".to_string(),
-            "0.0.0.0".to_string(),
+            host.to_string(),
             "--port".to_string(),
             "0".to_string(),
         ];

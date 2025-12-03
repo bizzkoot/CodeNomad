@@ -34,6 +34,12 @@ export function setupCliIPC(mainWindow: BrowserWindow, cliManager: CliProcessMan
 
   ipcMain.handle("cli:getStatus", async () => cliManager.getStatus())
 
+  ipcMain.handle("cli:restart", async () => {
+    const devMode = process.env.NODE_ENV === "development"
+    await cliManager.stop()
+    return cliManager.start({ dev: devMode })
+  })
+
   ipcMain.handle("dialog:open", async (_, request: DialogOpenRequest): Promise<DialogOpenResult> => {
     const properties: OpenDialogOptions["properties"] =
       request.mode === "directory" ? ["openDirectory", "createDirectory"] : ["openFile"]
