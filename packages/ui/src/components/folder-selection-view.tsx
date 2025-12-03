@@ -234,11 +234,10 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
             <div class="absolute top-4 right-6">
               <button
                 type="button"
-                class="selector-button selector-button-secondary inline-flex items-center gap-2"
+                class="selector-button selector-button-secondary inline-flex items-center justify-center"
                 onClick={() => props.onOpenRemoteAccess?.()}
               >
                 <Cast class="w-4 h-4" />
-                <span>Remote connect</span>
               </button>
             </div>
           </Show>

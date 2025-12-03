@@ -46,7 +46,6 @@ const InstanceTabs: Component<InstanceTabsProps> = (props) => {
                 aria-label="Remote connect"
               >
                 <Cast class="w-4 h-4" />
-                Remote connect
               </button>
 
             </Show>
