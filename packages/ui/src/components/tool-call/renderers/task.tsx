@@ -1,5 +1,4 @@
-import { For } from "solid-js"
-import type { ToolState } from "@opencode-ai/sdk"
+import { For, createMemo } from "solid-js"
 import type { ToolRenderer } from "../types"
 import { getRelativePath, getToolIcon, getToolName, readToolStatePayload } from "../utils"
 
@@ -7,39 +6,6 @@ interface TaskSummaryItem {
   id: string
   tool: string
   input: Record<string, any>
-}
-
-const taskSummaryCache = new Map<string, { signature: string; items: TaskSummaryItem[] }>()
-
-function normalizeTaskSummary(state?: ToolState, toolCallId?: string): TaskSummaryItem[] {
-  if (!state) return []
-  const { metadata } = readToolStatePayload(state)
-  const rawSummary = Array.isArray((metadata as any).summary) ? ((metadata as any).summary as any[]) : []
-  if (rawSummary.length === 0) {
-    if (toolCallId) taskSummaryCache.delete(toolCallId)
-    return []
-  }
-
-  const signature = JSON.stringify(rawSummary)
-  if (toolCallId) {
-    const cached = taskSummaryCache.get(toolCallId)
-    if (cached && cached.signature === signature) {
-      return cached.items
-    }
-  }
-
-  const normalized: TaskSummaryItem[] = rawSummary.map((entry, index) => {
-    const tool = typeof entry?.tool === "string" ? (entry.tool as string) : "unknown"
-    const input = typeof (entry as any)?.state?.input === "object" && entry.state?.input ? entry.state.input : {}
-    const id = typeof entry?.id === "string" && entry.id.length > 0 ? entry.id : `${tool}-${index}`
-    return { id, tool, input }
-  })
-
-  if (toolCallId) {
-    taskSummaryCache.set(toolCallId, { signature, items: normalized })
-  }
-
-  return normalized
 }
 
 function describeTaskItem(item: TaskSummaryItem): string {
@@ -74,17 +40,32 @@ export const taskRenderer: ToolRenderer = {
     }
     return base
   },
-  renderBody({ toolState, toolCall }) {
-    const state = toolState()
-    if (!state) return null
+  renderBody({ toolState, toolCall, messageVersion, partVersion }) {
+    const items = createMemo(() => {
+      // Track the reactive change points so we only recompute when the part/message changes
+      messageVersion?.()
+      partVersion?.()
 
-    const items = normalizeTaskSummary(state, toolCall().id || "__unknown__")
-    if (items.length === 0) return null
+      const state = toolState()
+      if (!state) return []
+
+      const { metadata } = readToolStatePayload(state)
+      const summary = Array.isArray((metadata as any).summary) ? ((metadata as any).summary as any[]) : []
+
+      return summary.map((entry, index) => {
+        const tool = typeof entry?.tool === "string" ? (entry.tool as string) : "unknown"
+        const input = typeof (entry as any)?.state?.input === "object" && entry.state?.input ? entry.state.input : {}
+        const id = typeof entry?.id === "string" && entry.id.length > 0 ? entry.id : `${tool}-${index}`
+        return { id, tool, input }
+      })
+    })
+
+    if (items().length === 0) return null
 
     return (
       <div class="message-text tool-call-markdown tool-call-task-container">
         <div class="tool-call-task-summary">
-          <For each={items}>
+          <For each={items()}>
             {(item) => {
               const icon = getToolIcon(item.tool)
               const description = describeTaskItem(item)

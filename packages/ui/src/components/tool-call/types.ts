@@ -25,6 +25,8 @@ export interface ToolRendererContext {
   toolCall: Accessor<ToolCallPart>
   toolState: Accessor<ToolState | undefined>
   toolName: Accessor<string>
+  messageVersion?: Accessor<number | undefined>
+  partVersion?: Accessor<number | undefined>
   renderMarkdown(options: MarkdownRenderOptions): JSXElement | null
   renderDiff(payload: DiffPayload, options?: DiffRenderOptions): JSXElement | null
 }

@@ -491,10 +491,15 @@ export default function ToolCall(props: ToolCallProps) {
     )
   }
 
+  const messageVersionAccessor = createMemo(() => props.messageVersion)
+  const partVersionAccessor = createMemo(() => props.partVersion)
+
   const rendererContext: ToolRendererContext = {
     toolCall: toolCallMemo,
     toolState,
     toolName,
+    messageVersion: messageVersionAccessor,
+    partVersion: partVersionAccessor,
     renderMarkdown: renderMarkdownContent,
     renderDiff: renderDiffContent,
   }
