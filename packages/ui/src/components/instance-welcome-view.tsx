@@ -1,8 +1,9 @@
 import { Component, createSignal, Show, For, createEffect, onMount, onCleanup, createMemo } from "solid-js"
+import { Trash2 } from "lucide-solid"
+
 import type { Instance } from "../types/instance"
-import { getParentSessions, createSession, setActiveParentSession } from "../stores/sessions"
+import { getParentSessions, createSession, setActiveParentSession, deleteSession, loading } from "../stores/sessions"
 import InstanceInfo from "./instance-info"
-import KeyboardHint from "./keyboard-hint"
 import Kbd from "./kbd"
 import { keyboardRegistry, type KeyboardShortcut } from "../lib/keyboard-registry"
 import { isMac } from "../lib/keyboard-utils"
@@ -22,6 +23,10 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
   const [showInstanceInfoOverlay, setShowInstanceInfoOverlay] = createSignal(false)
 
   const parentSessions = () => getParentSessions(props.instance.id)
+  const isSessionDeleting = (sessionId: string) => {
+    const deleting = loading().deletingSession.get(props.instance.id)
+    return deleting ? deleting.has(sessionId) : false
+  }
   const newSessionShortcut = createMemo<KeyboardShortcut>(() => {
     const registered = keyboardRegistry.get("session-new")
     if (registered) return registered
@@ -119,21 +124,48 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       scrollToIndex(newIndex)
     } else if (e.key === "Enter") {
       e.preventDefault()
-      handleEnterKey()
+      void handleEnterKey()
+    } else if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault()
+      void handleDeleteKey()
     }
   }
 
   async function handleEnterKey() {
     const sessions = parentSessions()
     const index = selectedIndex()
-
+ 
     if (index < sessions.length) {
       await handleSessionSelect(sessions[index].id)
     }
   }
-
-  onMount(() => {
+ 
+  async function handleDeleteKey() {
+    const sessions = parentSessions()
+    const index = selectedIndex()
+ 
+    if (index >= sessions.length) {
+      return
+    }
+ 
+    await handleSessionDelete(sessions[index].id)
+ 
+    const updatedSessions = parentSessions()
+    if (updatedSessions.length === 0) {
+      setFocusMode("new-session")
+      setSelectedIndex(0)
+      return
+    }
+ 
+    const nextIndex = Math.min(index, updatedSessions.length - 1)
+    setSelectedIndex(nextIndex)
+    setFocusMode("sessions")
+    scrollToIndex(nextIndex)
+  }
+ 
+   onMount(() => {
     window.addEventListener("keydown", handleKeyDown)
+
     onCleanup(() => {
       window.removeEventListener("keydown", handleKeyDown)
     })
@@ -184,10 +216,21 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
     setActiveParentSession(props.instance.id, sessionId)
   }
 
+  async function handleSessionDelete(sessionId: string) {
+    if (isSessionDeleting(sessionId)) return
+
+    try {
+      await deleteSession(props.instance.id, sessionId)
+    } catch (error) {
+      log.error("Failed to delete session:", error)
+    }
+  }
+
   async function handleNewSession() {
     if (isCreating()) return
 
     setIsCreating(true)
+
     try {
       const session = await createSession(props.instance.id)
       setActiveParentSession(props.instance.id, session.id)
@@ -248,48 +291,82 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
               </div>
               <div class="panel-list panel-list--fill flex-1 min-h-0 overflow-auto">
                 <For each={parentSessions()}>
-                  {(session, index) => (
-                    <div 
-                      class="panel-list-item"
-                      classList={{
-                        "panel-list-item-highlight": focusMode() === "sessions" && selectedIndex() === index(),
-                      }}
-                    >
-                      <button
-                        data-session-index={index()}
-                        class="panel-list-item-content group w-full"
-                        onClick={() => handleSessionSelect(session.id)}
-                        onMouseEnter={() => {
-                          setFocusMode("sessions")
-                          setSelectedIndex(index())
+                  {(session, index) => {
+                    const isFocused = () => focusMode() === "sessions" && selectedIndex() === index()
+                    return (
+                      <div
+                        class="panel-list-item"
+                        classList={{
+                          "panel-list-item-highlight": isFocused(),
                         }}
                       >
-                        <div class="flex items-center justify-between gap-3 w-full">
-                          <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2">
-                              <span
-                                class="text-sm font-medium text-primary truncate transition-colors"
-                                classList={{
-                                  "text-accent":
-                                    focusMode() === "sessions" && selectedIndex() === index(),
+                        <div class="flex items-center gap-2 w-full px-1">
+                          <button
+                            type="button"
+                            data-session-index={index()}
+                            class="panel-list-item-content group flex-1"
+                            onClick={() => handleSessionSelect(session.id)}
+                            onMouseEnter={() => {
+                              setFocusMode("sessions")
+                              setSelectedIndex(index())
+                            }}
+                          >
+                            <div class="flex items-center justify-between gap-3 w-full">
+                              <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                  <span
+                                    class="text-sm font-medium text-primary truncate transition-colors"
+                                    classList={{
+                                      "text-accent": isFocused(),
+                                    }}
+                                  >
+                                    {session.title || "Untitled Session"}
+                                  </span>
+                                </div>
+                                <div class="flex items-center gap-3 text-xs text-muted mt-0.5">
+                                  <span>{session.agent}</span>
+                                  <span>•</span>
+                                  <span>{formatRelativeTime(session.time.updated)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                          <Show when={isFocused()}>
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                              <kbd class="kbd flex-shrink-0">↵</kbd>
+                              <button
+                                type="button"
+                                class="p-1.5 rounded transition-colors text-muted hover:text-red-500 dark:hover:text-red-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                title="Delete session"
+                                disabled={isSessionDeleting(session.id)}
+                                onClick={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  void handleSessionDelete(session.id)
                                 }}
                               >
-                                {session.title || "Untitled Session"}
-                              </span>
+                                <Show
+                                  when={!isSessionDeleting(session.id)}
+                                  fallback={
+                                    <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                                      <path
+                                        class="opacity-75"
+                                        fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                      />
+                                    </svg>
+                                  }
+                                >
+                                  <Trash2 class="w-4 h-4" />
+                                </Show>
+                              </button>
                             </div>
-                            <div class="flex items-center gap-3 text-xs text-muted mt-0.5">
-                              <span>{session.agent}</span>
-                              <span>•</span>
-                              <span>{formatRelativeTime(session.time.updated)}</span>
-                            </div>
-                          </div>
-                          <Show when={focusMode() === "sessions" && selectedIndex() === index()}>
-                            <kbd class="kbd flex-shrink-0">↵</kbd>
                           </Show>
                         </div>
-                      </button>
-                    </div>
-                  )}
+                      </div>
+                    )
+                  }}
                 </For>
               </div>
             </div>
@@ -363,6 +440,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       </Show>
 
       <div class="panel-footer hidden sm:block">
+
         <div class="panel-footer-hints">
           <div class="flex items-center gap-1.5">
             <kbd class="kbd">↑</kbd>
@@ -383,12 +461,16 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
             <kbd class="kbd">Enter</kbd>
             <span>Resume</span>
           </div>
-          <KeyboardHint shortcuts={[newSessionShortcut()]} separator="" />
+          <div class="flex items-center gap-1.5">
+            <kbd class="kbd">Del</kbd>
+            <span>Delete</span>
+          </div>
         </div>
       </div>
     </div>
   )
 }
+ 
+ export default InstanceWelcomeView
 
-export default InstanceWelcomeView
 
