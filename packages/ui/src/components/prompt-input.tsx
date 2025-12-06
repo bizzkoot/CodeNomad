@@ -1,4 +1,5 @@
 import { createSignal, Show, onMount, For, onCleanup, createEffect, on, untrack } from "solid-js"
+import { ArrowBigUp, ArrowBigDown } from "lucide-solid"
 import UnifiedPicker from "./unified-picker"
 import { addToHistory, getHistory } from "../stores/message-history"
 import { getAttachments, addAttachment, clearAttachments, removeAttachment } from "../stores/attachments"
@@ -1041,9 +1042,7 @@ export default function PromptInput(props: PromptInputProps) {
                   disabled={!canHistoryGoPrevious()}
                   aria-label="Previous prompt"
                 >
-                  <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true">
-                    <path d="M10 6l-4 5h8L10 6z" />
-                  </svg>
+                  <ArrowBigUp class="h-5 w-5" aria-hidden="true" />
                 </button>
               </div>
               <div class="prompt-history-bottom">
@@ -1054,9 +1053,7 @@ export default function PromptInput(props: PromptInputProps) {
                   disabled={!canHistoryGoNext()}
                   aria-label="Next prompt"
                 >
-                  <svg viewBox="0 0 20 20" fill="currentColor" class="h-3 w-3" aria-hidden="true">
-                    <path d="M10 14l4-5H6l4 5z" />
-                  </svg>
+                  <ArrowBigDown class="h-5 w-5" aria-hidden="true" />
                 </button>
               </div>
             </Show>
