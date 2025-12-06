@@ -6,7 +6,8 @@ import MessageSection from "../message-section"
 import { messageStoreBus } from "../../stores/message-v2/bus"
 import PromptInput from "../prompt-input"
 import { instances } from "../../stores/instances"
-import { loadMessages, sendMessage, forkSession, isSessionMessagesLoading, setActiveParentSession, setActiveSession, runShellCommand } from "../../stores/sessions"
+import { loadMessages, sendMessage, forkSession, isSessionMessagesLoading, setActiveParentSession, setActiveSession, runShellCommand, abortSession } from "../../stores/sessions"
+import { isSessionBusy as getSessionBusyStatus } from "../../stores/session-status"
 import { showAlertDialog } from "../../stores/alerts"
 import { getLogger } from "../../lib/logger"
 
@@ -31,17 +32,22 @@ export const SessionView: Component<SessionViewProps> = (props) => {
   const session = () => props.activeSessions.get(props.sessionId)
   const messagesLoading = createMemo(() => isSessionMessagesLoading(props.instanceId, props.sessionId))
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instanceId))
+  const sessionBusy = createMemo(() => {
+    const currentSession = session()
+    if (!currentSession) return false
+    return getSessionBusyStatus(props.instanceId, currentSession.id)
+  })
   let scrollToBottomHandle: (() => void) | undefined
  
-   createEffect(() => {
-
+  createEffect(() => {
     const currentSession = session()
     if (currentSession) {
       loadMessages(props.instanceId, currentSession.id).catch((error) => log.error("Failed to load messages", error))
     }
   })
-
+ 
   async function handleSendMessage(prompt: string, attachments: Attachment[]) {
+
     if (scrollToBottomHandle) {
       scrollToBottomHandle()
     }
@@ -51,8 +57,26 @@ export const SessionView: Component<SessionViewProps> = (props) => {
   async function handleRunShell(command: string) {
     await runShellCommand(props.instanceId, props.sessionId, command)
   }
-
+ 
+  async function handleAbortSession() {
+    const currentSession = session()
+    if (!currentSession) return
+ 
+    try {
+      await abortSession(props.instanceId, currentSession.id)
+      log.info("Abort requested", { instanceId: props.instanceId, sessionId: currentSession.id })
+    } catch (error) {
+      log.error("Failed to abort session", error)
+      showAlertDialog("Failed to stop session", {
+        title: "Stop failed",
+        detail: error instanceof Error ? error.message : String(error),
+        variant: "error",
+      })
+    }
+  }
+ 
   function getUserMessageText(messageId: string): string | null {
+
     const normalizedMessage = messageStore().getMessage(messageId)
     if (normalizedMessage && normalizedMessage.role === "user") {
       const parts = normalizedMessage.partIds
@@ -169,6 +193,8 @@ export const SessionView: Component<SessionViewProps> = (props) => {
               onSend={handleSendMessage}
               onRunShell={handleRunShell}
               escapeInDebounce={props.escapeInDebounce}
+              isSessionBusy={sessionBusy()}
+              onAbortSession={handleAbortSession}
             />
           </div>
         )

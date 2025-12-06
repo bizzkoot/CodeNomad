@@ -6,7 +6,15 @@
 }
 
 .prompt-input-wrapper {
-  @apply flex items-end gap-2 p-3;
+  @apply flex items-stretch gap-2 p-2;
+}
+
+.prompt-input-actions {
+  @apply flex flex-col items-center justify-between;
+  align-self: stretch;
+  height: 100%;
+  padding: 0.25rem 0;
+  gap: 0.5rem;
 }
 
 .prompt-input-field {
@@ -14,14 +22,15 @@
   width: 100%;
 }
 
-.prompt-input {
-  @apply flex-1 w-full min-h-[56px] max-h-[96px] px-3 pt-2.5 pb-12 border rounded-md text-sm resize-none outline-none transition-colors;
-  font-family: inherit;
-  background-color: var(--surface-base);
-  color: inherit;
-  border-color: var(--border-base);
-  line-height: var(--line-height-normal);
-}
+ .prompt-input {
+   @apply flex-1 w-full min-h-[56px] max-h-[96px] px-3 pt-2.5 pb-4 border rounded-md text-sm resize-none outline-none transition-colors;
+   font-family: inherit;
+   background-color: var(--surface-base);
+   color: inherit;
+   border-color: var(--border-base);
+   line-height: var(--line-height-normal);
+ }
+
 
 .prompt-input-overlay {
   position: absolute;
@@ -82,6 +91,31 @@
 
 .prompt-input::placeholder {
   color: var(--text-muted);
+}
+
+.stop-button {
+  @apply w-10 h-10 rounded-md border-none cursor-pointer flex items-center justify-center transition-all flex-shrink-0;
+  background-color: rgba(239, 68, 68, 0.85);
+  color: var(--text-inverted);
+}
+
+.stop-button:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.9);
+  @apply opacity-95 scale-105;
+}
+
+.stop-button:active:not(:disabled) {
+  background-color: rgba(239, 68, 68, 1);
+  @apply scale-95;
+}
+
+.stop-button:disabled {
+  @apply opacity-60 cursor-not-allowed;
+}
+
+.stop-icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 .send-button {

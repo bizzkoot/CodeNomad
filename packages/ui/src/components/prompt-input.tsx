@@ -22,6 +22,8 @@ interface PromptInputProps {
   onRunShell?: (command: string) => Promise<void>
   disabled?: boolean
   escapeInDebounce?: boolean
+  isSessionBusy?: boolean
+  onAbortSession?: () => Promise<void>
 }
 
 export default function PromptInput(props: PromptInputProps) {
@@ -599,8 +601,14 @@ export default function PromptInput(props: PromptInputProps) {
       textareaRef?.focus()
     }
   }
-
+ 
+  function handleAbort() {
+    if (!props.onAbortSession || !props.isSessionBusy) return
+    void props.onAbortSession()
+  }
+ 
   function handleInput(e: Event) {
+
     const target = e.target as HTMLTextAreaElement
     const value = target.value
     setPrompt(value)
@@ -818,14 +826,17 @@ export default function PromptInput(props: PromptInputProps) {
     textareaRef?.focus()
   }
 
+  const canStop = () => Boolean(props.isSessionBusy && props.onAbortSession)
+ 
   const canSend = () => {
     if (props.disabled) return false
     const hasText = prompt().trim().length > 0
     if (mode() === "shell") return hasText
     return hasText || attachments().length > 0
   }
-
+ 
   const shellHint = () => (mode() === "shell" ? { key: "Esc", text: "to exit shell mode" } : { key: "!", text: "for shell mode" })
+
   const shouldShowOverlay = () => prompt().length === 0
 
   const instance = () => getActiveInstance()
@@ -1010,22 +1021,37 @@ export default function PromptInput(props: PromptInputProps) {
           </div>
         </div>
 
-        <button
-          class={`send-button ${mode() === "shell" ? "shell-mode" : ""}`}
-          onClick={handleSend}
-          disabled={!canSend()}
-          aria-label="Send message"
-        >
-          <Show
-            when={mode() === "shell"}
-            fallback={<span class="send-icon">▶</span>}
+        <div class="prompt-input-actions">
+          <button
+            type="button"
+            class="stop-button"
+            onClick={handleAbort}
+            disabled={!canStop()}
+            aria-label="Stop session"
+            title="Stop session"
           >
-            <svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M5 8l5 4-5 4" />
-              <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h6" />
+            <svg class="stop-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+              <rect x="4" y="4" width="12" height="12" rx="2" />
             </svg>
-          </Show>
-        </button>
+          </button>
+          <button
+            type="button"
+            class={`send-button ${mode() === "shell" ? "shell-mode" : ""}`}
+            onClick={handleSend}
+            disabled={!canSend()}
+            aria-label="Send message"
+          >
+            <Show
+              when={mode() === "shell"}
+              fallback={<span class="send-icon">▶</span>}
+            >
+              <svg class="shell-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5 8l5 4-5 4" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h6" />
+              </svg>
+            </Show>
+          </button>
+        </div>
       </div>
     </div>
   )
