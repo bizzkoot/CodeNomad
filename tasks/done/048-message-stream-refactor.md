@@ -32,3 +32,4 @@ Finish migrating the message stream container, tool call blocks, and reasoning U
 ## Notes
 - Branch suggestion: `feature/task-048-message-stream-refactor`.
 - Capture short screen recording or screenshots if tool call layout adjustments were required.
+- Legacy `message-stream.tsx` has since been replaced by `message-stream-v2.tsx` using the normalized message store.

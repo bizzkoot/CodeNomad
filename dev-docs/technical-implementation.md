@@ -49,7 +49,7 @@ packages/opencode-client/
 │   ├── components/
 │   │   ├── instance-tabs.tsx       # Level 1 tabs
 │   │   ├── session-tabs.tsx        # Level 2 tabs
-│   │   ├── message-stream.tsx      # Messages display
+│   │   ├── message-stream-v2.tsx  # Messages display (normalized store)
 │   │   ├── message-item.tsx        # Single message
 │   │   ├── tool-call.tsx           # Tool execution display
 │   │   ├── prompt-input.tsx        # Input with attachments
@@ -153,16 +153,24 @@ interface Session {
     providerId: string
     modelId: string
   }
-  messages: Message[]
-  status: SessionStatus
-  createdAt: number
-  updatedAt: number
+  version: string
+  time: { created: number; updated: number }
+  revert?: {
+    messageID?: string
+    partID?: string
+    snapshot?: string
+    diff?: string
+  }
 }
+
+// Message content lives in the normalized message-v2 store
+// keyed by instanceId/sessionId/messageId
 
 type SessionStatus =
   | "idle" // No activity
   | "streaming" // Assistant responding
   | "error" // Error occurred
+
 ```
 
 ### UI Store

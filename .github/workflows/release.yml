@@ -6,6 +6,7 @@ on:
       - main
 
 permissions:
+  id-token: write
   contents: write
 
 env:
@@ -63,154 +64,22 @@ jobs:
             gh release create "$TAG" --title "CodeNomad v${VERSION}" --generate-notes
           fi
 
-  build-macos:
+  build-and-upload:
     needs: prepare-release
-    runs-on: macos-13
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    uses: ./.github/workflows/build-and-upload.yml
+    with:
+      version: ${{ needs.prepare-release.outputs.version }}
+      tag: ${{ needs.prepare-release.outputs.tag }}
+      release_name: CodeNomad v${{ needs.prepare-release.outputs.version }}
+    secrets: inherit
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build macOS binaries
-        run: npm run build:mac
-
-      - name: Upload release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare-release.outputs.tag }}
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          for file in release/*; do
-            [ -f "$file" ] || continue
-            case "$file" in
-              *.dmg|*.zip)
-                gh release upload "$TAG" "$file" --clobber
-                ;;
-              *)
-                echo "Skipping non-installer asset: $file"
-                ;;
-            esac
-          done
-
-  build-windows:
-    needs: prepare-release
-    runs-on: windows-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Windows binaries
-        run: npm run build:win
-
-      - name: Upload release assets
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare-release.outputs.tag }}
-        run: |
-          Get-ChildItem -Path "release" -File | Where-Object {
-            $_.Name -match '\.(exe|zip)$'
-          } | ForEach-Object {
-            gh release upload $env:TAG $_.FullName --clobber
-          }
-
-  build-linux:
-    needs: prepare-release
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build Linux binaries
-        run: npm run build:linux
-
-      - name: Upload release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare-release.outputs.tag }}
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          for file in release/*; do
-            [ -f "$file" ] || continue
-            case "$file" in
-              *.AppImage|*.deb|*.tar.gz)
-                gh release upload "$TAG" "$file" --clobber
-                ;;
-              *)
-                echo "Skipping non-installer asset: $file"
-                ;;
-            esac
-          done
-
-  build-linux-rpm:
-    needs: prepare-release
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install rpm packaging dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm ruby ruby-dev build-essential
-          sudo gem install --no-document fpm
-
-      - name: Install project dependencies
-        run: npm ci
-
-      - name: Build Linux RPM binaries
-        run: npm run build:linux-rpm
-
-      - name: Upload RPM release assets
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.prepare-release.outputs.tag }}
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          for file in release/*.rpm; do
-            [ -f "$file" ] || continue
-            gh release upload "$TAG" "$file" --clobber
-          done
+  publish-server:
+    needs:
+      - prepare-release
+      - build-and-upload
+    if: ${{ needs.build-and-upload.result == 'success' }}
+    uses: ./.github/workflows/manual-npm-publish.yml
+    with:
+      version: ${{ needs.prepare-release.outputs.version }}
+      dist_tag: latest
+    secrets: inherit

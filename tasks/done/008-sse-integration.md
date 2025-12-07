@@ -1,5 +1,7 @@
 # Task 008: SSE Integration - Real-time Message Streaming
 
+> Note: References to `message-stream.tsx` here are legacy; the current UI uses `message-stream-v2.tsx` with the normalized message store.
+
 ## Status: TODO
 
 ## Objective

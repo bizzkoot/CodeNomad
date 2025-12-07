@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "CodeNomad",
+  "version": "0.1.0",
+  "identifier": "ai.opencode.client",
+  "build": {
+    "beforeDevCommand": "npm run dev:bootstrap",
+    "beforeBuildCommand": "npm run bundle:server",
+    "frontendDist": "resources/ui-loading"
+  },
+
+ 
+
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "CodeNomad",
+        "url": "loading.html",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 800,
+        "minHeight": 600,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "theme": "Dark",
+        "backgroundColor": "#1a1a1a"
+      }
+    ],
+    "security": {
+      "assetProtocol": {
+        "scope": ["**"]
+      },
+      "capabilities": ["main-window-native-dialogs"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "resources": [
+      "resources/server",
+      "resources/ui-loading"
+    ],
+    "icon": ["icon.icns", "icon.ico", "icon.png"],
+    "targets": ["app", "appimage", "deb", "rpm", "nsis"]
+  }
+}

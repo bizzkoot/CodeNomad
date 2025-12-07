@@ -1,0 +1,137 @@
+/* Primary tab strip */
+.tab-bar {
+  @apply border-b;
+  border-color: var(--border-base);
+}
+
+.tab-bar-instance {
+  background-color: var(--surface-secondary);
+}
+
+.tab-bar-session {
+  background-color: var(--surface-base);
+}
+
+.tab-container {
+  @apply flex items-center justify-between gap-1 px-2 py-1;
+}
+
+.tab-scroll {
+  @apply w-full;
+  overflow-x: auto;
+}
+
+.tab-strip {
+  @apply flex items-center gap-2 px-1;
+  min-width: 100%;
+}
+
+.tab-strip-tabs {
+  @apply flex items-center gap-1 flex-shrink-0;
+}
+
+.tab-strip-spacer {
+  @apply flex-1;
+  min-width: 1px;
+}
+
+.tab-shortcuts {
+  @apply flex items-center gap-2 flex-shrink-0;
+}
+
+.tab-remote-button {
+  @apply flex-shrink-0;
+}
+
+.tab-base {
+  @apply inline-flex items-center gap-2 px-3 py-2 rounded-t-md max-w-[200px] transition-colors text-sm font-medium;
+  font-family: var(--font-family-sans);
+  outline: none;
+}
+
+.tab-base:focus-visible {
+  @apply ring-2 ring-offset-1;
+  ring-color: var(--accent-primary);
+  ring-offset-color: var(--surface-base);
+}
+
+.tab-active {
+  background-color: var(--tab-active-bg);
+  color: var(--tab-active-text);
+}
+
+.tab-inactive {
+  background-color: var(--tab-inactive-bg);
+  color: var(--tab-inactive-text);
+}
+
+.tab-inactive:hover {
+  background-color: var(--tab-inactive-hover-bg);
+}
+
+.tab-active:hover {
+  background-color: var(--tab-active-hover-bg);
+}
+
+.tab-label {
+  @apply truncate;
+}
+
+.tab-close {
+  @apply opacity-100 hover:bg-red-500 hover:text-white rounded p-0.5 transition-all cursor-pointer;
+}
+
+.tab-close:focus-visible {
+  @apply ring-2 ring-offset-1;
+  ring-color: var(--accent-primary);
+  ring-offset-color: inherit;
+}
+
+.new-tab-button {
+  @apply inline-flex items-center justify-center w-8 h-8 rounded-md transition-colors;
+  background-color: var(--new-tab-bg);
+  color: var(--new-tab-text);
+}
+
+.new-tab-button:hover {
+  background-color: var(--new-tab-hover-bg);
+}
+
+.new-tab-button:focus-visible {
+  @apply ring-2 ring-offset-1;
+  ring-color: var(--accent-primary);
+  ring-offset-color: var(--surface-base);
+}
+
+/* Session tabs */
+.session-tab-base {
+  @apply inline-flex items-center gap-2 px-3 py-1.5 rounded-t-md max-w-[150px] transition-colors text-sm;
+  font-family: var(--font-family-sans);
+  outline: none;
+  border-bottom: 2px solid transparent;
+}
+
+.session-tab-base:focus-visible {
+  @apply ring-2 ring-offset-1;
+  ring-color: var(--accent-primary);
+  ring-offset-color: var(--surface-base);
+}
+
+.session-tab-active {
+  background-color: var(--session-tab-active-bg);
+  border-bottom-color: var(--accent-primary);
+  color: var(--session-tab-active-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.session-tab-inactive {
+  color: var(--session-tab-inactive-text);
+}
+
+.session-tab-inactive:hover {
+  background-color: var(--session-tab-hover-bg);
+}
+
+.session-tab-special {
+  color: var(--session-tab-inactive-text);
+}

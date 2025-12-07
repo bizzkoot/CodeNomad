@@ -4,6 +4,8 @@
 
 Create the message display component that renders user and assistant messages in a scrollable stream, showing message content, tool calls, and streaming states.
 
+> Note: This legacy task predates `message-stream-v2` and the normalized message store; the new implementation lives under `packages/ui/src/components/message-stream-v2.tsx`.
+
 ## Prerequisites
 
 - Task 006 completed (Tab navigation in place)

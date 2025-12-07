@@ -10,6 +10,12 @@ This guide explains how to build distributable binaries for CodeNomad.
 
 ## Quick Start
 
+All commands now run inside the workspace packages. From the repo root you can target the Electron app package directly:
+
+```bash
+npm run build --workspace @neuralnomads/codenomad-electron-app
+```
+
 ### Build for Current Platform (macOS default)
 
 ```bash
@@ -71,8 +77,8 @@ bun run build:all
 
 The build script performs these steps:
 
-1. **Compile TypeScript** → Electron app (main, preload, renderer)
-2. **Bundle with Vite** → Optimized production build
+1. **Build @neuralnomads/codenomad** → Produces the CLI `dist/` bundle (also rebuilds the UI assets it serves)
+2. **Compile TypeScript + bundle with Vite** → Electron main, preload, and renderer output in `dist/`
 3. **Package with electron-builder** → Platform-specific binaries
 
 ## Output

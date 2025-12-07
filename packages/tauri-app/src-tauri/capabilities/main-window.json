@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/capabilities.json",
+  "identifier": "main-window-native-dialogs",
+  "description": "Grant the main window access to required core features and native dialog commands.",
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:*",
+      "http://localhost:*"
+    ]
+  },
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "opener:allow-default-urls"
+  ]
+}

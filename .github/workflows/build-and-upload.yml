@@ -1,0 +1,519 @@
+name: Build and Upload Binaries
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Version to apply to workspace packages"
+        required: true
+        type: string
+      tag:
+        description: "Git tag to upload assets to"
+        required: true
+        type: string
+      release_name:
+        description: "Release name (unused here, for context)"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  build-macos:
+    runs-on: macos-15-intel
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Set workspace versions
+        run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-darwin-x64 --no-save
+
+      - name: Build macOS binaries (Electron)
+        run: npm run build:mac --workspace @neuralnomads/codenomad-electron-app
+
+      - name: Upload release assets
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in packages/electron-app/release/*.zip; do
+            [ -f "$file" ] || continue
+            echo "Uploading $file"
+            gh release upload "$TAG" "$file" --clobber
+          done
+
+  build-windows:
+    runs-on: windows-2025
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Set workspace versions
+        run: npm version ${{ env.VERSION }} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+        shell: bash
+
+      - name: Install dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-win32-x64-msvc --no-save
+
+      - name: Build Windows binaries (Electron)
+        run: npm run build:win --workspace @neuralnomads/codenomad-electron-app
+
+      - name: Upload release assets
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path "packages/electron-app/release" -Filter *.zip -File | ForEach-Object {
+            Write-Host "Uploading $($_.FullName)"
+            gh release upload $env:TAG $_.FullName --clobber
+          }
+
+  build-linux:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Set workspace versions
+        run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-linux-x64-gnu --no-save
+
+      - name: Build Linux binaries (Electron)
+        run: npm run build:linux --workspace @neuralnomads/codenomad-electron-app
+
+      - name: Upload release assets
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in packages/electron-app/release/*.zip; do
+            [ -f "$file" ] || continue
+            echo "Uploading $file"
+            gh release upload "$TAG" "$file" --clobber
+          done
+
+  build-tauri-macos:
+    runs-on: macos-15-intel
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Rust (Tauri)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set workspace versions
+        run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-darwin-x64 --no-save
+
+      - name: Build macOS bundle (Tauri)
+        run: npm run build --workspace @codenomad/tauri-app
+
+      - name: Package Tauri artifacts (macOS)
+        run: |
+          set -euo pipefail
+          BUNDLE_ROOT="packages/tauri-app/target/release/bundle"
+          ARTIFACT_DIR="packages/tauri-app/release-tauri"
+          rm -rf "$ARTIFACT_DIR"
+          mkdir -p "$ARTIFACT_DIR"
+          if [ -d "$BUNDLE_ROOT/macos/CodeNomad.app" ]; then
+            ditto -ck --sequesterRsrc --keepParent "$BUNDLE_ROOT/macos/CodeNomad.app" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-macos-x64.zip"
+          fi
+
+      - name: Upload Tauri release assets (macOS)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in packages/tauri-app/release-tauri/*.zip; do
+            [ -f "$file" ] || continue
+            echo "Uploading $file"
+            gh release upload "$TAG" "$file" --clobber
+          done
+
+  build-tauri-macos-arm64:
+    runs-on: macos-26
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Rust (Tauri)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set workspace versions
+        run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-darwin-arm64 --no-save
+
+      - name: Build macOS bundle (Tauri, arm64)
+        run: npm run build --workspace @codenomad/tauri-app
+
+      - name: Package Tauri artifacts (macOS arm64)
+        run: |
+          set -euo pipefail
+          BUNDLE_ROOT="packages/tauri-app/target/release/bundle"
+          ARTIFACT_DIR="packages/tauri-app/release-tauri"
+          rm -rf "$ARTIFACT_DIR"
+          mkdir -p "$ARTIFACT_DIR"
+          if [ -d "$BUNDLE_ROOT/macos/CodeNomad.app" ]; then
+            ditto -ck --sequesterRsrc --keepParent "$BUNDLE_ROOT/macos/CodeNomad.app" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-macos-arm64.zip"
+          fi
+
+      - name: Upload Tauri release assets (macOS arm64)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in packages/tauri-app/release-tauri/*.zip; do
+            [ -f "$file" ] || continue
+            echo "Uploading $file"
+            gh release upload "$TAG" "$file" --clobber
+          done
+
+  build-tauri-windows:
+    runs-on: windows-2025
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Rust (Tauri)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set workspace versions
+        run: npm version ${{ env.VERSION }} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+        shell: bash
+
+      - name: Install dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-win32-x64-msvc --no-save
+
+      - name: Build Windows bundle (Tauri)
+        run: npm run build --workspace @codenomad/tauri-app
+
+      - name: Package Tauri artifacts (Windows)
+        shell: pwsh
+        run: |
+          $bundleRoot = "packages/tauri-app/target/release/bundle"
+          $artifactDir = "packages/tauri-app/release-tauri"
+          if (Test-Path $artifactDir) { Remove-Item $artifactDir -Recurse -Force }
+          New-Item -ItemType Directory -Path $artifactDir | Out-Null
+          $exe = Get-ChildItem -Path $bundleRoot -Recurse -File -Filter *.exe | Select-Object -First 1
+          if ($null -ne $exe) {
+            $dest = Join-Path $artifactDir ("CodeNomad-Tauri-$env:VERSION-windows-x64.zip")
+            Compress-Archive -Path $exe.Directory.FullName -DestinationPath $dest -Force
+          }
+
+      - name: Upload Tauri release assets (Windows)
+        shell: pwsh
+        run: |
+          if (Test-Path "packages/tauri-app/release-tauri") {
+            Get-ChildItem -Path "packages/tauri-app/release-tauri" -Filter *.zip -File | ForEach-Object {
+              Write-Host "Uploading $($_.FullName)"
+              gh release upload $env:TAG $_.FullName --clobber
+            }
+          }
+
+  build-tauri-linux:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Rust (Tauri)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies (Tauri)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libgtk-3-dev \
+            libglib2.0-dev \
+            libwebkit2gtk-4.1-dev \
+            libsoup-3.0-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Set workspace versions
+        run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-linux-x64-gnu --no-save
+
+      - name: Build Linux bundle (Tauri)
+        run: npm run build --workspace @codenomad/tauri-app
+
+      - name: Package Tauri artifacts (Linux)
+        run: |
+          set -euo pipefail
+          SEARCH_ROOT="packages/tauri-app/target"
+          ARTIFACT_DIR="packages/tauri-app/release-tauri"
+          rm -rf "$ARTIFACT_DIR"
+          mkdir -p "$ARTIFACT_DIR"
+          shopt -s nullglob globstar
+
+          find_one() {
+            find "$SEARCH_ROOT" -type f -iname "$1" | head -n1
+          }
+
+          appimage=$(find_one "*.AppImage")
+          deb=$(find_one "*.deb")
+          rpm=$(find_one "*.rpm")
+
+          if [ -z "$appimage" ] || [ -z "$deb" ] || [ -z "$rpm" ]; then
+            echo "Missing bundle(s): appimage=${appimage:-none} deb=${deb:-none} rpm=${rpm:-none}" >&2
+            exit 1
+          fi
+
+          cp "$appimage" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.AppImage"
+          cp "$deb" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.deb"
+          cp "$rpm" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.rpm"
+
+      - name: Upload Tauri release assets (Linux)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in packages/tauri-app/release-tauri/*; do
+            [ -f "$file" ] || continue
+            echo "Uploading $file"
+            gh release upload "$TAG" "$file" --clobber
+          done
+
+  build-tauri-linux-arm64:
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/arm64
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Rust (Tauri)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Install Linux build dependencies (Tauri)
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo tee /etc/apt/sources.list.d/arm64.list >/dev/null <<'EOF'
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble main restricted universe multiverse
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-updates main restricted universe multiverse
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-security main restricted universe multiverse
+          deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports noble-backports main restricted universe multiverse
+          EOF
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
+            libgtk-3-dev:arm64 \
+            libglib2.0-dev:arm64 \
+            libwebkit2gtk-4.1-dev:arm64 \
+            libsoup-3.0-dev:arm64 \
+            libayatana-appindicator3-dev:arm64 \
+            librsvg2-dev:arm64
+
+      - name: Set workspace versions
+        run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-linux-arm64-gnu --no-save
+
+      - name: Build Linux bundle (Tauri arm64)
+        env:
+          TAURI_BUILD_TARGET: aarch64-unknown-linux-gnu
+          PKG_CONFIG_PATH: /usr/lib/aarch64-linux-gnu/pkgconfig
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
+          AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
+        run: npm run build --workspace @codenomad/tauri-app
+
+      - name: Package Tauri artifacts (Linux arm64)
+        run: |
+          set -euo pipefail
+          SEARCH_ROOT="packages/tauri-app/target"
+          ARTIFACT_DIR="packages/tauri-app/release-tauri"
+          rm -rf "$ARTIFACT_DIR"
+          mkdir -p "$ARTIFACT_DIR"
+          shopt -s nullglob globstar
+          first_artifact=$(find "$SEARCH_ROOT" -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" -o -name "*.tar.gz" \) | head -n1)
+          fallback_bin="$SEARCH_ROOT/release/codenomad-tauri"
+          if [ -n "$first_artifact" ]; then
+            zip -j "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.zip" "$first_artifact"
+          elif [ -f "$fallback_bin" ]; then
+            zip -j "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.zip" "$fallback_bin"
+          else
+            echo "No bundled artifact found under $SEARCH_ROOT and no binary at $fallback_bin" >&2
+            exit 1
+          fi
+
+
+      - name: Upload Tauri release assets (Linux arm64)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in packages/tauri-app/release-tauri/*.zip; do
+            [ -f "$file" ] || continue
+            echo "Uploading $file"
+            gh release upload "$TAG" "$file" --clobber
+          done
+
+
+  build-linux-rpm:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install rpm packaging dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm ruby ruby-dev build-essential
+          sudo gem install --no-document fpm
+
+      - name: Set workspace versions
+        run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
+
+      - name: Install project dependencies
+        run: npm ci --workspaces
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-linux-x64-gnu --no-save
+
+      - name: Build Linux RPM binaries
+        run: npm run build:linux-rpm --workspace @neuralnomads/codenomad-electron-app
+
+      - name: Upload RPM release assets
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in packages/electron-app/release/*.rpm; do
+            [ -f "$file" ] || continue
+            echo "Uploading $file"
+            gh release upload "$TAG" "$file" --clobber
+          done
