@@ -9,8 +9,25 @@ export const readRenderer: ToolRenderer = {
     if (!state) return undefined
     const { input } = readToolStatePayload(state)
     const filePath = typeof input.filePath === "string" ? input.filePath : ""
-    if (!filePath) return getToolName("read")
-    return `${getToolName("read")} ${getRelativePath(filePath)}`
+    const offset = typeof input.offset === "number" ? input.offset : undefined
+    const limit = typeof input.limit === "number" ? input.limit : undefined
+    const relativePath = filePath ? getRelativePath(filePath) : ""
+    const detailParts: string[] = []
+
+    if (typeof offset === "number") {
+      detailParts.push(`Offset: ${offset}`)
+    }
+
+    if (typeof limit === "number") {
+      detailParts.push(`Limit: ${limit}`)
+    }
+
+    const baseTitle = relativePath ? `${getToolName("read")} ${relativePath}` : getToolName("read")
+    if (!detailParts.length) {
+      return baseTitle
+    }
+
+    return `${baseTitle} · ${detailParts.join(" · ")}`
   },
   renderBody({ toolState, renderMarkdown }) {
     const state = toolState()

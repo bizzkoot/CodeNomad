@@ -702,6 +702,9 @@ export default function ToolCall(props: ToolCallProps) {
     if (!state) return getRendererAction()
     if (state.status === "pending") return getRendererAction()
 
+    const customTitle = renderer().getTitle?.(rendererContext)
+    if (customTitle) return customTitle
+
     if (isToolStateRunning(state) && state.title) {
       return state.title
     }
@@ -709,9 +712,6 @@ export default function ToolCall(props: ToolCallProps) {
     if (isToolStateCompleted(state) && state.title) {
       return state.title
     }
-
-    const customTitle = renderer().getTitle?.(rendererContext)
-    if (customTitle) return customTitle
 
     return getToolName(toolName())
   }
