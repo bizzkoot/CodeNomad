@@ -1,0 +1,71 @@
+name: Bug Report
+description: Report a bug or regression in CodeNomad
+labels:
+  - bug
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report! Please review open issues before submitting a new one and provide as much detail as possible so we can reproduce the problem.
+  - type: dropdown
+    id: variant
+    attributes:
+      label: App Variant
+      description: Which build are you running when this issue appears?
+      multiple: false
+      options:
+        - Electron
+        - Tauri
+        - Server CLI
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: Operating System & Version
+      description: Include the OS family and version (e.g., macOS 15.0, Ubuntu 24.04, Windows 11 23H2).
+      placeholder: macOS 15.0
+    validations:
+      required: true
+  - type: input
+    id: summary
+    attributes:
+      label: Issue Summary
+      description: Briefly describe what is happening.
+      placeholder: A quick one sentence problem statement
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to Reproduce
+      description: List the steps needed to reproduce the problem.
+      placeholder: |
+        1. Go to ...
+        2. Click ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: Describe what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs & Screenshots
+      description: Attach relevant logs, stack traces, or screenshots if available.
+      placeholder: Paste logs here or drag-and-drop files onto the issue.
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here.
+    validations:
+      required: false
