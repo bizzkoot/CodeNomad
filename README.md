@@ -44,6 +44,12 @@ Run CodeNomad as a local server and access it via your web browser. Perfect for 
 npx @neuralnomads/codenomad --launch
 ```
 
+For dev version
+
+```bash
+npx @neuralnomads/codenomad@dev --launch
+```
+
 This command starts the server and opens the web client in your default browser.
 
 ## Highlights
