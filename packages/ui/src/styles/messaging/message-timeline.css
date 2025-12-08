@@ -138,6 +138,14 @@
 
 .message-timeline-label-short {
   display: none;
+  line-height: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.message-timeline-icon {
+  width: 1rem;
+  height: 1rem;
 }
 
 @media (max-width: 720px) {
@@ -145,7 +153,7 @@
     display: none;
   }
   .message-timeline-label-short {
-    display: block;
+    display: inline-flex;
   }
 }
 

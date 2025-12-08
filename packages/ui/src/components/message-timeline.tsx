@@ -4,6 +4,8 @@ import { messageStoreBus } from "../stores/message-v2/bus"
 import type { ClientPart } from "../types/message"
 import type { MessageRecord } from "../stores/message-v2/types"
 import { buildRecordDisplayData } from "../stores/message-v2/record-display-cache"
+import { getToolIcon } from "./tool-call/utils"
+import { User as UserIcon, Bot as BotIcon } from "lucide-solid"
 
 export type TimelineSegmentType = "user" | "assistant" | "tool"
 
@@ -13,6 +15,7 @@ export interface TimelineSegment {
   type: TimelineSegmentType
   label: string
   tooltip: string
+  shortLabel?: string
 }
 
 interface MessageTimelineProps {
@@ -29,12 +32,6 @@ const SEGMENT_LABELS: Record<TimelineSegmentType, string> = {
   tool: "Tool",
 }
 
-const SEGMENT_SHORT_LABELS: Record<TimelineSegmentType, string> = {
-  user: "U",
-  assistant: "A",
-  tool: "T",
-}
-
 const TOOL_FALLBACK_LABEL = "Tool Call"
 const MAX_TOOLTIP_LENGTH = 220
 
@@ -46,6 +43,7 @@ interface PendingSegment {
   reasoningTexts: string[]
   toolTitles: string[]
   toolTypeLabels: string[]
+  toolIcons: string[]
   hasPrimaryText: boolean
 }
 
@@ -159,10 +157,12 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
       pending = null
       return
     }
-    const label = pending.type === "tool"
+    const isToolSegment = pending.type === "tool"
+    const label = isToolSegment
       ? pending.toolTypeLabels[0] || TOOL_FALLBACK_LABEL.slice(0, 4)
       : SEGMENT_LABELS[pending.type]
-    const tooltip = pending.type === "tool"
+    const shortLabel = isToolSegment ? pending.toolIcons[0] || getToolIcon("tool") : undefined
+    const tooltip = isToolSegment
       ? formatToolTooltip(pending.toolTitles)
       : formatTextsTooltip(
           [...pending.texts, ...pending.reasoningTexts],
@@ -175,6 +175,7 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
       type: pending.type,
       label,
       tooltip,
+      shortLabel,
     })
     segmentIndex += 1
     pending = null
@@ -183,7 +184,7 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
   const ensureSegment = (type: TimelineSegmentType): PendingSegment => {
     if (!pending || pending.type !== type) {
       flushPending()
-      pending = { type, texts: [], reasoningTexts: [], toolTitles: [], toolTypeLabels: [], hasPrimaryText: type !== "assistant" }
+      pending = { type, texts: [], reasoningTexts: [], toolTitles: [], toolTypeLabels: [], toolIcons: [], hasPrimaryText: type !== "assistant" }
     }
     return pending!
   }
@@ -199,6 +200,7 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
       const toolPart = part as ToolCallPart
       target.toolTitles.push(getToolTitle(toolPart))
       target.toolTypeLabels.push(getToolTypeLabel(toolPart))
+      target.toolIcons.push(getToolIcon(typeof toolPart.tool === "string" ? toolPart.tool : "tool"))
       continue
     }
 
@@ -307,6 +309,15 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
         {(segment) => {
           onCleanup(() => buttonRefs.delete(segment.id))
           const isActive = () => props.activeMessageId === segment.messageId
+          const shortLabelContent = () => {
+            if (segment.type === "tool") {
+              return segment.shortLabel ?? getToolIcon("tool")
+            }
+            if (segment.type === "user") {
+              return <UserIcon class="message-timeline-icon" aria-hidden="true" />
+            }
+            return <BotIcon class="message-timeline-icon" aria-hidden="true" />
+          }
           return (
             <button
               ref={(el) => registerButtonRef(segment.id, el)}
@@ -318,9 +329,7 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
               onMouseLeave={handleMouseLeave}
             >
               <span class="message-timeline-label message-timeline-label-full">{segment.label}</span>
-              <span class="message-timeline-label message-timeline-label-short">
-                {segment.type === "tool" ? segment.label.charAt(0).toUpperCase() : SEGMENT_SHORT_LABELS[segment.type]}
-              </span>
+              <span class="message-timeline-label message-timeline-label-short">{shortLabelContent()}</span>
             </button>
           )
         }}
