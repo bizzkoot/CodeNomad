@@ -273,8 +273,7 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
     if (!segment) return null
     const record = store().getMessage(segment.messageId)
     if (!record) return null
-    const info = store().getMessageInfo(segment.messageId)
-    return { record, info }
+    return { messageId: segment.messageId }
   })
  
   return (
@@ -303,10 +302,10 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
         {(data) => (
           <div class="message-timeline-tooltip" style={{ top: `${tooltipCoords().top}px`, left: `${tooltipCoords().left}px` }}>
             <MessagePreview
-              record={data().record}
-              messageInfo={data().info}
+              messageId={data().messageId}
               instanceId={props.instanceId}
               sessionId={props.sessionId}
+              store={store}
             />
           </div>
         )}

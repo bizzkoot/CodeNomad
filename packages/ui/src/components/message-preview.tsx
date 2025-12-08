@@ -1,24 +1,36 @@
-import type { Component } from "solid-js"
-import MessageItem from "./message-item"
-import type { MessageRecord } from "../stores/message-v2/types"
-import type { MessageInfo } from "../types/message"
+import { createMemo, type Component } from "solid-js"
+import MessageBlock from "./message-block"
+import type { InstanceMessageStore } from "../stores/message-v2/instance-store"
 
 interface MessagePreviewProps {
-  record: MessageRecord
-  messageInfo?: MessageInfo
   instanceId: string
   sessionId: string
+  messageId: string
+  store: () => InstanceMessageStore
 }
 
 const MessagePreview: Component<MessagePreviewProps> = (props) => {
+  const indexMap = createMemo(() => new Map([[props.messageId, 0]]))
+  const lastAssistantIndex = createMemo(() => {
+    const record = props.store().getMessage(props.messageId)
+    if (record?.role === "assistant") {
+      return 0
+    }
+    return -1
+  })
+
   return (
-    <div class="message-preview">
-      <MessageItem
-        record={props.record}
-        messageInfo={props.messageInfo}
+    <div class="message-preview message-stream">
+      <MessageBlock
+        messageId={props.messageId}
         instanceId={props.instanceId}
         sessionId={props.sessionId}
-        parts={props.record.partIds.map((id) => props.record.parts[id]?.data).filter((part): part is NonNullable<typeof part> => Boolean(part))}
+        store={props.store}
+        messageIndexMap={indexMap}
+        lastAssistantIndex={lastAssistantIndex}
+        showThinking={() => false}
+        thinkingDefaultExpanded={() => false}
+        showUsageMetrics={() => false}
       />
     </div>
   )
