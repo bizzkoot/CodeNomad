@@ -32,7 +32,7 @@ const SEGMENT_LABELS: Record<TimelineSegmentType, string> = {
 const SEGMENT_SHORT_LABELS: Record<TimelineSegmentType, string> = {
   user: "U",
   assistant: "A",
-  tool: "Tool",
+  tool: "T",
 }
 
 const TOOL_FALLBACK_LABEL = "Tool Call"
@@ -307,7 +307,7 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
             >
               <span class="message-timeline-label message-timeline-label-full">{segment.label}</span>
               <span class="message-timeline-label message-timeline-label-short">
-                {segment.type === "tool" ? (segment.label.slice(0, 4).toUpperCase()) : SEGMENT_SHORT_LABELS[segment.type]}
+                {segment.type === "tool" ? segment.label.charAt(0).toUpperCase() : SEGMENT_SHORT_LABELS[segment.type]}
               </span>
             </button>
           )
