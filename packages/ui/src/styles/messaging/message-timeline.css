@@ -149,4 +149,23 @@
   }
 }
 
+.message-timeline-tooltip {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+}
 
+.message-preview {
+  width: 360px;
+  max-height: 420px;
+  overflow: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border-base);
+  background-color: var(--surface-base);
+  box-shadow: var(--panel-shadow, 0 12px 32px rgba(0, 0, 0, 0.25));
+  padding: 0.75rem;
+}
+
+.message-preview .message-item-base {
+  font-size: 0.85rem;
+}

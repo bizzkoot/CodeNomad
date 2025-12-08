@@ -1,4 +1,6 @@
-import { For, createEffect, onCleanup, type Component } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Component } from "solid-js"
+import MessagePreview from "./message-preview"
+import { messageStoreBus } from "../stores/message-v2/bus"
 import type { ClientPart } from "../types/message"
 import type { MessageRecord } from "../stores/message-v2/types"
 import { buildRecordDisplayData } from "../stores/message-v2/record-display-cache"
@@ -17,10 +19,12 @@ interface MessageTimelineProps {
   segments: TimelineSegment[]
   onSegmentClick?: (segment: TimelineSegment) => void
   activeMessageId?: string | null
+  instanceId: string
+  sessionId: string
 }
 
 const SEGMENT_LABELS: Record<TimelineSegmentType, string> = {
-  user: "User",
+  user: "You",
   assistant: "Asst",
   tool: "Tool",
 }
@@ -204,6 +208,10 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
 
 const MessageTimeline: Component<MessageTimelineProps> = (props) => {
   const buttonRefs = new Map<string, HTMLButtonElement>()
+  const store = () => messageStoreBus.getOrCreate(props.instanceId)
+  const [hoveredSegment, setHoveredSegment] = createSignal<TimelineSegment | null>(null)
+  const [tooltipCoords, setTooltipCoords] = createSignal<{ top: number; left: number }>({ top: 0, left: 0 })
+  let hoverTimer: number | null = null
  
   const registerButtonRef = (segmentId: string, element: HTMLButtonElement | null) => {
     if (element) {
@@ -212,6 +220,36 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
       buttonRefs.delete(segmentId)
     }
   }
+ 
+  const clearHoverTimer = () => {
+    if (hoverTimer !== null && typeof window !== "undefined") {
+      window.clearTimeout(hoverTimer)
+      hoverTimer = null
+    }
+  }
+ 
+  const handleMouseEnter = (segment: TimelineSegment, event: MouseEvent) => {
+    if (typeof window === "undefined") return
+    clearHoverTimer()
+    const target = event.currentTarget as HTMLButtonElement
+    hoverTimer = window.setTimeout(() => {
+      const rect = target.getBoundingClientRect()
+      const preferredTop = rect.top + rect.height / 2
+      const clampedTop = Math.min(window.innerHeight - 220, Math.max(16, preferredTop - 110))
+      const tooltipWidth = 360
+      const preferredLeft = rect.right + 12
+      const clampedLeft = Math.min(window.innerWidth - tooltipWidth - 16, preferredLeft)
+      setTooltipCoords({ top: clampedTop, left: clampedLeft })
+      setHoveredSegment(segment)
+    }, 200)
+  }
+ 
+  const handleMouseLeave = () => {
+    clearHoverTimer()
+    setHoveredSegment(null)
+  }
+ 
+  onCleanup(() => clearHoverTimer())
  
   createEffect(() => {
     const activeId = props.activeMessageId
@@ -230,6 +268,15 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
     })
   })
  
+  const previewData = createMemo(() => {
+    const segment = hoveredSegment()
+    if (!segment) return null
+    const record = store().getMessage(segment.messageId)
+    if (!record) return null
+    const info = store().getMessageInfo(segment.messageId)
+    return { record, info }
+  })
+ 
   return (
     <div class="message-timeline" role="navigation" aria-label="Message timeline">
       <For each={props.segments}>
@@ -241,9 +288,10 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
               ref={(el) => registerButtonRef(segment.id, el)}
               type="button"
               class={`message-timeline-segment message-timeline-${segment.type} ${isActive() ? "message-timeline-segment-active" : ""}`}
-              title={segment.tooltip}
               aria-current={isActive() ? "true" : undefined}
               onClick={() => props.onSegmentClick?.(segment)}
+              onMouseEnter={(event) => handleMouseEnter(segment, event)}
+              onMouseLeave={handleMouseLeave}
             >
               <span class="message-timeline-label message-timeline-label-full">{segment.label}</span>
               <span class="message-timeline-label message-timeline-label-short">{SEGMENT_SHORT_LABELS[segment.type]}</span>
@@ -251,9 +299,21 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
           )
         }}
       </For>
+      <Show when={previewData()}>
+        {(data) => (
+          <div class="message-timeline-tooltip" style={{ top: `${tooltipCoords().top}px`, left: `${tooltipCoords().left}px` }}>
+            <MessagePreview
+              record={data().record}
+              messageInfo={data().info}
+              instanceId={props.instanceId}
+              sessionId={props.sessionId}
+            />
+          </div>
+        )}
+      </Show>
     </div>
   )
 }
-
-
+ 
 export default MessageTimeline
+

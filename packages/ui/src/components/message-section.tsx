@@ -502,6 +502,8 @@ export default function MessageSection(props: MessageSectionProps) {
               segments={timelineSegments()}
               onSegmentClick={handleTimelineSegmentClick}
               activeMessageId={activeMessageId()}
+              instanceId={props.instanceId}
+              sessionId={props.sessionId}
             />
           </div>
         </Show>
