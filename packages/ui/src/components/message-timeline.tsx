@@ -32,7 +32,7 @@ const SEGMENT_LABELS: Record<TimelineSegmentType, string> = {
 const SEGMENT_SHORT_LABELS: Record<TimelineSegmentType, string> = {
   user: "U",
   assistant: "A",
-  tool: "T",
+  tool: "Tool",
 }
 
 const TOOL_FALLBACK_LABEL = "Tool Call"
@@ -151,7 +151,7 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
       pending = null
       return
     }
-    const label = SEGMENT_LABELS[pending.type]
+    const label = pending.type === "tool" ? (pending.toolTitles[0] || SEGMENT_LABELS[pending.type]) : SEGMENT_LABELS[pending.type]
     const tooltip = pending.type === "tool"
       ? formatToolTooltip(pending.toolTitles)
       : formatTextsTooltip(
@@ -306,7 +306,9 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
               onMouseLeave={handleMouseLeave}
             >
               <span class="message-timeline-label message-timeline-label-full">{segment.label}</span>
-              <span class="message-timeline-label message-timeline-label-short">{SEGMENT_SHORT_LABELS[segment.type]}</span>
+              <span class="message-timeline-label message-timeline-label-short">
+                {segment.type === "tool" ? (segment.label.slice(0, 4).toUpperCase()) : SEGMENT_SHORT_LABELS[segment.type]}
+              </span>
             </button>
           )
         }}
