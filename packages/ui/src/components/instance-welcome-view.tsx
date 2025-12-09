@@ -1,12 +1,14 @@
 import { Component, createSignal, Show, For, createEffect, onMount, onCleanup, createMemo } from "solid-js"
-import { Loader2, Trash2 } from "lucide-solid"
+import { Loader2, Pencil, Trash2 } from "lucide-solid"
 
 import type { Instance } from "../types/instance"
-import { getParentSessions, createSession, setActiveParentSession, deleteSession, loading } from "../stores/sessions"
+import { getParentSessions, createSession, setActiveParentSession, deleteSession, loading, renameSession } from "../stores/sessions"
 import InstanceInfo from "./instance-info"
 import Kbd from "./kbd"
+import SessionRenameDialog from "./session-rename-dialog"
 import { keyboardRegistry, type KeyboardShortcut } from "../lib/keyboard-registry"
 import { isMac } from "../lib/keyboard-utils"
+import { showToastNotification } from "../lib/notifications"
 import { getLogger } from "../lib/logger"
 const log = getLogger("actions")
 
@@ -24,6 +26,8 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
   const [isDesktopLayout, setIsDesktopLayout] = createSignal(
     typeof window !== "undefined" ? window.matchMedia("(min-width: 1024px)").matches : false,
   )
+  const [renameTarget, setRenameTarget] = createSignal<{ id: string; title: string; label: string } | null>(null)
+  const [isRenaming, setIsRenaming] = createSignal(false)
 
   const parentSessions = () => getParentSessions(props.instance.id)
   const isFetchingSessions = createMemo(() => Boolean(loading().fetchingSessions.get(props.instance.id)))
@@ -74,6 +78,25 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
   }
 
   function handleKeyDown(e: KeyboardEvent) {
+    let activeElement: HTMLElement | null = null
+    if (typeof document !== "undefined") {
+      activeElement = document.activeElement as HTMLElement | null
+    }
+    const insideModal = activeElement?.closest(".modal-surface") || activeElement?.closest("[role='dialog']")
+    const isEditingField =
+      activeElement &&
+      (["INPUT", "TEXTAREA", "SELECT"].includes(activeElement.tagName) ||
+        activeElement.isContentEditable ||
+        Boolean(insideModal))
+ 
+    if (isEditingField) {
+      if (insideModal && e.key === "Escape" && renameTarget()) {
+        e.preventDefault()
+        closeRenameDialog()
+      }
+      return
+    }
+ 
     if (showInstanceInfoOverlay()) {
       if (e.key === "Escape") {
         e.preventDefault()
@@ -81,53 +104,67 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       }
       return
     }
-
+ 
     const sessions = parentSessions()
-
+ 
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "n") {
       e.preventDefault()
       handleNewSession()
       return
     }
-
+ 
     if (sessions.length === 0) return
-
+ 
+    const listFocused = focusMode() === "sessions"
+ 
     if (e.key === "ArrowDown") {
+      if (!listFocused) {
+        setFocusMode("sessions")
+        setSelectedIndex(0)
+      }
       e.preventDefault()
       const newIndex = Math.min(selectedIndex() + 1, sessions.length - 1)
       setSelectedIndex(newIndex)
-      setFocusMode("sessions")
       scrollToIndex(newIndex)
-    } else if (e.key === "ArrowUp") {
+      return
+    }
+ 
+    if (e.key === "ArrowUp") {
+      if (!listFocused) {
+        setFocusMode("sessions")
+        setSelectedIndex(Math.max(parentSessions().length - 1, 0))
+      }
       e.preventDefault()
       const newIndex = Math.max(selectedIndex() - 1, 0)
       setSelectedIndex(newIndex)
-      setFocusMode("sessions")
       scrollToIndex(newIndex)
-    } else if (e.key === "PageDown") {
+      return
+    }
+ 
+    if (!listFocused) {
+      return
+    }
+ 
+    if (e.key === "PageDown") {
       e.preventDefault()
       const pageSize = 5
       const newIndex = Math.min(selectedIndex() + pageSize, sessions.length - 1)
       setSelectedIndex(newIndex)
-      setFocusMode("sessions")
       scrollToIndex(newIndex)
     } else if (e.key === "PageUp") {
       e.preventDefault()
       const pageSize = 5
       const newIndex = Math.max(selectedIndex() - pageSize, 0)
       setSelectedIndex(newIndex)
-      setFocusMode("sessions")
       scrollToIndex(newIndex)
     } else if (e.key === "Home") {
       e.preventDefault()
       setSelectedIndex(0)
-      setFocusMode("sessions")
       scrollToIndex(0)
     } else if (e.key === "End") {
       e.preventDefault()
       const newIndex = sessions.length - 1
       setSelectedIndex(newIndex)
-      setFocusMode("sessions")
       scrollToIndex(newIndex)
     } else if (e.key === "Enter") {
       e.preventDefault()
@@ -137,6 +174,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       void handleDeleteKey()
     }
   }
+
 
   async function handleEnterKey() {
     const sessions = parentSessions()
@@ -231,6 +269,31 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       await deleteSession(props.instance.id, sessionId)
     } catch (error) {
       log.error("Failed to delete session:", error)
+    }
+  }
+
+  function openRenameDialogForSession(sessionId: string, title: string) {
+    const label = title && title.trim() ? title : sessionId
+    setRenameTarget({ id: sessionId, title: title ?? "", label })
+  }
+
+  function closeRenameDialog() {
+    setRenameTarget(null)
+  }
+
+  async function handleRenameSubmit(nextTitle: string) {
+    const target = renameTarget()
+    if (!target) return
+
+    setIsRenaming(true)
+    try {
+      await renameSession(props.instance.id, target.id, nextTitle)
+      setRenameTarget(null)
+    } catch (error) {
+      log.error("Failed to rename session:", error)
+      showToastNotification({ message: "Unable to rename session", variant: "error" })
+    } finally {
+      setIsRenaming(false)
     }
   }
 
@@ -355,6 +418,18 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
                           <Show when={isFocused()}>
                             <div class="flex items-center gap-2 flex-shrink-0">
                               <kbd class="kbd flex-shrink-0">↵</kbd>
+                              <button
+                                type="button"
+                                class="p-1.5 rounded transition-colors text-muted hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                                title="Rename session"
+                                onClick={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  openRenameDialogForSession(session.id, session.title || "")
+                                }}
+                              >
+                                <Pencil class="w-4 h-4" />
+                              </button>
                               <button
                                 type="button"
                                 class="p-1.5 rounded transition-colors text-muted hover:text-red-500 dark:hover:text-red-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -488,10 +563,17 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
           </div>
         </div>
       </div>
+
+      <SessionRenameDialog
+        open={Boolean(renameTarget())}
+        currentTitle={renameTarget()?.title ?? ""}
+        sessionLabel={renameTarget()?.label}
+        isSubmitting={isRenaming()}
+        onRename={handleRenameSubmit}
+        onClose={closeRenameDialog}
+      />
     </div>
   )
 }
- 
- export default InstanceWelcomeView
 
-
+export default InstanceWelcomeView

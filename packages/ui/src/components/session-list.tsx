@@ -1,13 +1,14 @@
 import { Component, For, Show, createSignal, createEffect, onCleanup, onMount, createMemo, JSX } from "solid-js"
 import type { Session, SessionStatus } from "../types/session"
 import { getSessionStatus } from "../stores/session-status"
-import { MessageSquare, Info, X, Copy, Trash2 } from "lucide-solid"
+import { MessageSquare, Info, X, Copy, Trash2, Pencil } from "lucide-solid"
 import KeyboardHint from "./keyboard-hint"
 import Kbd from "./kbd"
+import SessionRenameDialog from "./session-rename-dialog"
 import { keyboardRegistry } from "../lib/keyboard-registry"
 import { formatShortcut } from "../lib/keyboard-utils"
 import { showToastNotification } from "../lib/notifications"
-import { deleteSession, loading } from "../stores/sessions"
+import { deleteSession, loading, renameSession } from "../stores/sessions"
 import { getLogger } from "../lib/logger"
 const log = getLogger("session")
 
@@ -66,6 +67,8 @@ const SessionList: Component<SessionListProps> = (props) => {
   const [isResizing, setIsResizing] = createSignal(false)
   const [startX, setStartX] = createSignal(0)
   const [startWidth, setStartWidth] = createSignal(DEFAULT_WIDTH)
+  const [renameTarget, setRenameTarget] = createSignal<{ id: string; title: string; label: string } | null>(null)
+  const [isRenaming, setIsRenaming] = createSignal(false)
   const infoShortcut = keyboardRegistry.get("switch-to-info")
  
   const isSessionDeleting = (sessionId: string) => {
@@ -132,8 +135,36 @@ const SessionList: Component<SessionListProps> = (props) => {
       showToastNotification({ message: "Unable to delete session", variant: "error" })
     }
   }
+
+  const openRenameDialog = (sessionId: string) => {
+    const session = props.sessions.get(sessionId)
+    if (!session) return
+    const label = session.title && session.title.trim() ? session.title : sessionId
+    setRenameTarget({ id: sessionId, title: session.title ?? "", label })
+  }
+
+  const closeRenameDialog = () => {
+    setRenameTarget(null)
+  }
+
+  const handleRenameSubmit = async (nextTitle: string) => {
+    const target = renameTarget()
+    if (!target) return
+
+    setIsRenaming(true)
+    try {
+      await renameSession(props.instanceId, target.id, nextTitle)
+      setRenameTarget(null)
+    } catch (error) {
+      log.error(`Failed to rename session ${target.id}:`, error)
+      showToastNotification({ message: "Unable to rename session", variant: "error" })
+    } finally {
+      setIsRenaming(false)
+    }
+  }
  
   const clampWidth = (width: number) => Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width))
+ 
 
  
 
@@ -283,6 +314,19 @@ const SessionList: Component<SessionListProps> = (props) => {
               </span>
               <span
                 class={`session-item-close opacity-80 hover:opacity-100 ${isActive() ? "hover:bg-white/20" : "hover:bg-surface-hover"}`}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  openRenameDialog(rowProps.sessionId)
+                }}
+                role="button"
+                tabIndex={0}
+                aria-label="Rename session"
+                title="Rename session"
+              >
+                <Pencil class="w-3 h-3" />
+              </span>
+              <span
+                class={`session-item-close opacity-80 hover:opacity-100 ${isActive() ? "hover:bg-white/20" : "hover:bg-surface-hover"}`}
                 onClick={(event) => handleDeleteSession(event, rowProps.sessionId)}
                 role="button"
                 tabIndex={0}
@@ -418,8 +462,18 @@ const SessionList: Component<SessionListProps> = (props) => {
           {props.footerContent ?? null}
         </div>
       </Show>
+
+      <SessionRenameDialog
+        open={Boolean(renameTarget())}
+        currentTitle={renameTarget()?.title ?? ""}
+        sessionLabel={renameTarget()?.label}
+        isSubmitting={isRenaming()}
+        onRename={handleRenameSubmit}
+        onClose={closeRenameDialog}
+      />
     </div>
   )
 }
 
 export default SessionList
+

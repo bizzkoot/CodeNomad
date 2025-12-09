@@ -334,9 +334,39 @@ async function updateSessionModel(
   updateSessionInfo(instanceId, sessionId)
 }
 
+async function renameSession(instanceId: string, sessionId: string, nextTitle: string): Promise<void> {
+  const instance = instances().get(instanceId)
+  if (!instance || !instance.client) {
+    throw new Error("Instance not ready")
+  }
+
+  const session = sessions().get(instanceId)?.get(sessionId)
+  if (!session) {
+    throw new Error("Session not found")
+  }
+
+  const trimmedTitle = nextTitle.trim()
+  if (!trimmedTitle) {
+    throw new Error("Session title is required")
+  }
+
+  await instance.client.session.update({
+    path: { id: sessionId },
+    body: { title: trimmedTitle },
+  })
+
+  withSession(instanceId, sessionId, (current) => {
+    current.title = trimmedTitle
+    const time = { ...(current.time ?? {}) }
+    time.updated = Date.now()
+    current.time = time
+  })
+}
+
 export {
   abortSession,
   executeCustomCommand,
+  renameSession,
   runShellCommand,
   sendMessage,
   updateSessionAgent,

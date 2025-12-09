@@ -41,6 +41,7 @@ import {
 import {
   abortSession,
   executeCustomCommand,
+  renameSession,
   runShellCommand,
   sendMessage,
   updateSessionAgent,
@@ -82,6 +83,7 @@ export {
   createSession,
   deleteSession,
   executeCustomCommand,
+  renameSession,
   runShellCommand,
   fetchAgents,
   fetchProviders,
