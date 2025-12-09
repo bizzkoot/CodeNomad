@@ -1,4 +1,4 @@
-import { JSX, Show, Accessor, children as resolveChildren, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { JSX, Accessor, children as resolveChildren, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
 const sizeCache = new Map<string, number>()
 const DEFAULT_MARGIN_PX = 600
@@ -133,8 +133,14 @@ export default function VirtualItem(props: VirtualItemProps) {
     })
   }
   const virtualizationEnabled = () => (props.virtualizationEnabled ? props.virtualizationEnabled() : true)
+  const shouldHideContent = createMemo(() => {
+    if (props.forceVisible?.()) return false
+    if (!virtualizationEnabled()) return false
+    return !isIntersecting()
+  })
+ 
+   let wrapperRef: HTMLDivElement | undefined
 
-  let wrapperRef: HTMLDivElement | undefined
   let contentRef: HTMLDivElement | undefined
   let resizeObserver: ResizeObserver | undefined
   let intersectionCleanup: (() => void) | undefined
@@ -213,6 +219,7 @@ export default function VirtualItem(props: VirtualItemProps) {
     contentRef = element ?? undefined
     if (contentRef) {
       queueMicrotask(() => {
+        if (shouldHideContent()) return
         updateMeasuredHeight()
         setupResizeObserver()
       })
@@ -220,9 +227,21 @@ export default function VirtualItem(props: VirtualItemProps) {
       cleanupResizeObserver()
     }
   }
-
+ 
+  createEffect(() => {
+    if (shouldHideContent()) {
+      cleanupResizeObserver()
+    } else if (contentRef) {
+      queueMicrotask(() => {
+        updateMeasuredHeight()
+        setupResizeObserver()
+      })
+    }
+  })
+ 
   createEffect(() => {
     const key = props.cacheKey
+
     const cached = sizeCache.get(key)
     if (cached !== undefined) {
       setMeasuredHeight(cached)
@@ -238,13 +257,8 @@ export default function VirtualItem(props: VirtualItemProps) {
     refreshIntersectionObserver(root ?? null)
   })
 
-  const shouldHideContent = createMemo(() => {
-    if (props.forceVisible?.()) return false
-    if (!virtualizationEnabled()) return false
-    return !isIntersecting()
-  })
- 
   const placeholderHeight = createMemo(() => {
+
     const seenHeight = measuredHeight()
     if (seenHeight > 0) {
       return seenHeight
@@ -267,6 +281,14 @@ export default function VirtualItem(props: VirtualItemProps) {
     return classes.filter(Boolean).join(" ")
   }
   const placeholderClass = () => ["virtual-item-placeholder", props.placeholderClass].filter(Boolean).join(" ")
+  const lazyContent = createMemo<JSX.Element | null>(() => {
+    if (shouldHideContent()) return null
+    if (import.meta.env?.DEV) {
+      console.debug("rendering virtual item", props.cacheKey)
+    }
+    return resolved()
+  })
+
  
   return (
     <div ref={setWrapperRef} id={props.id} class={wrapperClass()} style={{ width: "100%" }}>
@@ -278,7 +300,7 @@ export default function VirtualItem(props: VirtualItemProps) {
         }}
       >
         <div ref={setContentRef} class={contentClass()}>
-          {resolved()}
+          {lazyContent()}
         </div>
       </div>
     </div>
