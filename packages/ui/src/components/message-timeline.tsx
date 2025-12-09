@@ -239,6 +239,9 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
   const store = () => messageStoreBus.getOrCreate(props.instanceId)
   const [hoveredSegment, setHoveredSegment] = createSignal<TimelineSegment | null>(null)
   const [tooltipCoords, setTooltipCoords] = createSignal<{ top: number; left: number }>({ top: 0, left: 0 })
+  const [hoverAnchorRect, setHoverAnchorRect] = createSignal<{ top: number; left: number; width: number; height: number } | null>(null)
+  const [tooltipSize, setTooltipSize] = createSignal<{ width: number; height: number }>({ width: 360, height: 420 })
+  const [tooltipElement, setTooltipElement] = createSignal<HTMLDivElement | null>(null)
   let hoverTimer: number | null = null
   const showTools = () => props.showToolSegments ?? true
  
@@ -261,31 +264,40 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
     if (typeof window === "undefined") return
     clearHoverTimer()
     const target = event.currentTarget as HTMLButtonElement
-      hoverTimer = window.setTimeout(() => {
-        const rect = target.getBoundingClientRect()
-        const tooltipWidth = 360
-        const tooltipHeight = 420
-        const verticalGap = 16
-        const horizontalGap = 16
-        const preferredTop = rect.top + rect.height / 2 - tooltipHeight / 2
-        const clampedTop = Math.min(window.innerHeight - tooltipHeight - verticalGap, Math.max(verticalGap, preferredTop))
-        const preferredLeft = rect.left - tooltipWidth - horizontalGap
-        const clampedLeft = Math.max(horizontalGap, preferredLeft)
-        setTooltipCoords({ top: clampedTop, left: clampedLeft })
-        setHoveredSegment(segment)
-      }, 200)
-
+    hoverTimer = window.setTimeout(() => {
+      const rect = target.getBoundingClientRect()
+      setHoverAnchorRect({ top: rect.top, left: rect.left, width: rect.width, height: rect.height })
+      setHoveredSegment(segment)
+    }, 200)
   }
- 
+
   const handleMouseLeave = () => {
     clearHoverTimer()
     setHoveredSegment(null)
+    setHoverAnchorRect(null)
   }
  
+  createEffect(() => {
+    if (typeof window === "undefined") return
+    const anchor = hoverAnchorRect()
+    const segment = hoveredSegment()
+    if (!anchor || !segment) return
+    const { width, height } = tooltipSize()
+    const verticalGap = 16
+    const horizontalGap = 16
+    const preferredTop = anchor.top + anchor.height / 2 - height / 2
+    const maxTop = window.innerHeight - height - verticalGap
+    const clampedTop = Math.min(maxTop, Math.max(verticalGap, preferredTop))
+    const preferredLeft = anchor.left - width - horizontalGap
+    const clampedLeft = Math.max(horizontalGap, preferredLeft)
+    setTooltipCoords({ top: clampedTop, left: clampedLeft })
+  })
+
   onCleanup(() => clearHoverTimer())
- 
+
   createEffect(() => {
     const activeId = props.activeMessageId
+
     if (!activeId) return
     const targetSegment = props.segments.find((segment) => segment.messageId === activeId)
     if (!targetSegment) return
@@ -300,8 +312,23 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
       }
     })
   })
- 
+
+  createEffect(() => {
+    const element = tooltipElement()
+    if (!element || typeof window === "undefined") return
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect()
+      setTooltipSize({ width: rect.width, height: rect.height })
+    }
+    updateSize()
+    if (typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => updateSize())
+    observer.observe(element)
+    onCleanup(() => observer.disconnect())
+  })
+
   const previewData = createMemo(() => {
+
     const segment = hoveredSegment()
     if (!segment) return null
     const record = store().getMessage(segment.messageId)
@@ -343,16 +370,23 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
         }}
       </For>
       <Show when={previewData()}>
-        {(data) => (
-          <div class="message-timeline-tooltip" style={{ top: `${tooltipCoords().top}px`, left: `${tooltipCoords().left}px` }}>
-            <MessagePreview
-              messageId={data().messageId}
-              instanceId={props.instanceId}
-              sessionId={props.sessionId}
-              store={store}
-            />
-          </div>
-        )}
+        {(data) => {
+          onCleanup(() => setTooltipElement(null))
+          return (
+            <div
+              ref={(element) => setTooltipElement(element)}
+              class="message-timeline-tooltip"
+              style={{ top: `${tooltipCoords().top}px`, left: `${tooltipCoords().left}px` }}
+            >
+              <MessagePreview
+                messageId={data().messageId}
+                instanceId={props.instanceId}
+                sessionId={props.sessionId}
+                store={store}
+              />
+            </div>
+          )
+        }}
       </Show>
     </div>
   )
