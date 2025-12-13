@@ -1086,8 +1086,9 @@ export default function PromptInput(props: PromptInputProps) {
               </For>
             </div>
           </Show>
-          <div class="prompt-input-field">
-            <textarea
+          <div class="prompt-input-field-container">
+            <div class="prompt-input-field">
+              <textarea
               ref={textareaRef}
               class={`prompt-input ${mode() === "shell" ? "shell-mode" : ""}`}
               placeholder={
@@ -1167,6 +1168,7 @@ export default function PromptInput(props: PromptInputProps) {
             </Show>
           </div>
         </div>
+      </div>
 
         <div class="prompt-input-actions">
           <button
