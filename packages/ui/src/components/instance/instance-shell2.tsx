@@ -338,55 +338,55 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     ),
   )
 
-  const runAfterDrawerReady = (callback: (() => void) | undefined, attempts = 12) => {
-    if (!callback) return
-    if (leftDrawerContentEl()) {
-      requestAnimationFrame(() => callback())
-      return
-    }
-    if (attempts <= 0) return
-    requestAnimationFrame(() => runAfterDrawerReady(callback, attempts - 1))
+  interface PendingSidebarAction {
+    action: SessionSidebarRequestAction
+    id: number
   }
 
-  const ensureLeftDrawerVisible = (callback?: () => void) => {
-    if (leftPinned()) {
-      runAfterDrawerReady(callback)
-      return
-    }
-    if (!leftOpen()) {
-      setLeftOpen(true)
-      measureDrawerHost()
-    }
-    runAfterDrawerReady(callback)
-  }
+  let sidebarActionId = 0
+  const [pendingSidebarAction, setPendingSidebarAction] = createSignal<PendingSidebarAction | null>(null)
 
   const focusAgentSelectorControl = () => {
     const agentTrigger = leftDrawerContentEl()?.querySelector("[data-agent-selector]") as HTMLElement | null
-    if (!agentTrigger) return
+    if (!agentTrigger) return false
     agentTrigger.focus()
-    setTimeout(() => agentTrigger.click(), 20)
+    setTimeout(() => agentTrigger.click(), 10)
+    return true
   }
 
   const focusModelSelectorControl = () => {
-    const trigger = leftDrawerContentEl()?.querySelector(
+    const trigger = leftDrawerContentEl()?.querySelector<HTMLElement>(
       "[data-model-selector-control] .selector-trigger",
-    ) as HTMLElement | null
-    if (!trigger) return
+    )
+    if (!trigger) return false
     trigger.focus()
-    setTimeout(() => trigger.click(), 20)
+    setTimeout(() => trigger.click(), 10)
+    return true
   }
 
-  const handleSidebarRequest = (action: SessionSidebarRequestAction) => {
-    if (action === "focus-agent-selector") {
-      ensureLeftDrawerVisible(() => focusAgentSelectorControl())
-      return
-    }
-    if (action === "focus-model-selector") {
-      ensureLeftDrawerVisible(() => focusModelSelectorControl())
+  createEffect(() => {
+    const pending = pendingSidebarAction()
+    if (!pending) return
+    const action = pending.action
+    const contentReady = Boolean(leftDrawerContentEl())
+    if (!contentReady) {
       return
     }
     if (action === "show-session-list") {
-      ensureLeftDrawerVisible()
+      setPendingSidebarAction(null)
+      return
+    }
+    const handled = action === "focus-agent-selector" ? focusAgentSelectorControl() : focusModelSelectorControl()
+    if (handled) {
+      setPendingSidebarAction(null)
+    }
+  })
+
+  const handleSidebarRequest = (action: SessionSidebarRequestAction) => {
+    setPendingSidebarAction({ action, id: sidebarActionId++ })
+    if (!leftPinned() && !leftOpen()) {
+      setLeftOpen(true)
+      measureDrawerHost()
     }
   }
 
