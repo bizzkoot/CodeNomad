@@ -9,6 +9,7 @@ import { abortSession, getSessions, isSessionBusy } from "../../stores/sessions"
 import { showCommandPalette, hideCommandPalette } from "../../stores/command-palette"
 import type { Instance } from "../../types/instance"
 import { getLogger } from "../logger"
+import { emitSessionSidebarRequest } from "../session-sidebar-events"
 
 const log = getLogger("actions")
 
@@ -55,38 +56,14 @@ export function useAppLifecycle(options: UseAppLifecycleOptions) {
 
     registerAgentShortcuts(
       () => {
-        const modelInput = document.querySelector("[data-model-selector]") as HTMLInputElement
-        if (modelInput) {
-          modelInput.focus()
-          setTimeout(() => {
-            const event = new KeyboardEvent("keydown", {
-              key: "ArrowDown",
-              code: "ArrowDown",
-              keyCode: 40,
-              which: 40,
-              bubbles: true,
-              cancelable: true,
-            })
-            modelInput.dispatchEvent(event)
-          }, 10)
-        }
+        const instance = options.getActiveInstance()
+        if (!instance) return
+        emitSessionSidebarRequest({ instanceId: instance.id, action: "focus-model-selector" })
       },
       () => {
-        const agentTrigger = document.querySelector("[data-agent-selector]") as HTMLElement
-        if (agentTrigger) {
-          agentTrigger.focus()
-          setTimeout(() => {
-            const event = new KeyboardEvent("keydown", {
-              key: "Enter",
-              code: "Enter",
-              keyCode: 13,
-              which: 13,
-              bubbles: true,
-              cancelable: true,
-            })
-            agentTrigger.dispatchEvent(event)
-          }, 50)
-        }
+        const instance = options.getActiveInstance()
+        if (!instance) return
+        emitSessionSidebarRequest({ instanceId: instance.id, action: "focus-agent-selector" })
       },
     )
 
