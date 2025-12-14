@@ -114,7 +114,7 @@ export default function AgentSelector(props: AgentSelectorProps) {
         </Select.Trigger>
 
         <Select.Portal>
-          <Select.Content class="selector-popover max-h-80 overflow-auto p-1 z-50">
+          <Select.Content class="selector-popover max-h-80 overflow-auto p-1">
             <Select.Listbox class="selector-listbox" />
           </Select.Content>
         </Select.Portal>
