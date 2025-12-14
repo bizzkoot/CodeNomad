@@ -1,6 +1,6 @@
 /* Panel component shells */
 .panel {
-  @apply rounded-lg shadow-sm border overflow-hidden;
+  @apply rounded-lg shadow-sm border overflow-hidden min-w-0;
   background-color: var(--surface-base);
   border-color: var(--border-base);
   color: var(--text-primary);
@@ -53,7 +53,8 @@
 }
 
 .panel-list {
-  @apply max-h-[400px] overflow-y-auto;
+  @apply max-h-[400px] overflow-y-auto w-full min-w-0;
+  overflow-x: hidden;
 }
 
 .panel-list--fill {
@@ -76,7 +77,7 @@
 }
 
 .panel-list-item-content {
-  @apply flex-1 text-left px-4 py-3 flex items-center justify-between gap-3 outline-none transition-colors w-full;
+  @apply flex-1 text-left px-4 py-3 flex items-center justify-between gap-3 outline-none transition-colors w-full min-w-0;
 }
 
 .panel-list-item-content:hover {

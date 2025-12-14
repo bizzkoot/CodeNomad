@@ -399,7 +399,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
                               <div class="flex-1 min-w-0">
                                 <div class="flex items-center gap-2">
                                   <span
-                                    class="text-sm font-medium text-primary truncate transition-colors"
+                                    class="text-sm font-medium text-primary whitespace-normal break-words transition-colors"
                                     classList={{
                                       "text-accent": isFocused(),
                                     }}
