@@ -346,11 +346,24 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   let sidebarActionId = 0
   const [pendingSidebarAction, setPendingSidebarAction] = createSignal<PendingSidebarAction | null>(null)
 
+  const triggerKeyboardEvent = (target: HTMLElement, options: { key: string; code: string; keyCode: number }) => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: options.key,
+        code: options.code,
+        keyCode: options.keyCode,
+        which: options.keyCode,
+        bubbles: true,
+        cancelable: true,
+      }),
+    )
+  }
+
   const focusAgentSelectorControl = () => {
     const agentTrigger = leftDrawerContentEl()?.querySelector("[data-agent-selector]") as HTMLElement | null
     if (!agentTrigger) return false
     agentTrigger.focus()
-    setTimeout(() => agentTrigger.click(), 10)
+    setTimeout(() => triggerKeyboardEvent(agentTrigger, { key: "Enter", code: "Enter", keyCode: 13 }), 10)
     return true
   }
 
@@ -360,7 +373,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     )
     if (!trigger) return false
     trigger.focus()
-    setTimeout(() => trigger.click(), 10)
+    setTimeout(() => triggerKeyboardEvent(trigger, { key: "ArrowDown", code: "ArrowDown", keyCode: 40 }), 10)
     return true
   }
 
