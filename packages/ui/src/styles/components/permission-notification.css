@@ -2,38 +2,41 @@
 .permission-notification-banner {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-sm);
   padding: 0.375rem 0.75rem;
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  color: #000;
-  border: none;
-  border-radius: 0.375rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  background: linear-gradient(135deg, var(--status-warning) 0%, color-mix(in srgb, var(--status-warning) 85%, #000) 100%);
+  color: var(--text-inverted);
+  border: 1px solid color-mix(in srgb, var(--status-warning) 70%, #000);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--status-warning) 30%, transparent);
   animation: permission-pulse 2s ease-in-out infinite;
 }
 
 .permission-notification-banner:hover {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  box-shadow: 0 4px 8px rgba(251, 191, 36, 0.4);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--status-warning) 85%, #000) 0%, color-mix(in srgb, var(--status-warning) 70%, #000) 100%);
+  box-shadow: 0 4px 8px color-mix(in srgb, var(--status-warning) 40%, transparent);
   transform: translateY(-1px);
 }
 
 .permission-notification-banner:active {
   transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 2px 4px color-mix(in srgb, var(--status-warning) 30%, transparent);
 }
 
 .permission-notification-icon {
   font-size: 1rem;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .permission-notification-text {
   white-space: nowrap;
+  color: inherit;
+  font-size: inherit;
 }
 
 .permission-notification-count {
@@ -43,18 +46,72 @@
   min-width: 1.25rem;
   height: 1.25rem;
   padding: 0 0.25rem;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 0.625rem;
-  font-size: 0.625rem;
-  font-weight: 700;
+  background: color-mix(in srgb, #000 30%, transparent);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: inherit;
+  flex-shrink: 0;
 }
 
 @keyframes permission-pulse {
   0%, 100% {
-    box-shadow: 0 2px 4px rgba(251, 191, 36, 0.3);
+    box-shadow: 0 2px 4px color-mix(in srgb, var(--status-warning) 30%, transparent);
   }
   50% {
-    box-shadow: 0 2px 8px rgba(251, 191, 36, 0.6), 0 0 16px rgba(251, 191, 36, 0.3);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--status-warning) 60%, transparent), 0 0 16px color-mix(in srgb, var(--status-warning) 30%, transparent);
+  }
+}
+
+/* Web Permission Indicator Button (for browser-based streaming) */
+.permission-indicator-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: color-mix(in srgb, var(--status-warning) 15%, transparent);
+  color: var(--status-warning);
+  border: 2px solid var(--status-warning);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  animation: web-permission-pulse 2s ease-in-out infinite;
+}
+
+.permission-indicator-button:hover {
+  background: color-mix(in srgb, var(--status-warning) 25%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--status-warning) 50%, transparent);
+  transform: scale(1.05);
+}
+
+.permission-indicator-button:active {
+  transform: scale(0.98);
+}
+
+.permission-indicator-button:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
+.permission-indicator-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--font-size-xs);
+  color: inherit;
+}
+
+@keyframes web-permission-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--status-warning) 40%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-warning) 20%, transparent);
   }
 }
 
@@ -65,13 +122,13 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: color-mix(in srgb, var(--text-inverted) 60%, transparent);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
-  padding: 1rem;
+  padding: var(--space-lg);
   animation: modal-backdrop-fadein 0.2s ease;
 }
 
@@ -85,9 +142,10 @@
 }
 
 .permission-approval-modal {
-  background: var(--surface-color, #fff);
-  border-radius: 0.75rem;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  background: var(--surface-base);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 25px -5px color-mix(in srgb, #000 10%, transparent), 0 10px 10px -5px color-mix(in srgb, #000 4%, transparent);
   max-width: 48rem;
   width: 100%;
   max-height: 90vh;
@@ -108,127 +166,138 @@
 }
 
 .permission-modal-empty {
-  padding: 2rem;
+  padding: var(--space-xl);
+  color: var(--text-secondary);
+  text-align: center;
 }
 
 .permission-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1.5rem;
-  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--border-base);
+  gap: var(--space-lg);
 }
 
 .permission-modal-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text-primary, #111827);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
   margin: 0;
+  flex: 1;
 }
 
 .permission-modal-count {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.25rem 0.75rem;
-  background: var(--accent-bg, #f3f4f6);
-  border-radius: 0.375rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text-secondary, #6b7280);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--surface-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-base);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .permission-modal-body {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  padding: var(--space-lg);
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-lg);
 }
 
 .permission-modal-type {
   display: inline-flex;
   align-items: center;
-  padding: 0.25rem 0.75rem;
-  background: var(--warning-bg, #fef3c7);
-  color: var(--warning-text, #92400e);
-  border-radius: 0.375rem;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: var(--space-xs) var(--space-sm);
+  background: color-mix(in srgb, var(--status-warning) 20%, transparent);
+  color: var(--status-warning);
+  border: 1px solid color-mix(in srgb, var(--status-warning) 50%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   align-self: flex-start;
 }
 
 .permission-modal-message {
-  padding: 1rem;
-  background: var(--code-bg, #f9fafb);
-  border-radius: 0.5rem;
-  border: 1px solid var(--border-color, #e5e7eb);
+  padding: var(--space-lg);
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-mono);
+  word-break: break-word;
 }
 
 .permission-modal-message code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 0.875rem;
-  color: var(--text-primary, #111827);
-  word-break: break-word;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
 }
 
 .permission-modal-diff {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--space-sm);
 }
 
 .permission-modal-diff-label {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary, #6b7280);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .permission-modal-diff-viewer {
-  border: 1px solid var(--border-color, #e5e7eb);
-  border-radius: 0.5rem;
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-md);
   overflow: hidden;
   max-height: 24rem;
+  background: var(--surface-secondary);
 }
 
 .permission-modal-error {
-  padding: 0.75rem 1rem;
-  background: var(--error-bg, #fee2e2);
-  color: var(--error-text, #991b1b);
-  border-radius: 0.5rem;
-  border: 1px solid var(--error-border, #fecaca);
-  font-size: 0.875rem;
+  padding: var(--space-sm) var(--space-lg);
+  background: color-mix(in srgb, var(--status-error) 20%, transparent);
+  color: var(--status-error);
+  border: 1px solid color-mix(in srgb, var(--status-error) 50%, transparent);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
 }
 
 .permission-modal-footer {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 1.5rem;
-  border-top: 1px solid var(--border-color, #e5e7eb);
-  background: var(--surface-subtle, #f9fafb);
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  border-top: 1px solid var(--border-base);
+  background: var(--surface-secondary);
 }
 
 .permission-modal-buttons {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-sm);
   justify-content: stretch;
 }
 
 .permission-modal-button {
   flex: 1;
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--border-color, #d1d5db);
-  border-radius: 0.5rem;
-  font-size: 0.875rem;
-  font-weight: 600;
+  padding: var(--button-padding-y) var(--button-padding-x);
+  border: 1px solid transparent;
+  border-radius: var(--button-radius);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
   cursor: pointer;
   transition: all 0.15s ease;
+  font-family: var(--font-family-sans);
 }
 
 .permission-modal-button:disabled {
@@ -236,42 +305,47 @@
   cursor: not-allowed;
 }
 
+.permission-modal-button:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: 2px;
+}
+
 .permission-modal-button-once {
-  background: var(--primary-bg, #3b82f6);
-  color: white;
-  border-color: var(--primary-bg, #3b82f6);
+  background: var(--accent-primary);
+  color: var(--text-inverted);
+  border-color: var(--accent-primary);
 }
 
 .permission-modal-button-once:hover:not(:disabled) {
-  background: var(--primary-hover, #2563eb);
-  border-color: var(--primary-hover, #2563eb);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .permission-modal-button-always {
-  background: var(--success-bg, #10b981);
-  color: white;
-  border-color: var(--success-bg, #10b981);
+  background: var(--status-success);
+  color: var(--text-inverted);
+  border-color: var(--status-success);
 }
 
 .permission-modal-button-always:hover:not(:disabled) {
-  background: var(--success-hover, #059669);
-  border-color: var(--success-hover, #059669);
+  background: color-mix(in srgb, var(--status-success) 85%, #000);
+  border-color: color-mix(in srgb, var(--status-success) 85%, #000);
 }
 
 .permission-modal-button-deny {
-  background: var(--error-bg, #ef4444);
-  color: white;
-  border-color: var(--error-bg, #ef4444);
+  background: var(--status-error);
+  color: var(--text-inverted);
+  border-color: var(--status-error);
 }
 
 .permission-modal-button-deny:hover:not(:disabled) {
-  background: var(--error-hover, #dc2626);
-  border-color: var(--error-hover, #dc2626);
+  background: color-mix(in srgb, var(--status-error) 85%, #000);
+  border-color: color-mix(in srgb, var(--status-error) 85%, #000);
 }
 
 .permission-modal-shortcuts {
   display: flex;
-  gap: 1rem;
+  gap: var(--space-lg);
   justify-content: center;
   flex-wrap: wrap;
 }
@@ -279,56 +353,28 @@
 .permission-modal-shortcut {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.75rem;
-  color: var(--text-secondary, #6b7280);
+  gap: var(--space-sm);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
 }
 
 .permission-modal-shortcut kbd {
-  min-width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.375rem;
+  background: var(--kbd-bg);
+  border: 1px solid var(--kbd-border);
+  color: var(--kbd-text);
+  border-radius: var(--radius-xs);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, #000 10%, transparent);
 }
 
-/* Dark theme adjustments */
-:global(.dark) .permission-approval-modal {
-  background: var(--surface-color, #1f2937);
-}
-
-:global(.dark) .permission-modal-header {
-  border-bottom-color: var(--border-color, #374151);
-}
-
-:global(.dark) .permission-modal-title {
-  color: var(--text-primary, #f9fafb);
-}
-
-:global(.dark) .permission-modal-count {
-  background: var(--accent-bg, #374151);
-  color: var(--text-secondary, #d1d5db);
-}
-
-:global(.dark) .permission-modal-type {
-  background: rgba(251, 191, 36, 0.2);
-  color: #fbbf24;
-}
-
-:global(.dark) .permission-modal-message {
-  background: var(--code-bg, #111827);
-  border-color: var(--border-color, #374151);
-}
-
-:global(.dark) .permission-modal-message code {
-  color: var(--text-primary, #f9fafb);
-}
-
-:global(.dark) .permission-modal-diff-viewer {
-  border-color: var(--border-color, #374151);
-}
-
-:global(.dark) .permission-modal-footer {
-  border-top-color: var(--border-color, #374151);
-  background: var(--surface-subtle, #111827);
-}
-
-:global(.dark) .permission-modal-button {
-  border-color: var(--border-color, #4b5563);
-}
+/* Dark theme adjustments - already handled by CSS tokens above */
+/* The token system automatically applies correct colors for dark mode via
+   :root @media (prefers-color-scheme: dark) definitions */

@@ -1,4 +1,4 @@
-import { Component, createSignal, Show, onMount } from "solid-js"
+import { Component, createSignal, Show, onMount, createEffect } from "solid-js"
 import { Dialog } from "@kobalte/core/dialog"
 import { X, FolderTree } from "lucide-solid"
 import { serverApi } from "../lib/api-client"
@@ -58,14 +58,14 @@ const FolderTreeBrowser: Component<FolderTreeBrowserProps> = (props) => {
   /**
    * Fetch root directory entries when modal opens
    */
-  onMount(() => {
-    if (props.isOpen) {
+  createEffect(() => {
+    if (props.isOpen && rootEntries().length === 0 && !isLoadingRoot()) {
       void loadRootDirectory()
     }
   })
 
   /**
-   * Load root directory contents
+   * Fetch root directory contents
    */
   async function loadRootDirectory() {
     setIsLoadingRoot(true)
