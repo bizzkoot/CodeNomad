@@ -1246,6 +1246,26 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                     >
                       <span class="status-dot" />
                     </span>
+
+                    <Show when={!showingInfoView()}>
+                      <button
+                        type="button"
+                        class="connection-status-button px-2 py-0.5 text-xs flex items-center gap-1 whitespace-nowrap"
+                        onClick={() => setFolderTreeBrowserOpen(true)}
+                        aria-label="Browse workspace files"
+                        style={{ flex: "0 0 auto" }}
+                      >
+                        <FolderTree size={14} />
+                        <span class="file-button-label">Files</span>
+                      </button>
+                    </Show>
+
+                    <div style={{ flex: "0 0 auto", display: "flex", "align-items": "center" }}>
+                      <PermissionNotificationBanner
+                        instanceId={props.instance.id}
+                        onClick={() => setPermissionModalOpen(true)}
+                      />
+                    </div>
                   </div>
 
                   <IconButton
