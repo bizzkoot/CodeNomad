@@ -57,7 +57,6 @@
 .folder-tree-browser-body {
   @apply flex-1 overflow-y-auto px-2 py-3;
   min-height: 300px;
-  max-height: calc(80vh - 140px);
 }
 
 .folder-tree-browser-tree {
