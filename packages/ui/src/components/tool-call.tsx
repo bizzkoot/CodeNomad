@@ -7,6 +7,7 @@ import { useGlobalCache } from "../lib/hooks/use-global-cache"
 import { useConfig } from "../stores/preferences"
 import type { DiffViewMode } from "../stores/preferences"
 import { sendPermissionResponse } from "../stores/instances"
+import { getPermissionDisplayTitle, getPermissionKind, getPermissionSessionId } from "../types/permission"
 import type { TextPart, RenderCache } from "../types/message"
 import { resolveToolRenderer } from "./tool-call/renderers"
 import type {
@@ -837,7 +838,7 @@ export default function ToolCall(props: ToolCallProps) {
     setPermissionSubmitting(true)
     setPermissionError(null)
     try {
-      const sessionId = permission.sessionID || props.sessionId
+      const sessionId = getPermissionSessionId(permission) || props.sessionId
       await sendPermissionResponse(props.instanceId, sessionId, permission.id, response)
     } catch (error) {
       log.error("Failed to send permission response", error)
@@ -882,11 +883,11 @@ export default function ToolCall(props: ToolCallProps) {
       <div class={`tool-call-permission ${active ? "tool-call-permission-active" : "tool-call-permission-queued"}`}>
         <div class="tool-call-permission-header">
           <span class="tool-call-permission-label">{active ? "Permission Required" : "Permission Queued"}</span>
-          <span class="tool-call-permission-type">{permission.type}</span>
+          <span class="tool-call-permission-type">{getPermissionKind(permission)}</span>
         </div>
         <div class="tool-call-permission-body">
           <div class="tool-call-permission-title">
-            <code>{permission.title}</code>
+            <code>{getPermissionDisplayTitle(permission)}</code>
           </div>
           <Show when={diffPayload}>
             {(payload) => (

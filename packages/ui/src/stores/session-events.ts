@@ -6,8 +6,6 @@ import type {
   MessageUpdateEvent,
 } from "../types/message"
 import type {
-  EventPermissionReplied,
-  EventPermissionUpdated,
   EventSessionCompacted,
   EventSessionError,
   EventSessionIdle,
@@ -17,6 +15,8 @@ import type {
 import type { MessageStatus } from "./message-v2/types"
 
 import { getLogger } from "../lib/logger"
+import { getPermissionId, getPermissionKind, getRequestIdFromPermissionReply } from "../types/permission"
+import type { PermissionReplyEventPropertiesLike, PermissionRequestLike } from "../types/permission"
 import { showToastNotification, ToastVariant } from "../lib/notifications"
 import { instances, addPermissionToQueue, removePermissionFromQueue } from "./instances"
 import { showAlertDialog } from "./alerts"
@@ -442,22 +442,23 @@ function handleTuiToast(_instanceId: string, event: TuiToastEvent): void {
   })
 }
 
-function handlePermissionUpdated(instanceId: string, event: EventPermissionUpdated): void {
-  const permission = event.properties
+function handlePermissionUpdated(instanceId: string, event: { type: string; properties?: PermissionRequestLike } | any): void {
+  const permission = event?.properties as PermissionRequestLike | undefined
   if (!permission) return
 
-  log.info(`[SSE] Permission updated: ${permission.id} (${permission.type})`)
+  log.info(`[SSE] Permission request: ${getPermissionId(permission)} (${getPermissionKind(permission)})`)
   addPermissionToQueue(instanceId, permission)
   upsertPermissionV2(instanceId, permission)
 }
 
-function handlePermissionReplied(instanceId: string, event: EventPermissionReplied): void {
-  const { permissionID } = event.properties
-  if (!permissionID) return
+function handlePermissionReplied(instanceId: string, event: { type: string; properties?: PermissionReplyEventPropertiesLike } | any): void {
+  const properties = event?.properties as PermissionReplyEventPropertiesLike | undefined
+  const requestId = getRequestIdFromPermissionReply(properties)
+  if (!requestId) return
 
-  log.info(`[SSE] Permission replied: ${permissionID}`)
-  removePermissionFromQueue(instanceId, permissionID)
-  removePermissionV2(instanceId, permissionID)
+  log.info(`[SSE] Permission replied: ${requestId}`)
+  removePermissionFromQueue(instanceId, requestId)
+  removePermissionV2(instanceId, requestId)
 }
 
 export {

@@ -1,6 +1,8 @@
 import { createSignal } from "solid-js"
 import type { Instance, LogEntry } from "../types/instance"
-import type { LspStatus, Permission } from "@opencode-ai/sdk"
+import type { LspStatus } from "@opencode-ai/sdk"
+import type { PermissionReply, PermissionRequestLike } from "../types/permission"
+import { getPermissionCreatedAt, getPermissionSessionId } from "../types/permission"
 import { sdkManager } from "../lib/sdk-manager"
 import { sseManager } from "../lib/sse-manager"
 import { serverApi } from "../lib/api-client"
@@ -31,7 +33,7 @@ const [instanceLogs, setInstanceLogs] = createSignal<Map<string, LogEntry[]>>(ne
 const [logStreamingState, setLogStreamingState] = createSignal<Map<string, boolean>>(new Map())
 
 // Permission queue management per instance
-const [permissionQueues, setPermissionQueues] = createSignal<Map<string, Permission[]>>(new Map())
+const [permissionQueues, setPermissionQueues] = createSignal<Map<string, PermissionRequestLike[]>>(new Map())
 const [activePermissionId, setActivePermissionId] = createSignal<Map<string, string | null>>(new Map())
 const permissionSessionCounts = new Map<string, Map<string, number>>()
 
@@ -382,7 +384,7 @@ function clearLogs(id: string) {
 }
 
 // Permission management functions
-function getPermissionQueue(instanceId: string): Permission[] {
+function getPermissionQueue(instanceId: string): PermissionRequestLike[] {
   const queue = permissionQueues().get(instanceId)
   if (!queue) {
     return []
@@ -429,7 +431,7 @@ function clearSessionPendingCounts(instanceId: string): void {
   permissionSessionCounts.delete(instanceId)
 }
 
-function addPermissionToQueue(instanceId: string, permission: Permission): void {
+function addPermissionToQueue(instanceId: string, permission: PermissionRequestLike): void {
   let inserted = false
 
   setPermissionQueues((prev) => {
@@ -440,7 +442,7 @@ function addPermissionToQueue(instanceId: string, permission: Permission): void 
       return next
     }
 
-    const updatedQueue = [...queue, permission].sort((a, b) => a.time.created - b.time.created)
+    const updatedQueue = [...queue, permission].sort((a, b) => getPermissionCreatedAt(a) - getPermissionCreatedAt(b))
     next.set(instanceId, updatedQueue)
     inserted = true
     return next
@@ -459,17 +461,19 @@ function addPermissionToQueue(instanceId: string, permission: Permission): void 
   })
 
   const sessionId = getPermissionSessionId(permission)
-  incrementSessionPendingCount(instanceId, sessionId)
-  setSessionPendingPermission(instanceId, sessionId, true)
+  if (sessionId) {
+    incrementSessionPendingCount(instanceId, sessionId)
+    setSessionPendingPermission(instanceId, sessionId, true)
+  }
 }
 
 function removePermissionFromQueue(instanceId: string, permissionId: string): void {
-  let removedPermission: Permission | null = null
+  let removedPermission: PermissionRequestLike | null = null
 
   setPermissionQueues((prev) => {
     const next = new Map(prev)
     const queue = next.get(instanceId) ?? []
-    const filtered: Permission[] = []
+    const filtered: PermissionRequestLike[] = []
 
     for (const item of queue) {
       if (item.id === permissionId) {
@@ -493,7 +497,7 @@ function removePermissionFromQueue(instanceId: string, permissionId: string): vo
     const next = new Map(prev)
     const activeId = next.get(instanceId)
     if (activeId === permissionId) {
-      const nextPermission = updatedQueue.length > 0 ? (updatedQueue[0] as Permission) : null
+      const nextPermission = updatedQueue.length > 0 ? (updatedQueue[0] as PermissionRequestLike) : null
       next.set(instanceId, nextPermission?.id ?? null)
     }
     return next
@@ -502,8 +506,10 @@ function removePermissionFromQueue(instanceId: string, permissionId: string): vo
   const removed = removedPermission
   if (removed) {
     const removedSessionId = getPermissionSessionId(removed)
-    const remaining = decrementSessionPendingCount(instanceId, removedSessionId)
-    setSessionPendingPermission(instanceId, removedSessionId, remaining > 0)
+    if (removedSessionId) {
+      const remaining = decrementSessionPendingCount(instanceId, removedSessionId)
+      setSessionPendingPermission(instanceId, removedSessionId, remaining > 0)
+    }
   }
 }
 
@@ -521,29 +527,55 @@ function clearPermissionQueue(instanceId: string): void {
   clearSessionPendingCounts(instanceId)
 }
 
-function getPermissionSessionId(permission: Permission): string {
-  return (permission as any).sessionID
-}
+
 
 async function sendPermissionResponse(
   instanceId: string,
   sessionId: string,
-  permissionId: string,
-  response: "once" | "always" | "reject"
+  requestId: string,
+  reply: PermissionReply
 ): Promise<void> {
   const instance = instances().get(instanceId)
   if (!instance?.client) {
     throw new Error("Instance not ready")
   }
 
+  const client: any = instance.client
+
   try {
-    await instance.client.postSessionIdPermissionsPermissionId({
-      path: { id: sessionId, permissionID: permissionId },
-      body: { response },
-    })
+    // New API (preferred): POST /permission/:requestID/reply
+    if (typeof client.postPermissionRequestIdReply === "function") {
+      await client.postPermissionRequestIdReply({
+        path: { requestID: requestId },
+        body: { reply },
+      })
+    } else if (typeof client.postPermissionRequestIDReply === "function") {
+      await client.postPermissionRequestIDReply({
+        path: { requestID: requestId },
+        body: { reply },
+      })
+    } else if (typeof client.postPermissionRequestIdReply2 === "function") {
+      await client.postPermissionRequestIdReply2({
+        path: { requestID: requestId },
+        body: { reply },
+      })
+    } else if (client.permission && typeof client.permission.reply === "function") {
+      await client.permission.reply({
+        path: { requestID: requestId },
+        body: { reply },
+      })
+    } else if (typeof client.postSessionIdPermissionsPermissionId === "function") {
+      // Legacy API fallback: POST /session/:sessionID/permissions/:permissionID
+      await client.postSessionIdPermissionsPermissionId({
+        path: { id: sessionId, permissionID: requestId },
+        body: { response: reply },
+      })
+    } else {
+      throw new Error("Unsupported permissions API in client")
+    }
 
     // Remove from queue after successful response
-    removePermissionFromQueue(instanceId, permissionId)
+    removePermissionFromQueue(instanceId, requestId)
   } catch (error) {
     log.error("Failed to send permission response", error)
     throw error

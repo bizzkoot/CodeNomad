@@ -7,8 +7,7 @@ import {
 } from "../types/message"
 import type {
   EventLspUpdated,
-  EventPermissionReplied,
-  EventPermissionUpdated,
+
   EventSessionCompacted,
   EventSessionError,
   EventSessionIdle,
@@ -62,8 +61,8 @@ type SSEEvent =
   | EventSessionCompacted
   | EventSessionError
   | EventSessionIdle
-  | EventPermissionUpdated
-  | EventPermissionReplied
+  | { type: "permission.updated" | "permission.asked"; properties?: any }
+  | { type: "permission.replied"; properties?: any }
   | EventLspUpdated
   | TuiToastEvent
   | BackgroundProcessUpdatedEvent
@@ -139,10 +138,11 @@ class SSEManager {
         this.onSessionStatus?.(instanceId, event as EventSessionStatus)
         break
       case "permission.updated":
-        this.onPermissionUpdated?.(instanceId, event as EventPermissionUpdated)
+      case "permission.asked":
+        this.onPermissionUpdated?.(instanceId, event as any)
         break
       case "permission.replied":
-        this.onPermissionReplied?.(instanceId, event as EventPermissionReplied)
+        this.onPermissionReplied?.(instanceId, event as any)
         break
       case "lsp.updated":
         this.onLspUpdated?.(instanceId, event as EventLspUpdated)
@@ -176,8 +176,8 @@ class SSEManager {
   onTuiToast?: (instanceId: string, event: TuiToastEvent) => void
   onSessionIdle?: (instanceId: string, event: EventSessionIdle) => void
   onSessionStatus?: (instanceId: string, event: EventSessionStatus) => void
-  onPermissionUpdated?: (instanceId: string, event: EventPermissionUpdated) => void
-  onPermissionReplied?: (instanceId: string, event: EventPermissionReplied) => void
+  onPermissionUpdated?: (instanceId: string, event: any) => void
+  onPermissionReplied?: (instanceId: string, event: any) => void
   onLspUpdated?: (instanceId: string, event: EventLspUpdated) => void
   onBackgroundProcessUpdated?: (instanceId: string, event: BackgroundProcessUpdatedEvent) => void
   onBackgroundProcessRemoved?: (instanceId: string, event: BackgroundProcessRemovedEvent) => void
