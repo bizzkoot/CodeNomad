@@ -782,6 +782,8 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
     const messageKey = entry.messageId ?? "__global__"
     const partKey = entry.partId ?? entry.permission?.id ?? "__global__"
 
+    storeLog.info(`[V2 Store] upsertPermission: ${entry.permission.id} (messageKey: ${messageKey}, partKey: ${partKey})`)
+
     setState(
       "permissions",
       produce((draft) => {
@@ -795,18 +797,25 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
         }
         if (!draft.active || draft.active.permission.id === entry.permission.id) {
           draft.active = entry
+          storeLog.info(`[V2 Store] Set active: ${entry.permission.id}`)
         }
       }),
     )
   }
 
   function removePermission(permissionId: string) {
+    storeLog.info(`[V2 Store] removePermission called: ${permissionId}`)
+    storeLog.info(`[V2 Store] Current active: ${state.permissions.active?.permission.id}`)
+    storeLog.info(`[V2 Store] Queue before: ${state.permissions.queue.map(p => p.permission.id).join(", ")}`)
+
     setState(
       "permissions",
       produce((draft) => {
         draft.queue = draft.queue.filter((item) => item.permission.id !== permissionId)
         if (draft.active?.permission.id === permissionId) {
-          draft.active = draft.queue[0] ?? null
+          const nextActive = draft.queue[0] ?? null
+          draft.active = nextActive
+          storeLog.info(`[V2 Store] Set active to: ${nextActive?.permission.id ?? "null"}`)
         }
         Object.keys(draft.byMessage).forEach((messageKey) => {
           const partEntries = draft.byMessage[messageKey]
@@ -821,14 +830,24 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
         })
       }),
     )
+
+    storeLog.info(`[V2 Store] Queue after: ${state.permissions.queue.map(p => p.permission.id).join(", ")}`)
+    storeLog.info(`[V2 Store] New active: ${state.permissions.active?.permission.id ?? "null"}`)
   }
 
   function getPermissionState(messageId?: string, partId?: string) {
     const messageKey = messageId ?? "__global__"
     const partKey = partId ?? "__global__"
     const entry = state.permissions.byMessage[messageKey]?.[partKey]
-    if (!entry) return null
+
+    if (!entry) {
+      storeLog.info(`[V2 Store] getPermissionState: ${messageKey}/${partKey} -> NOT FOUND`)
+      return null
+    }
+
     const active = state.permissions.active?.permission.id === entry.permission.id
+    storeLog.info(`[V2 Store] getPermissionState: ${entry.permission.id} -> active: ${active}`)
+
     return { entry, active }
   }
 

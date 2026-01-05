@@ -457,9 +457,13 @@ function handlePermissionUpdated(instanceId: string, event: { type: string; prop
 function handlePermissionReplied(instanceId: string, event: { type: string; properties?: PermissionReplyEventPropertiesLike } | any): void {
   const properties = event?.properties as PermissionReplyEventPropertiesLike | undefined
   const requestId = getRequestIdFromPermissionReply(properties)
-  if (!requestId) return
+  if (!requestId) {
+    log.warn(`[SSE] Permission replied but no requestId found:`, properties)
+    return
+  }
 
   log.info(`[SSE] Permission replied: ${requestId}`)
+  log.info(`[SSE] Calling removePermissionFromQueue and removePermissionV2 for: ${requestId}`)
   removePermissionFromQueue(instanceId, requestId)
   removePermissionV2(instanceId, requestId)
 }

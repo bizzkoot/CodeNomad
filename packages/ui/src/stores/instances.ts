@@ -583,10 +583,11 @@ async function sendPermissionResponse(
     )
 
     // Remove from queue after successful response
+    // NOTE: V2 store is updated via SSE 'permission.replied' event in handlePermissionReplied()
+    // to avoid race conditions and double-removal issues
     removePermissionFromQueue(instanceId, requestId)
-    
-    // CRITICAL: Also remove from v2 message store to keep state in sync
-    removePermissionV2(instanceId, requestId)
+
+    log.info(`[Permission] Response sent for request ${requestId}, waiting for SSE confirmation`)
   } catch (error) {
     log.error("Failed to send permission response", error)
     throw error
