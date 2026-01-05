@@ -242,29 +242,33 @@ export default function ToolCall(props: ToolCallProps) {
 
   const store = createMemo(() => messageStoreBus.getOrCreate(props.instanceId))
 
-  const createVariantCache = (variant: string | (() => string)) =>
+  const cacheVersion = createMemo(() => {
+    if (typeof props.partVersion === "number") {
+      return String(props.partVersion)
+    }
+    if (typeof props.messageVersion === "number") {
+      return String(props.messageVersion)
+    }
+    return "noversion"
+  })
+
+  const createVariantCache = (variant: string | (() => string), version?: () => string) =>
     useGlobalCache({
       instanceId: () => props.instanceId,
       sessionId: () => props.sessionId,
       scope: TOOL_CALL_CACHE_SCOPE,
-      key: () => {
+      cacheId: () => {
         const context = cacheContext()
         const resolvedVariant = typeof variant === "function" ? variant() : variant
         return makeRenderCacheKey(context.toolCallId || undefined, context.messageId, context.partId, resolvedVariant)
       },
+      version: () => (version ? version() : cacheVersion()),
     })
 
   const diffCache = createVariantCache("diff")
   const permissionDiffCache = createVariantCache("permission-diff")
-  const markdownCache = createVariantCache("markdown")
-  const ansiRunningCache = createVariantCache(() => {
-    const versionKey = typeof props.partVersion === "number" ? String(props.partVersion) : "noversion"
-    return `ansi-running:${versionKey}`
-  })
-  const ansiFinalCache = createVariantCache(() => {
-    const versionKey = typeof props.partVersion === "number" ? String(props.partVersion) : "noversion"
-    return `ansi-final:${versionKey}`
-  })
+  const ansiRunningCache = createVariantCache("ansi-running", () => "running")
+  const ansiFinalCache = createVariantCache("ansi-final")
   const runningAnsiRenderer = createAnsiStreamRenderer()
   let runningAnsiSource = ""
 
@@ -738,13 +742,8 @@ export default function ToolCall(props: ToolCallProps) {
       throw new Error("Tool call markdown requires a part id")
     }
     const markdownPart: TextPart = { id: partId, type: "text", text: options.content, version: props.partVersion }
-    const cached = markdownCache.get<RenderCache>()
-    if (cached) {
-      markdownPart.renderCache = cached
-    }
 
     const handleMarkdownRendered = () => {
-      markdownCache.set(markdownPart.renderCache)
       handleScrollRendered()
       props.onContentRendered?.()
     }
@@ -753,6 +752,8 @@ export default function ToolCall(props: ToolCallProps) {
       <div class={messageClass} ref={(element) => scrollHelpers.registerContainer(element)} onScroll={scrollHelpers.handleScroll}>
         <Markdown
           part={markdownPart}
+          instanceId={props.instanceId}
+          sessionId={props.sessionId}
           isDark={isDark()}
           disableHighlight={disableHighlight}
           onRendered={handleMarkdownRendered}
