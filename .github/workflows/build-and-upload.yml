@@ -4,17 +4,30 @@ on:
   workflow_call:
     inputs:
       version:
-        description: "Version to apply to workspace packages"
-        required: true
+        description: "Version to apply to workspace packages (release builds)"
+        required: false
+        default: ""
         type: string
       tag:
-        description: "Git tag to upload assets to"
-        required: true
+        description: "Git tag to upload assets to (release builds)"
+        required: false
+        default: ""
         type: string
       release_name:
         description: "Release name (unused here, for context)"
-        required: true
+        required: false
+        default: ""
         type: string
+      upload:
+        description: "Upload built artifacts to the GitHub release"
+        required: false
+        default: true
+        type: boolean
+      set_versions:
+        description: "Run npm version to set workspace versions"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   id-token: write
@@ -41,6 +54,7 @@ jobs:
           cache: npm
 
       - name: Set workspace versions
+        if: ${{ inputs.set_versions && inputs.version != '' }}
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
@@ -53,6 +67,7 @@ jobs:
         run: npm run build:mac --workspace @neuralnomads/codenomad-electron-app
 
       - name: Upload release assets
+        if: ${{ inputs.upload && inputs.tag != '' }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -79,6 +94,7 @@ jobs:
           cache: npm
 
       - name: Set workspace versions
+        if: ${{ inputs.set_versions && inputs.version != '' }}
         run: npm version ${{ env.VERSION }} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
         shell: bash
 
@@ -92,6 +108,7 @@ jobs:
         run: npm run build:win --workspace @neuralnomads/codenomad-electron-app
 
       - name: Upload release assets
+        if: ${{ inputs.upload && inputs.tag != '' }}
         shell: pwsh
         run: |
           Get-ChildItem -Path "packages/electron-app/release" -Filter *.zip -File | ForEach-Object {
@@ -116,6 +133,7 @@ jobs:
           cache: npm
 
       - name: Set workspace versions
+        if: ${{ inputs.set_versions && inputs.version != '' }}
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
@@ -128,6 +146,7 @@ jobs:
         run: npm run build:linux --workspace @neuralnomads/codenomad-electron-app
 
       - name: Upload release assets
+        if: ${{ inputs.upload && inputs.tag != '' }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -157,6 +176,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Set workspace versions
+        if: ${{ inputs.set_versions && inputs.version != '' }}
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
@@ -165,10 +185,14 @@ jobs:
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-darwin-x64 --no-save
 
+      - name: Ensure tauri native binary
+        run: npm install @tauri-apps/cli-darwin-x64 --no-save
+
       - name: Build macOS bundle (Tauri)
         run: npm run build --workspace @codenomad/tauri-app
 
       - name: Package Tauri artifacts (macOS)
+        if: ${{ inputs.upload }}
         run: |
           set -euo pipefail
           BUNDLE_ROOT="packages/tauri-app/target/release/bundle"
@@ -180,6 +204,7 @@ jobs:
           fi
 
       - name: Upload Tauri release assets (macOS)
+        if: ${{ inputs.upload && inputs.tag != '' }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -209,6 +234,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Set workspace versions
+        if: ${{ inputs.set_versions && inputs.version != '' }}
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
@@ -217,10 +243,14 @@ jobs:
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-darwin-arm64 --no-save
 
+      - name: Ensure tauri native binary
+        run: npm install @tauri-apps/cli-darwin-arm64 @tauri-apps/cli-darwin-universal --no-save
+
       - name: Build macOS bundle (Tauri, arm64)
         run: npm run build --workspace @codenomad/tauri-app
 
       - name: Package Tauri artifacts (macOS arm64)
+        if: ${{ inputs.upload }}
         run: |
           set -euo pipefail
           BUNDLE_ROOT="packages/tauri-app/target/release/bundle"
@@ -232,6 +262,7 @@ jobs:
           fi
 
       - name: Upload Tauri release assets (macOS arm64)
+        if: ${{ inputs.upload && inputs.tag != '' }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -261,6 +292,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Set workspace versions
+        if: ${{ inputs.set_versions && inputs.version != '' }}
         run: npm version ${{ env.VERSION }} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
         shell: bash
 
@@ -270,10 +302,14 @@ jobs:
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-win32-x64-msvc --no-save
 
+      - name: Ensure tauri native binary
+        run: npm install @tauri-apps/cli-win32-x64-msvc --no-save
+
       - name: Build Windows bundle (Tauri)
         run: npm run build --workspace @codenomad/tauri-app
 
       - name: Package Tauri artifacts (Windows)
+        if: ${{ inputs.upload }}
         shell: pwsh
         run: |
           $bundleRoot = "packages/tauri-app/target/release/bundle"
@@ -287,6 +323,7 @@ jobs:
           }
 
       - name: Upload Tauri release assets (Windows)
+        if: ${{ inputs.upload && inputs.tag != '' }}
         shell: pwsh
         run: |
           if (Test-Path "packages/tauri-app/release-tauri") {
@@ -329,6 +366,7 @@ jobs:
             librsvg2-dev
 
       - name: Set workspace versions
+        if: ${{ inputs.set_versions && inputs.version != '' }}
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
@@ -337,10 +375,14 @@ jobs:
       - name: Ensure rollup native binary
         run: npm install @rollup/rollup-linux-x64-gnu --no-save
 
+      - name: Ensure tauri native binary
+        run: npm install @tauri-apps/cli-linux-x64-gnu --no-save
+
       - name: Build Linux bundle (Tauri)
         run: npm run build --workspace @codenomad/tauri-app
 
       - name: Package Tauri artifacts (Linux)
+        if: ${{ inputs.upload }}
         run: |
           set -euo pipefail
           SEARCH_ROOT="packages/tauri-app/target"
@@ -367,6 +409,7 @@ jobs:
           cp "$rpm" "$ARTIFACT_DIR/CodeNomad-Tauri-${VERSION}-linux-x64.rpm"
 
       - name: Upload Tauri release assets (Linux)
+        if: ${{ inputs.upload && inputs.tag != '' }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -497,6 +540,7 @@ jobs:
           sudo gem install --no-document fpm
 
       - name: Set workspace versions
+        if: ${{ inputs.set_versions && inputs.version != '' }}
         run: npm version ${VERSION} --workspaces --include-workspace-root --no-git-tag-version --allow-same-version
 
       - name: Install project dependencies
@@ -509,6 +553,7 @@ jobs:
         run: npm run build:linux-rpm --workspace @neuralnomads/codenomad-electron-app
 
       - name: Upload RPM release assets
+        if: ${{ inputs.upload && inputs.tag != '' }}
         run: |
           set -euo pipefail
           shopt -s nullglob
