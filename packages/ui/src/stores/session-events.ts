@@ -22,7 +22,7 @@ import { showToastNotification, ToastVariant } from "../lib/notifications"
 import { instances, addPermissionToQueue, removePermissionFromQueue } from "./instances"
 import { showAlertDialog } from "./alerts"
 import { createClientSession, Session, SessionStatus } from "../types/session"
-import { sessions, setSessions, withSession } from "./session-state"
+import { sessions, setSessions, syncInstanceSessionIndicator, withSession } from "./session-state"
 import { normalizeMessagePart } from "./message-v2/normalizers"
 import { updateSessionInfo } from "./message-v2/session-info"
 
@@ -66,10 +66,19 @@ const mapSdkSessionStatus = (status: EventSessionStatus["properties"]["status"])
   return "working"
 }
 
-function applySessionStatus(instanceId: string, sessionId: string, status: SessionStatus, bumpUpdated = false) {
+function applySessionStatus(
+  instanceId: string,
+  sessionId: string,
+  status: SessionStatus,
+  bumpUpdatedOnTransition = false,
+) {
   withSession(instanceId, sessionId, (session) => {
+    const current = session.status ?? "idle"
+    if (current === status) return false
+
     session.status = status
-    if (bumpUpdated) {
+
+    if (bumpUpdatedOnTransition) {
       session.time = { ...(session.time ?? {}), updated: Date.now() }
     }
   })
@@ -87,20 +96,26 @@ async function fetchSessionInfo(instanceId: string, sessionId: string): Promise<
 
     const fetched = createClientSession(info, instanceId)
 
+    let updatedInstanceSessions: Map<string, Session> | undefined
+
     setSessions((prev) => {
       const next = new Map(prev)
-      const instanceSessions = new Map(next.get(instanceId) ?? [])
+      const instanceSessions = next.get(instanceId) ?? new Map<string, Session>()
       const existing = instanceSessions.get(sessionId)
-      instanceSessions.set(sessionId, {
+      const merged: Session = {
         ...fetched,
         agent: existing?.agent ?? fetched.agent,
         model: existing?.model ?? fetched.model,
         status: existing?.status ?? fetched.status,
         pendingPermission: existing?.pendingPermission ?? fetched.pendingPermission,
-      })
+      }
+      instanceSessions.set(sessionId, merged)
       next.set(instanceId, instanceSessions)
+      updatedInstanceSessions = instanceSessions
       return next
     })
+
+    syncInstanceSessionIndicator(instanceId, updatedInstanceSessions)
 
     return fetched
   } catch (error) {
@@ -109,11 +124,19 @@ async function fetchSessionInfo(instanceId: string, sessionId: string): Promise<
   }
 }
 
-function ensureSessionStatus(instanceId: string, sessionId: string, status: SessionStatus, bumpUpdated = false) {
+function ensureSessionStatus(
+  instanceId: string,
+  sessionId: string,
+  status: SessionStatus,
+  bumpUpdatedOnTransition = false,
+) {
   const instanceSessions = sessions().get(instanceId)
   const existing = instanceSessions?.get(sessionId)
   if (existing) {
-    applySessionStatus(instanceId, sessionId, status, bumpUpdated)
+    if ((existing.status ?? "idle") === status) {
+      return
+    }
+    applySessionStatus(instanceId, sessionId, status, bumpUpdatedOnTransition)
     return
   }
 
@@ -125,7 +148,7 @@ function ensureSessionStatus(instanceId: string, sessionId: string, status: Sess
   const pending = (async () => {
     const fetched = await fetchSessionInfo(instanceId, sessionId)
     if (!fetched) return
-    applySessionStatus(instanceId, sessionId, status, bumpUpdated)
+    applySessionStatus(instanceId, sessionId, status, bumpUpdatedOnTransition)
   })()
 
   pendingSessionFetches.set(key, pending)
@@ -170,14 +193,16 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
     const sessionId = typeof part.sessionID === "string" ? part.sessionID : fallbackSessionId
     const messageId = typeof part.messageID === "string" ? part.messageID : fallbackMessageId
     if (!sessionId || !messageId) return
- 
     const session = instanceSessions?.get(sessionId)
     if (!session) {
       ensureSessionStatus(instanceId, sessionId, "working", true)
       return
     }
 
-    applySessionStatus(instanceId, sessionId, "working", true)
+    if (session.status !== "working" && session.status !== "compacting") {
+      applySessionStatus(instanceId, sessionId, "working", true)
+    }
+
 
     const store = messageStoreBus.getOrCreate(instanceId)
     const role: MessageRole = resolveMessageRole(messageInfo)
@@ -227,7 +252,9 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
       return
     }
 
-    applySessionStatus(instanceId, sessionId, "working", true)
+    if (session.status !== "working" && session.status !== "compacting") {
+      applySessionStatus(instanceId, sessionId, "working", true)
+    }
 
     const store = messageStoreBus.getOrCreate(instanceId)
 
@@ -297,13 +324,18 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
           },
     } as Session
 
+    let updatedInstanceSessions: Map<string, Session> | undefined
+
     setSessions((prev) => {
       const next = new Map(prev)
-      const updated = new Map(prev.get(instanceId))
-      updated.set(newSession.id, newSession)
-      next.set(instanceId, updated)
+      const instanceSessions = next.get(instanceId) ?? new Map<string, Session>()
+      instanceSessions.set(newSession.id, newSession)
+      next.set(instanceId, instanceSessions)
+      updatedInstanceSessions = instanceSessions
       return next
     })
+
+    syncInstanceSessionIndicator(instanceId, updatedInstanceSessions)
     setSessionRevertV2(instanceId, info.id, info.revert ?? null)
 
     log.info(`[SSE] New session created: ${info.id}`, newSession)
@@ -331,13 +363,18 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
         : existingSession.revert,
     }
 
+    let updatedInstanceSessions: Map<string, Session> | undefined
+
     setSessions((prev) => {
       const next = new Map(prev)
-      const updated = new Map(prev.get(instanceId))
-      updated.set(existingSession.id, updatedSession)
-      next.set(instanceId, updated)
+      const instanceSessions = next.get(instanceId) ?? new Map<string, Session>()
+      instanceSessions.set(existingSession.id, updatedSession)
+      next.set(instanceId, instanceSessions)
+      updatedInstanceSessions = instanceSessions
       return next
     })
+
+    syncInstanceSessionIndicator(instanceId, updatedInstanceSessions)
     setSessionRevertV2(instanceId, info.id, info.revert ?? null)
   }
 }
@@ -346,7 +383,7 @@ function handleSessionIdle(instanceId: string, event: EventSessionIdle): void {
   const sessionId = event.properties?.sessionID
   if (!sessionId) return
 
-  ensureSessionStatus(instanceId, sessionId, "idle")
+  ensureSessionStatus(instanceId, sessionId, "idle", true)
   log.info(`[SSE] Session idle: ${sessionId}`)
 }
 
@@ -355,7 +392,7 @@ function handleSessionStatus(instanceId: string, event: EventSessionStatus): voi
   if (!sessionId) return
 
   const status = mapSdkSessionStatus(event.properties.status)
-  ensureSessionStatus(instanceId, sessionId, status, status === "working")
+  ensureSessionStatus(instanceId, sessionId, status, true)
   log.info(`[SSE] Session status updated: ${sessionId}`, { status })
 }
 
@@ -366,7 +403,7 @@ function handleSessionCompacted(instanceId: string, event: EventSessionCompacted
   log.info(`[SSE] Session compacted: ${sessionID}`)
 
   setSessionCompactionState(instanceId, sessionID, false)
-  ensureSessionStatus(instanceId, sessionID, "idle")
+  ensureSessionStatus(instanceId, sessionID, "idle", true)
 
   withSession(instanceId, sessionID, (session) => {
     const time = { ...(session.time ?? {}) }
