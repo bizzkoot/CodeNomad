@@ -24,6 +24,7 @@ import {
   loading,
   setLoading,
   cleanupBlankSessions,
+  syncInstanceSessionIndicator,
 } from "./session-state"
 import { DEFAULT_MODEL_OUTPUT_LIMIT, getDefaultModel, isModelValid } from "./session-models"
 import { normalizeMessagePart } from "./message-v2/normalizers"
@@ -120,6 +121,8 @@ async function fetchSessions(instanceId: string): Promise<void> {
       return next
     })
 
+    syncInstanceSessionIndicator(instanceId, sessionMap)
+
     setMessagesLoaded((prev) => {
       const next = new Map(prev)
       const loadedSet = next.get(instanceId)
@@ -213,6 +216,8 @@ async function createSession(instanceId: string, agent?: string): Promise<Sessio
       next.set(instanceId, instanceSessions)
       return next
     })
+
+    syncInstanceSessionIndicator(instanceId)
 
     const instanceProviders = providers().get(instanceId) || []
     const initialProvider = instanceProviders.find((p) => p.id === session.model.providerId)
@@ -311,6 +316,8 @@ async function forkSession(
     return next
   })
 
+  syncInstanceSessionIndicator(instanceId)
+
   const instanceProviders = providers().get(instanceId) || []
   const forkProvider = instanceProviders.find((p) => p.id === forkedSession.model.providerId)
   const forkModel = forkProvider?.models.find((m) => m.id === forkedSession.model.modelId)
@@ -364,9 +371,14 @@ async function deleteSession(instanceId: string, sessionId: string): Promise<voi
       const instanceSessions = next.get(instanceId)
       if (instanceSessions) {
         instanceSessions.delete(sessionId)
+        if (instanceSessions.size === 0) {
+          next.delete(instanceId)
+        }
       }
       return next
     })
+
+    syncInstanceSessionIndicator(instanceId)
 
     setSessionCompactionState(instanceId, sessionId, false)
     clearSessionDraftPrompt(instanceId, sessionId)
@@ -578,19 +590,23 @@ async function loadMessages(instanceId: string, sessionId: string, force = false
     setSessions((prev) => {
       const next = new Map(prev)
       const nextInstanceSessions = next.get(instanceId)
-      if (nextInstanceSessions) {
-        const existingSession = nextInstanceSessions.get(sessionId)
-        if (existingSession) {
-          const updatedSession = {
-            ...existingSession,
-            agent: agentName || existingSession.agent,
-            model: providerID && modelID ? { providerId: providerID, modelId: modelID } : existingSession.model,
-          }
-          const updatedInstanceSessions = new Map(nextInstanceSessions)
-          updatedInstanceSessions.set(sessionId, updatedSession)
-          next.set(instanceId, updatedInstanceSessions)
-        }
+      if (!nextInstanceSessions) {
+        return next
       }
+
+      const existingSession = nextInstanceSessions.get(sessionId)
+      if (!existingSession) {
+        return next
+      }
+
+      const updatedSession = {
+        ...existingSession,
+        agent: agentName || existingSession.agent,
+        model: providerID && modelID ? { providerId: providerID, modelId: modelID } : existingSession.model,
+      }
+
+      nextInstanceSessions.set(sessionId, updatedSession)
+      next.set(instanceId, nextInstanceSessions)
       return next
     })
 
