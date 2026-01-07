@@ -1,16 +1,18 @@
-name: Dev Release
+name: Dev CI
 
 on:
+  push:
+    branches:
+      - dev
   workflow_dispatch:
 
 permissions:
-  id-token: write
-  contents: write
+  contents: read
 
 jobs:
-  dev-release:
-    uses: ./.github/workflows/reusable-release.yml
+  dev-ci:
+    uses: ./.github/workflows/build-and-upload.yml
     with:
-      version_suffix: -dev
-      dist_tag: dev
+      upload: false
+      set_versions: false
     secrets: inherit

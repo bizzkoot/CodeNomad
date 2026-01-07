@@ -1,19 +1,32 @@
-import { createEffect, createSignal, onMount, onCleanup } from "solid-js"
-import { renderMarkdown, onLanguagesLoaded, initMarkdown, decodeHtmlEntities } from "../lib/markdown"
+import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { renderMarkdown, onLanguagesLoaded, decodeHtmlEntities } from "../lib/markdown"
+import { useGlobalCache } from "../lib/hooks/use-global-cache"
 import type { TextPart, RenderCache } from "../types/message"
 import { getLogger } from "../lib/logger"
 import { copyToClipboard } from "../lib/clipboard"
+
 const log = getLogger("session")
 
-const markdownRenderCache = new Map<string, RenderCache>()
+function hashText(value: string): string {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16)
+}
 
-function makeMarkdownCacheKey(partId: string, themeKey: string, highlightEnabled: boolean, versionKey: string) {
-  const versionSegment = versionKey.length > 0 ? versionKey : "noversion"
-  return `${partId}:${themeKey}:${highlightEnabled ? 1 : 0}:${versionSegment}`
+function resolvePartVersion(part: TextPart, text: string): string {
+  if (typeof part.version === "number") {
+    return String(part.version)
+  }
+  return `text-${hashText(text)}`
 }
 
 interface MarkdownProps {
   part: TextPart
+  instanceId?: string
+  sessionId?: string
   isDark?: boolean
   size?: "base" | "sm" | "tight"
   disableHighlight?: boolean
@@ -29,43 +42,62 @@ export function Markdown(props: MarkdownProps) {
     Promise.resolve().then(() => props.onRendered?.())
   }
 
-  createEffect(async () => {
+  const resolved = createMemo(() => {
     const part = props.part
     const rawText = typeof part.text === "string" ? part.text : ""
     const text = decodeHtmlEntities(rawText)
-    const dark = Boolean(props.isDark)
-    const themeKey = dark ? "dark" : "light"
+    const themeKey = Boolean(props.isDark) ? "dark" : "light"
     const highlightEnabled = !props.disableHighlight
     const partId = typeof part.id === "string" && part.id.length > 0 ? part.id : ""
     if (!partId) {
       throw new Error("Markdown rendering requires a part id")
     }
-    const versionKey = typeof part.version === "number" ? String(part.version) : ""
-    const cacheKey = makeMarkdownCacheKey(partId, themeKey, highlightEnabled, versionKey)
+    const version = resolvePartVersion(part, text)
+    return { part, text, themeKey, highlightEnabled, partId, version }
+  })
+
+  const cacheHandle = useGlobalCache({
+    instanceId: () => props.instanceId,
+    sessionId: () => props.sessionId,
+    scope: "markdown",
+    cacheId: () => {
+      const { partId, themeKey, highlightEnabled } = resolved()
+      return `${partId}:${themeKey}:${highlightEnabled ? 1 : 0}`
+    },
+    version: () => resolved().version,
+  })
+
+  createEffect(async () => {
+    const { part, text, themeKey, highlightEnabled, version } = resolved()
 
     latestRequestedText = text
 
-    const localCache = part.renderCache
     const cacheMatches = (cache: RenderCache | undefined) => {
       if (!cache) return false
-      if (versionKey.length > 0) {
-        return cache.mode === versionKey && cache.theme === themeKey
-      }
-      return cache.text === text && cache.theme === themeKey
+      return cache.theme === themeKey && cache.mode === version
     }
 
+    const localCache = part.renderCache
     if (localCache && cacheMatches(localCache)) {
       setHtml(localCache.html)
       notifyRendered()
       return
     }
 
-    const globalCache = markdownRenderCache.get(cacheKey)
+    const globalCache = cacheHandle.get<RenderCache>()
     if (globalCache && cacheMatches(globalCache)) {
       setHtml(globalCache.html)
       part.renderCache = globalCache
       notifyRendered()
       return
+    }
+
+    const commitCacheEntry = (renderedHtml: string) => {
+      const cacheEntry: RenderCache = { text, html: renderedHtml, theme: themeKey, mode: version }
+      setHtml(renderedHtml)
+      part.renderCache = cacheEntry
+      cacheHandle.set(cacheEntry)
+      notifyRendered()
     }
 
     if (!highlightEnabled) {
@@ -75,20 +107,12 @@ export function Markdown(props: MarkdownProps) {
         const rendered = await renderMarkdown(text, { suppressHighlight: true })
 
         if (latestRequestedText === text) {
-          const cacheEntry: RenderCache = { text, html: rendered, theme: themeKey, mode: versionKey || undefined }
-          setHtml(rendered)
-          part.renderCache = cacheEntry
-          markdownRenderCache.set(cacheKey, cacheEntry)
-          notifyRendered()
+          commitCacheEntry(rendered)
         }
       } catch (error) {
         log.error("Failed to render markdown:", error)
         if (latestRequestedText === text) {
-          const cacheEntry: RenderCache = { text, html: text, theme: themeKey, mode: versionKey || undefined }
-          setHtml(text)
-          part.renderCache = cacheEntry
-          markdownRenderCache.set(cacheKey, cacheEntry)
-          notifyRendered()
+          commitCacheEntry(text)
         }
       }
       return
@@ -96,22 +120,13 @@ export function Markdown(props: MarkdownProps) {
 
     try {
       const rendered = await renderMarkdown(text)
-
       if (latestRequestedText === text) {
-        const cacheEntry: RenderCache = { text, html: rendered, theme: themeKey, mode: versionKey || undefined }
-        setHtml(rendered)
-        part.renderCache = cacheEntry
-        markdownRenderCache.set(cacheKey, cacheEntry)
-        notifyRendered()
+        commitCacheEntry(rendered)
       }
     } catch (error) {
       log.error("Failed to render markdown:", error)
       if (latestRequestedText === text) {
-        const cacheEntry: RenderCache = { text, html: text, theme: themeKey, mode: versionKey || undefined }
-        setHtml(text)
-        part.renderCache = cacheEntry
-        markdownRenderCache.set(cacheKey, cacheEntry)
-        notifyRendered()
+        commitCacheEntry(text)
       }
     }
   })
@@ -147,15 +162,12 @@ export function Markdown(props: MarkdownProps) {
 
     containerRef?.addEventListener("click", handleClick)
 
-    // Register listener for language loading completion
     const cleanupLanguageListener = onLanguagesLoaded(async () => {
       if (props.disableHighlight) {
         return
       }
 
-      const part = props.part
-      const rawText = typeof part.text === "string" ? part.text : ""
-      const text = decodeHtmlEntities(rawText)
+      const { part, text, themeKey, version } = resolved()
 
       if (latestRequestedText !== text) {
         return
@@ -164,9 +176,10 @@ export function Markdown(props: MarkdownProps) {
       try {
         const rendered = await renderMarkdown(text)
         if (latestRequestedText === text) {
+          const cacheEntry: RenderCache = { text, html: rendered, theme: themeKey, mode: version }
           setHtml(rendered)
-          const themeKey = Boolean(props.isDark) ? "dark" : "light"
-          part.renderCache = { text, html: rendered, theme: themeKey }
+          part.renderCache = cacheEntry
+          cacheHandle.set(cacheEntry)
           notifyRendered()
         }
       } catch (error) {
