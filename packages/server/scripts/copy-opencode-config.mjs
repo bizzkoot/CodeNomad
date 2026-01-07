@@ -10,6 +10,7 @@ const cliRoot = path.resolve(__dirname, "..")
 const sourceDir = path.resolve(cliRoot, "../opencode-config")
 const targetDir = path.resolve(cliRoot, "dist/opencode-config")
 const nodeModulesDir = path.resolve(sourceDir, "node_modules")
+const selfLinkDir = path.resolve(nodeModulesDir, "@codenomad", "opencode-config")
 const npmExecPath = process.env.npm_execpath
 const npmNodeExecPath = process.env.npm_node_execpath
 
@@ -48,6 +49,10 @@ if (!existsSync(nodeModulesDir)) {
     process.exit(result.status ?? 1)
   }
 }
+
+// npm can create a self-referential link for scoped packages on Windows.
+// That link causes recursive copies (ELOOP) during bundling.
+rmSync(selfLinkDir, { recursive: true, force: true })
 
 rmSync(targetDir, { recursive: true, force: true })
 mkdirSync(path.dirname(targetDir), { recursive: true })
