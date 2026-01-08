@@ -1,6 +1,6 @@
 import type { Command } from "./commands"
 import type { Command as SDKCommand } from "@opencode-ai/sdk"
-import { showAlertDialog } from "../stores/alerts"
+import { showAlertDialog, showPromptDialog } from "../stores/alerts"
 import { activeSessionId, executeCustomCommand } from "../stores/sessions"
 import { getLogger } from "./logger"
 
@@ -11,15 +11,29 @@ export function commandRequiresArguments(template?: string): boolean {
   return /\$(?:\d+|ARGUMENTS)/.test(template)
 }
 
-export function promptForCommandArguments(command: SDKCommand): string | null {
+export async function promptForCommandArguments(command: SDKCommand): Promise<string | null> {
   if (!commandRequiresArguments(command.template)) {
     return ""
   }
-  const input = window.prompt(`Arguments for /${command.name}`, "")
-  if (input === null) {
+
+  try {
+    return await showPromptDialog(`Arguments for /${command.name}`, {
+      title: "Custom command",
+      variant: "info",
+      inputLabel: "Arguments",
+      inputPlaceholder: "e.g. foo bar",
+      inputDefaultValue: "",
+      confirmLabel: "Run",
+      cancelLabel: "Cancel",
+    })
+  } catch (error) {
+    log.error("Failed to prompt for command arguments", error)
+    showAlertDialog("Failed to open arguments prompt.", {
+      title: "Command arguments",
+      variant: "error",
+    })
     return null
   }
-  return input
 }
 
 function formatCommandLabel(name: string): string {
@@ -43,11 +57,11 @@ export function buildCustomCommandEntries(instanceId: string, commands: SDKComma
         })
         return
       }
-      const args = promptForCommandArguments(cmd)
-      if (args === null) {
-        return
-      }
       try {
+        const args = await promptForCommandArguments(cmd)
+        if (args === null) {
+          return
+        }
         await executeCustomCommand(instanceId, sessionId, cmd.name, args)
       } catch (error) {
         log.error("Failed to run custom command", error)

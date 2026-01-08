@@ -1,5 +1,5 @@
 import { Dialog } from "@kobalte/core/dialog"
-import { Component, Show, createEffect } from "solid-js"
+import { Component, Show, createEffect, createSignal } from "solid-js"
 import { alertDialogState, dismissAlertDialog } from "../stores/alerts"
 import type { AlertVariant, AlertDialogState } from "../stores/alerts"
 
@@ -27,8 +27,9 @@ const variantAccent: Record<AlertVariant, { badgeBg: string; badgeBorder: string
   },
 }
 
-function dismiss(confirmed: boolean, payload?: AlertDialogState | null) {
+function dismiss(confirmed: boolean, payload?: AlertDialogState | null, promptValue?: string) {
   const current = payload ?? alertDialogState()
+
   if (current?.type === "confirm") {
     if (confirmed) {
       current.onConfirm?.()
@@ -36,7 +37,23 @@ function dismiss(confirmed: boolean, payload?: AlertDialogState | null) {
       current.onCancel?.()
     }
     current.resolve?.(confirmed)
-  } else if (confirmed) {
+    dismissAlertDialog()
+    return
+  }
+
+  if (current?.type === "prompt") {
+    if (confirmed) {
+      current.onConfirm?.()
+      current.resolvePrompt?.(promptValue ?? "")
+    } else {
+      current.onCancel?.()
+      current.resolvePrompt?.(null)
+    }
+    dismissAlertDialog()
+    return
+  }
+
+  if (confirmed) {
     current?.onConfirm?.()
   }
   dismissAlertDialog()
@@ -60,8 +77,11 @@ const AlertDialog: Component = () => {
         const accent = variantAccent[variant]
         const title = payload.title || accent.fallbackTitle
         const isConfirm = payload.type === "confirm"
-        const confirmLabel = payload.confirmLabel || (isConfirm ? "Confirm" : "OK")
+        const isPrompt = payload.type === "prompt"
+        const confirmLabel = payload.confirmLabel || (isConfirm ? "Confirm" : isPrompt ? "Run" : "OK")
         const cancelLabel = payload.cancelLabel || "Cancel"
+
+        const [inputValue, setInputValue] = createSignal(payload.inputDefaultValue ?? "")
 
         return (
           <Dialog
@@ -98,27 +118,47 @@ const AlertDialog: Component = () => {
                     </div>
                   </div>
 
-                  <div class="mt-6 flex justify-end gap-3">
-                    {isConfirm && (
-                      <button
-                        type="button"
-                        class="button-secondary"
-                        onClick={() => dismiss(false, payload)}
-                      >
-                        {cancelLabel}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      class="button-primary"
-                      ref={(el) => {
-                        primaryButtonRef = el
-                      }}
-                      onClick={() => dismiss(true, payload)}
-                    >
-                      {confirmLabel}
-                    </button>
-                  </div>
+                   <Show when={isPrompt}>
+                     <div class="mt-4">
+                       <label class="text-xs font-medium text-muted uppercase tracking-wide">
+                         {payload.inputLabel || "Arguments"}
+                       </label>
+                       <input
+                         class="modal-search-input mt-2"
+                         value={inputValue()}
+                         placeholder={payload.inputPlaceholder || ""}
+                         onInput={(e) => setInputValue(e.currentTarget.value)}
+                         onKeyDown={(e) => {
+                           if (e.key === "Enter") {
+                             e.preventDefault()
+                             dismiss(true, payload, inputValue())
+                           }
+                         }}
+                       />
+                     </div>
+                   </Show>
+
+                   <div class="mt-6 flex justify-end gap-3">
+                     {(isConfirm || isPrompt) && (
+                       <button
+                         type="button"
+                         class="button-secondary"
+                         onClick={() => dismiss(false, payload)}
+                       >
+                         {cancelLabel}
+                       </button>
+                     )}
+                     <button
+                       type="button"
+                       class="button-primary"
+                       ref={(el) => {
+                         primaryButtonRef = el
+                       }}
+                       onClick={() => dismiss(true, payload, inputValue())}
+                     >
+                       {confirmLabel}
+                     </button>
+                   </div>
                 </Dialog.Content>
               </div>
             </Dialog.Portal>

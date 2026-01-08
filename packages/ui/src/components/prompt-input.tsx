@@ -9,7 +9,8 @@ import type { Attachment } from "../types/attachment"
 import type { Agent } from "../types/session"
 import Kbd from "./kbd"
 import { getActiveInstance } from "../stores/instances"
-import { agents, getSessionDraftPrompt, setSessionDraftPrompt, clearSessionDraftPrompt } from "../stores/sessions"
+import { agents, getSessionDraftPrompt, setSessionDraftPrompt, clearSessionDraftPrompt, executeCustomCommand } from "../stores/sessions"
+import { getCommands } from "../stores/commands"
 import { showAlertDialog } from "../stores/alerts"
 import { getLogger } from "../lib/logger"
 const log = getLogger("actions")
@@ -36,6 +37,7 @@ export default function PromptInput(props: PromptInputProps) {
   const [historyDraft, setHistoryDraft] = createSignal<string | null>(null)
   const [, setIsFocused] = createSignal(false)
   const [showPicker, setShowPicker] = createSignal(false)
+  const [pickerMode, setPickerMode] = createSignal<"mention" | "command">("mention")
   const [searchQuery, setSearchQuery] = createSignal("")
   const [atPosition, setAtPosition] = createSignal<number | null>(null)
   const [isDragging, setIsDragging] = createSignal(false)
@@ -560,14 +562,28 @@ export default function PromptInput(props: PromptInputProps) {
     const currentAttachments = attachments()
     if (props.disabled || (!text && currentAttachments.length === 0)) return
 
-    const resolvedPrompt = resolvePastedPlaceholders(text, currentAttachments)
     const isShellMode = mode() === "shell"
+
+    // Slash command routing (match OpenCode TUI): only run if the command exists.
+    const isSlashCandidate = !isShellMode && text.startsWith("/")
+    const firstSpace = isSlashCandidate ? text.indexOf(" ") : -1
+    const commandToken = isSlashCandidate ? (firstSpace === -1 ? text : text.slice(0, firstSpace)) : ""
+    const commandName = isSlashCandidate ? commandToken.slice(1) : ""
+    const commandArgs = isSlashCandidate ? (firstSpace === -1 ? "" : text.slice(firstSpace + 1).trimStart()) : ""
+
+    const isKnownSlashCommand =
+      isSlashCandidate &&
+      commandName.length > 0 &&
+      getCommands(props.instanceId).some((cmd) => cmd.name === commandName)
+
+    const resolvedPrompt = isKnownSlashCommand ? text : resolvePastedPlaceholders(text, currentAttachments)
+    const historyEntry = resolvedPrompt
 
     const refreshHistory = async () => {
       try {
-        await addToHistory(props.instanceFolder, resolvedPrompt)
+        await addToHistory(props.instanceFolder, historyEntry)
         setHistory((prev) => {
-          const next = [resolvedPrompt, ...prev]
+          const next = [historyEntry, ...prev]
           if (next.length > HISTORY_LIMIT) {
             next.length = HISTORY_LIMIT
           }
@@ -580,10 +596,18 @@ export default function PromptInput(props: PromptInputProps) {
     }
 
     clearPrompt()
-    clearAttachments(props.instanceId, props.sessionId)
-    setIgnoredAtPositions(new Set<number>())
-    setPasteCount(0)
-    setImageCount(0)
+
+    // Ignore attachments for slash commands, but keep them for next prompt.
+    if (!isKnownSlashCommand) {
+      clearAttachments(props.instanceId, props.sessionId)
+      setPasteCount(0)
+      setImageCount(0)
+      setIgnoredAtPositions(new Set<number>())
+    } else {
+      syncAttachmentCounters("", currentAttachments)
+      setIgnoredAtPositions(new Set<number>())
+    }
+
     setHistoryDraft(null)
 
     try {
@@ -593,6 +617,8 @@ export default function PromptInput(props: PromptInputProps) {
         } else {
           await props.onSend(resolvedPrompt, [])
         }
+      } else if (isKnownSlashCommand) {
+        await executeCustomCommand(props.instanceId, props.sessionId, commandName, commandArgs)
       } else {
         await props.onSend(resolvedPrompt, currentAttachments)
       }
@@ -677,10 +703,26 @@ export default function PromptInput(props: PromptInputProps) {
     setHistoryDraft(null)
 
     const cursorPos = target.selectionStart
+
+    // Slash command picker (only when editing the command token: "/<query>")
+    if (value.startsWith("/") && cursorPos >= 1) {
+      const firstWhitespaceIndex = value.slice(1).search(/\s/)
+      const tokenEnd = firstWhitespaceIndex === -1 ? value.length : firstWhitespaceIndex + 1
+
+      if (cursorPos <= tokenEnd) {
+        setPickerMode("command")
+        setAtPosition(0)
+        setSearchQuery(value.substring(1, cursorPos))
+        setShowPicker(true)
+        return
+      }
+    }
+
     const textBeforeCursor = value.substring(0, cursorPos)
     const lastAtIndex = textBeforeCursor.lastIndexOf("@")
 
     const previousAtPosition = atPosition()
+
 
     if (lastAtIndex === -1) {
       setIgnoredAtPositions(new Set<number>())
@@ -698,6 +740,7 @@ export default function PromptInput(props: PromptInputProps) {
 
       if (!hasSpace && cursorPos === lastAtIndex + textAfterAt.length + 1) {
         if (!ignoredAtPositions().has(lastAtIndex)) {
+          setPickerMode("mention")
           setAtPosition(lastAtIndex)
           setSearchQuery(textAfterAt)
           setShowPicker(true)
@@ -716,9 +759,30 @@ export default function PromptInput(props: PromptInputProps) {
       | {
           type: "file"
           file: { path: string; relativePath?: string; isGitFile: boolean; isDirectory?: boolean }
-        },
+        }
+      | { type: "command"; command: { name: string; description?: string } },
   ) {
-    if (item.type === "agent") {
+    if (item.type === "command") {
+      const name = item.command.name
+      const currentPrompt = prompt()
+
+      const afterSlash = currentPrompt.slice(1)
+      const firstWhitespaceIndex = afterSlash.search(/\s/)
+      const tokenEnd = firstWhitespaceIndex === -1 ? currentPrompt.length : firstWhitespaceIndex + 1
+
+      const before = ""
+      const after = currentPrompt.substring(tokenEnd)
+      const newPrompt = before + `/${name} ` + after
+      setPrompt(newPrompt)
+
+      setTimeout(() => {
+        if (textareaRef) {
+          const newCursorPos = `/${name} `.length
+          textareaRef.setSelectionRange(newCursorPos, newCursorPos)
+          textareaRef.focus()
+        }
+      }, 0)
+    } else if (item.type === "agent") {
       const agentName = item.agent.name
       const existingAttachments = attachments()
       const alreadyAttached = existingAttachments.some(
@@ -822,7 +886,7 @@ export default function PromptInput(props: PromptInputProps) {
 
   function handlePickerClose() {
     const pos = atPosition()
-    if (pos !== null) {
+    if (pickerMode() === "mention" && pos !== null) {
       setIgnoredAtPositions((prev) => new Set(prev).add(pos))
     }
     setShowPicker(false)
@@ -981,9 +1045,11 @@ export default function PromptInput(props: PromptInputProps) {
         <Show when={showPicker() && instance()}>
           <UnifiedPicker
             open={showPicker()}
+            mode={pickerMode()}
             onClose={handlePickerClose}
             onSelect={handlePickerSelect}
             agents={instanceAgents()}
+            commands={getCommands(props.instanceId)}
             instanceClient={instance()!.client}
             searchQuery={searchQuery()}
             textareaRef={textareaRef}

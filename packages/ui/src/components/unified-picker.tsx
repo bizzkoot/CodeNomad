@@ -1,5 +1,6 @@
-import { Component, createSignal, createEffect, For, Show, onCleanup } from "solid-js"
+import { Component, createSignal, createEffect, createMemo, For, Show, onCleanup } from "solid-js"
 import type { Agent } from "../types/session"
+import type { Command as SDKCommand } from "@opencode-ai/sdk/v2"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { serverApi } from "../lib/api-client"
 import { getLogger } from "../lib/logger"
@@ -67,13 +68,18 @@ function mapEntriesToFileItems(entries: { path: string; type: "file" | "director
   })
 }
 
-type PickerItem = { type: "agent"; agent: Agent } | { type: "file"; file: FileItem }
+type PickerItem =
+  | { type: "agent"; agent: Agent }
+  | { type: "file"; file: FileItem }
+  | { type: "command"; command: SDKCommand }
 
 interface UnifiedPickerProps {
   open: boolean
+  mode?: "mention" | "command"
   onSelect: (item: PickerItem) => void
   onClose: () => void
   agents: Agent[]
+  commands?: SDKCommand[]
   instanceClient: OpencodeClient | null
   searchQuery: string
   textareaRef?: HTMLTextAreaElement
@@ -81,6 +87,8 @@ interface UnifiedPickerProps {
 }
 
 const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
+  const mode = () => props.mode ?? "mention"
+
   const [files, setFiles] = createSignal<FileItem[]>([])
   const [filteredAgents, setFilteredAgents] = createSignal<Agent[]>([])
   const [selectedIndex, setSelectedIndex] = createSignal(0)
@@ -246,6 +254,11 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
       return
     }
 
+    if (mode() !== "mention") {
+      // Command mode doesn't use file snapshots.
+      return
+    }
+
     const workspaceChanged = lastWorkspaceId !== props.workspaceId
     const queryChanged = lastQuery !== props.searchQuery
 
@@ -262,6 +275,7 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
 
   createEffect(() => {
     if (!props.open) return
+    if (mode() !== "mention") return
 
     const query = props.searchQuery.toLowerCase()
     const filtered = query
@@ -275,8 +289,25 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
     setFilteredAgents(filtered)
   })
 
+  const filteredCommands = createMemo(() => {
+    if (mode() !== "command") return []
+    const q = props.searchQuery.trim().toLowerCase()
+    const source = props.commands ?? []
+    if (!q) return source
+    return source.filter((cmd) => {
+      const nameMatch = cmd.name.toLowerCase().includes(q)
+      const descMatch = (cmd.description ?? "").toLowerCase().includes(q)
+      return nameMatch || descMatch
+    })
+  })
+
   const allItems = (): PickerItem[] => {
     const items: PickerItem[] = []
+    if (mode() === "command") {
+      filteredCommands().forEach((command) => items.push({ type: "command", command }))
+      return items
+    }
+
     filteredAgents().forEach((agent) => items.push({ type: "agent", agent }))
     files().forEach((file) => items.push({ type: "file", file }))
     return items
@@ -329,9 +360,10 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
     }
   })
 
+  const commandCount = () => filteredCommands().length
   const agentCount = () => filteredAgents().length
   const fileCount = () => files().length
-  const isLoading = () => loadingState() !== "idle"
+  const isLoading = () => mode() === "mention" && loadingState() !== "idle"
   const loadingMessage = () => {
     if (loadingState() === "search") {
       return "Searching..."
@@ -351,7 +383,9 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
       >
         <div class="dropdown-header">
           <div class="dropdown-header-title">
-            Select Agent or File
+            <Show when={mode() === "command"} fallback={"Select Agent or File"}>
+              Select Command
+            </Show>
             <Show when={isLoading()}>
               <span class="ml-2">{loadingMessage()}</span>
             </Show>
@@ -359,11 +393,41 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
         </div>
 
         <div ref={scrollContainerRef} class="dropdown-content max-h-60">
-          <Show when={agentCount() === 0 && fileCount() === 0}>
+          <Show when={(mode() === "command" ? commandCount() === 0 : agentCount() === 0 && fileCount() === 0)}>
             <div class="dropdown-empty">No results found</div>
           </Show>
 
-          <Show when={agentCount() > 0}>
+          <Show when={mode() === "command" && commandCount() > 0}>
+            <div class="dropdown-section-header">COMMANDS</div>
+            <For each={filteredCommands()}>
+              {(command) => {
+                const itemIndex = allItems().findIndex((item) => item.type === "command" && item.command.name === command.name)
+                return (
+                  <div
+                    class={`dropdown-item ${itemIndex === selectedIndex() ? "dropdown-item-highlight" : ""}`}
+                    data-picker-selected={itemIndex === selectedIndex()}
+                    onClick={() => handleSelect({ type: "command", command })}
+                  >
+                    <div class="flex items-start gap-2">
+                      <svg class="dropdown-icon-accent h-4 w-4 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                      </svg>
+                      <div class="flex-1">
+                        <div class="text-sm font-medium">/{command.name}</div>
+                        <Show when={command.description}>
+                          <div class="mt-0.5 text-xs" style="color: var(--text-muted)">
+                            {(command.description ?? "").length > 80 ? (command.description ?? "").slice(0, 80) + "..." : command.description}
+                          </div>
+                        </Show>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }}
+            </For>
+          </Show>
+
+          <Show when={mode() === "mention" && agentCount() > 0}>
             <div class="dropdown-section-header">
               AGENTS
             </div>
@@ -418,7 +482,7 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
             </For>
           </Show>
 
-          <Show when={fileCount() > 0}>
+          <Show when={mode() === "mention" && fileCount() > 0}>
             <div class="dropdown-section-header">
               FILES
             </div>
