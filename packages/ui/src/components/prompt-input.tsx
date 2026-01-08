@@ -610,6 +610,11 @@ export default function PromptInput(props: PromptInputProps) {
 
     setHistoryDraft(null)
 
+    if (isKnownSlashCommand) {
+      // Record attempted slash commands even if execution fails.
+      void refreshHistory()
+    }
+ 
     try {
       if (isShellMode) {
         if (props.onRunShell) {
@@ -622,7 +627,9 @@ export default function PromptInput(props: PromptInputProps) {
       } else {
         await props.onSend(resolvedPrompt, currentAttachments)
       }
-      void refreshHistory()
+      if (!isKnownSlashCommand) {
+        void refreshHistory()
+      }
     } catch (error) {
       log.error("Failed to send message:", error)
       showAlertDialog("Failed to send message", {
@@ -1023,6 +1030,7 @@ export default function PromptInput(props: PromptInputProps) {
   }
  
   const shellHint = () => (mode() === "shell" ? { key: "Esc", text: "to exit shell mode" } : { key: "!", text: "for shell mode" })
+  const commandHint = () => ({ key: "/", text: "for commands" })
 
   const shouldShowOverlay = () => prompt().length === 0
 
@@ -1215,6 +1223,11 @@ export default function PromptInput(props: PromptInputProps) {
                       <span class="prompt-overlay-text">
                         • <Kbd>{shellHint().key}</Kbd> {shellHint().text}
                       </span>
+                      <Show when={mode() !== "shell"}>
+                        <span class="prompt-overlay-text">
+                          • <Kbd>{commandHint().key}</Kbd> {commandHint().text}
+                        </span>
+                      </Show>
                       <Show when={mode() === "shell"}>
                         <span class="prompt-overlay-shell-active">Shell mode active</span>
                       </Show>

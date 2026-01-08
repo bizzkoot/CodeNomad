@@ -39,8 +39,7 @@ import {
 import { keyboardRegistry, type KeyboardShortcut } from "../../lib/keyboard-registry"
 import { messageStoreBus } from "../../stores/message-v2/bus"
 import { clearSessionRenderCache } from "../message-block"
-import { buildCustomCommandEntries } from "../../lib/command-utils"
-import { getCommands as getInstanceCommands } from "../../stores/commands"
+
 import { isOpen as isCommandPaletteOpen, hideCommandPalette, showCommandPalette } from "../../stores/command-palette"
 import SessionList from "../session-list"
 import KeyboardHint from "../keyboard-hint"
@@ -373,9 +372,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     }
   }
 
-  const customCommands = createMemo(() => buildCustomCommandEntries(props.instance.id, getInstanceCommands(props.instance.id)))
-
-  const instancePaletteCommands = createMemo(() => [...props.paletteCommands(), ...customCommands()])
+  const instancePaletteCommands = createMemo(() => props.paletteCommands())
   const paletteOpen = createMemo(() => isCommandPaletteOpen(props.instance.id))
 
   const keyboardShortcuts = createMemo(() =>
