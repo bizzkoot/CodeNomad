@@ -139,7 +139,6 @@
 
 .permission-center-item-active {
   border-color: var(--session-status-permission-fg);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--session-status-permission-fg) 35%, transparent);
 }
 
 .permission-center-item-header {
@@ -215,6 +214,13 @@
   margin-top: var(--space-sm);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
+}
+
+/* Remove border from tool-call when inside permission items to avoid double borders */
+.permission-center-item .tool-call {
+  border: none;
+  border-radius: 0;
+  margin: 0;
 }
 
 @media (max-width: 720px) {
