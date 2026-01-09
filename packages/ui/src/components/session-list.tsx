@@ -2,12 +2,10 @@ import { Component, For, Show, createSignal, createMemo, createEffect, JSX, onCl
 import type { Session, SessionStatus } from "../types/session"
 import type { SessionThread } from "../stores/session-state"
 import { getSessionStatus } from "../stores/session-status"
-import { Bot, User, Info, Copy, Trash2, Pencil, ShieldAlert, ChevronDown } from "lucide-solid"
+import { Bot, User, Copy, Trash2, Pencil, ShieldAlert, ChevronDown } from "lucide-solid"
 import KeyboardHint from "./keyboard-hint"
-import Kbd from "./kbd"
 import SessionRenameDialog from "./session-rename-dialog"
 import { keyboardRegistry } from "../lib/keyboard-registry"
-import { formatShortcut } from "../lib/keyboard-utils"
 import { showToastNotification } from "../lib/notifications"
 import {
   deleteSession,
@@ -50,8 +48,7 @@ function formatSessionStatus(status: SessionStatus): string {
 const SessionList: Component<SessionListProps> = (props) => {
   const [renameTarget, setRenameTarget] = createSignal<{ id: string; title: string; label: string } | null>(null)
   const [isRenaming, setIsRenaming] = createSignal(false)
-  const infoShortcut = keyboardRegistry.get("switch-to-info")
- 
+
   const isSessionDeleting = (sessionId: string) => {
     const deleting = loading().deletingSession.get(props.instanceId)
     return deleting ? deleting.has(sessionId) : false
@@ -59,12 +56,10 @@ const SessionList: Component<SessionListProps> = (props) => {
  
 
   const selectSession = (sessionId: string) => {
-    if (sessionId !== "info") {
-      const session = props.sessions.get(sessionId)
-      const parentId = session?.parentId ?? session?.id
-      if (parentId) {
-        ensureSessionParentExpanded(props.instanceId, parentId)
-      }
+    const session = props.sessions.get(sessionId)
+    const parentId = session?.parentId ?? session?.id
+    if (parentId) {
+      ensureSessionParentExpanded(props.instanceId, parentId)
     }
 
     props.onSelect(sessionId)
@@ -313,7 +308,7 @@ const SessionList: Component<SessionListProps> = (props) => {
 
   createEffect(() => {
     const activeId = props.activeSessionId
-    if (!activeId) return
+    if (!activeId || activeId === "info") return
     scrollActiveIntoView(activeId)
   })
 
@@ -335,37 +330,11 @@ const SessionList: Component<SessionListProps> = (props) => {
       </Show>
 
       <div class="session-list flex-1 overflow-y-auto" ref={(el) => listEl[1](el)}>
-          <div class="session-section">
-            <div class="session-section-header px-3 py-2 text-xs font-semibold text-primary/70 uppercase tracking-wide">
-              Instance
-            </div>
-            <div class="session-list-item group">
-              <button
-                class={`session-item-base ${props.activeSessionId === "info" ? "session-item-active" : "session-item-inactive"}`}
-                data-session-id="info"
-                onClick={() => selectSession("info")}
-                title="Instance Info"
-                role="button"
-                aria-selected={props.activeSessionId === "info"}
-              >
-                <div class="session-item-row session-item-header">
-                  <div class="session-item-title-row">
-                    <Info class="w-4 h-4 flex-shrink-0" />
-                    <span class="session-item-title session-item-title--clamp">Instance Info</span>
-                  </div>
-                  {infoShortcut && <Kbd shortcut={formatShortcut(infoShortcut)} class="ml-2 not-italic" />}
-                </div>
-              </button>
-            </div>
-          </div>
 
+         <Show when={props.threads.length > 0}>
+           <div class="session-section">
+             <For each={props.threads}>
 
-        <Show when={props.threads.length > 0}>
-          <div class="session-section">
-            <div class="session-section-header px-3 py-2 text-xs font-semibold text-primary/70 uppercase tracking-wide">
-              Sessions
-            </div>
-            <For each={props.threads}>
               {(thread) => {
                 const expanded = () => isSessionParentExpanded(props.instanceId, thread.parent.id)
                 return (

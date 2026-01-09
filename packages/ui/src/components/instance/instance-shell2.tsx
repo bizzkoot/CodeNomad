@@ -26,6 +26,7 @@ import MenuIcon from "@suid/icons-material/Menu"
 import MenuOpenIcon from "@suid/icons-material/MenuOpen"
 import PushPinIcon from "@suid/icons-material/PushPin"
 import PushPinOutlinedIcon from "@suid/icons-material/PushPinOutlined"
+import InfoOutlinedIcon from "@suid/icons-material/InfoOutlined"
 import type { Instance } from "../../types/instance"
 import type { Command } from "../../lib/commands"
 import type { BackgroundProcess } from "../../../../server/src/api-types"
@@ -848,6 +849,15 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
           </div>
         </div>
         <div class="flex items-center gap-2">
+          <IconButton
+            size="small"
+            color="inherit"
+            aria-label="Instance Info"
+            title="Instance Info"
+            onClick={() => handleSessionSelect("info")}
+          >
+            <InfoOutlinedIcon fontSize="small" />
+          </IconButton>
           <Show when={!isPhoneLayout()}>
             <IconButton
               size="small"
