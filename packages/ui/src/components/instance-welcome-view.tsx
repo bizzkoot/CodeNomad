@@ -1,8 +1,9 @@
 import { Component, createSignal, Show, For, createEffect, onMount, onCleanup, createMemo } from "solid-js"
-import { Loader2, Pencil, Trash2 } from "lucide-solid"
+import { Loader2, Pencil, Trash2, ArrowDownWideNarrow, Check } from "lucide-solid"
 
 import type { Instance } from "../types/instance"
 import { getParentSessions, createSession, setActiveParentSession, deleteSession, loading, renameSession } from "../stores/sessions"
+import { useConfig } from "../stores/preferences"
 import InstanceInfo from "./instance-info"
 import Kbd from "./kbd"
 import SessionRenameDialog from "./session-rename-dialog"
@@ -28,8 +29,54 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
   )
   const [renameTarget, setRenameTarget] = createSignal<{ id: string; title: string; label: string } | null>(null)
   const [isRenaming, setIsRenaming] = createSignal(false)
+  const [showSortMenu, setShowSortMenu] = createSignal(false)
+
+  // Per-folder sort order using global preferences (stable across restarts)
+  const { preferences, updatePreferences } = useConfig()
+  const folderKey = props.instance.folder
+  console.log('[Sort Debug] Component init, folder:', folderKey)
+  console.log('[Sort Debug] Current sessionSortOrders:', JSON.stringify(preferences().sessionSortOrders))
+  const [sortOrder, setSortOrder] = createSignal<'created' | 'updated'>(
+    preferences().sessionSortOrders?.[folderKey] ?? 'created'
+  )
+  console.log('[Sort Debug] Initial sortOrder:', sortOrder())
+  
+  // Sync when preferences change (e.g., from another window)
+  createEffect(() => {
+    const saved = preferences().sessionSortOrders?.[folderKey] ?? 'created'
+    console.log('[Sort Debug] createEffect - preferences changed, saved:', saved, 'current:', sortOrder())
+    if (saved !== sortOrder()) {
+      console.log('[Sort Debug] Updating sortOrder to:', saved)
+      setSortOrder(saved)
+    }
+  })
+
+  // Save to preferences when user changes sort order
+  const handleSortChange = (newOrder: 'created' | 'updated') => {
+    console.log('[Sort Debug] User clicked sort:', newOrder, 'for folder:', folderKey)
+    setSortOrder(newOrder)
+    const current = preferences().sessionSortOrders ?? {}
+    const updated = { ...current, [folderKey]: newOrder }
+    console.log('[Sort Debug] Updating preferences with:', JSON.stringify(updated))
+    updatePreferences({ sessionSortOrders: updated })
+    console.log('[Sort Debug] Saved to preferences')
+  }
 
   const parentSessions = () => getParentSessions(props.instance.id)
+  const sortedParentSessions = createMemo(() => {
+    const sessions = parentSessions()
+    const order = sortOrder()
+
+    // Create a shallow copy before sorting
+    const sessionsCopy = [...sessions]
+
+    if (order === 'created') {
+      return sessionsCopy.sort((a, b) => (b.time?.created ?? 0) - (a.time?.created ?? 0))
+    }
+
+    // order === 'updated'
+    return sessionsCopy.sort((a, b) => (b.time?.updated ?? 0) - (a.time?.updated ?? 0))
+  })
   const isFetchingSessions = createMemo(() => Boolean(loading().fetchingSessions.get(props.instance.id)))
   const isSessionDeleting = (sessionId: string) => {
     const deleting = loading().deletingSession.get(props.instance.id)
@@ -46,7 +93,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
         meta: isMac(),
         ctrl: !isMac(),
       },
-      handler: () => {},
+      handler: () => { },
       description: "New Session",
       context: "global",
     }
@@ -54,7 +101,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
   const newSessionShortcutString = createMemo(() => (isMac() ? "cmd+shift+n" : "ctrl+shift+n"))
 
   createEffect(() => {
-    const sessions = parentSessions()
+    const sessions = sortedParentSessions()
     if (sessions.length === 0) {
       setFocusMode("new-session")
       setSelectedIndex(0)
@@ -88,7 +135,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       (["INPUT", "TEXTAREA", "SELECT"].includes(activeElement.tagName) ||
         activeElement.isContentEditable ||
         Boolean(insideModal))
- 
+
     if (isEditingField) {
       if (insideModal && e.key === "Escape" && renameTarget()) {
         e.preventDefault()
@@ -96,7 +143,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       }
       return
     }
- 
+
     if (showInstanceInfoOverlay()) {
       if (e.key === "Escape") {
         e.preventDefault()
@@ -104,19 +151,19 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       }
       return
     }
- 
-    const sessions = parentSessions()
- 
+
+    const sessions = sortedParentSessions()
+
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "n") {
       e.preventDefault()
       handleNewSession()
       return
     }
- 
+
     if (sessions.length === 0) return
- 
+
     const listFocused = focusMode() === "sessions"
- 
+
     if (e.key === "ArrowDown") {
       if (!listFocused) {
         setFocusMode("sessions")
@@ -128,11 +175,11 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       scrollToIndex(newIndex)
       return
     }
- 
+
     if (e.key === "ArrowUp") {
       if (!listFocused) {
         setFocusMode("sessions")
-        setSelectedIndex(Math.max(parentSessions().length - 1, 0))
+        setSelectedIndex(Math.max(sortedParentSessions().length - 1, 0))
       }
       e.preventDefault()
       const newIndex = Math.max(selectedIndex() - 1, 0)
@@ -140,11 +187,11 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
       scrollToIndex(newIndex)
       return
     }
- 
+
     if (!listFocused) {
       return
     }
- 
+
     if (e.key === "PageDown") {
       e.preventDefault()
       const pageSize = 5
@@ -177,38 +224,38 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
 
 
   async function handleEnterKey() {
-    const sessions = parentSessions()
+    const sessions = sortedParentSessions()
     const index = selectedIndex()
- 
+
     if (index < sessions.length) {
       await handleSessionSelect(sessions[index].id)
     }
   }
- 
+
   async function handleDeleteKey() {
-    const sessions = parentSessions()
+    const sessions = sortedParentSessions()
     const index = selectedIndex()
- 
+
     if (index >= sessions.length) {
       return
     }
- 
+
     await handleSessionDelete(sessions[index].id)
- 
-    const updatedSessions = parentSessions()
+
+    const updatedSessions = sortedParentSessions()
     if (updatedSessions.length === 0) {
       setFocusMode("new-session")
       setSelectedIndex(0)
       return
     }
- 
+
     const nextIndex = Math.min(index, updatedSessions.length - 1)
     setSelectedIndex(nextIndex)
     setFocusMode("sessions")
     scrollToIndex(nextIndex)
   }
- 
-   onMount(() => {
+
+  onMount(() => {
     window.addEventListener("keydown", handleKeyDown)
 
     onCleanup(() => {
@@ -362,19 +409,65 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
                       {parentSessions().length} {parentSessions().length === 1 ? "session" : "sessions"} available
                     </p>
                   </div>
-                  <Show when={!isDesktopLayout() && !showInstanceInfoOverlay()}>
-                    <button
-                      type="button"
-                      class="button-tertiary lg:hidden flex-shrink-0"
-                      onClick={openInstanceInfoOverlay}
-                    >
-                      View Instance Info
-                    </button>
-                  </Show>
+                  <div class="flex items-center gap-2">
+                    <div class="relative">
+                      <button
+                        type="button"
+                        class="p-1.5 rounded transition-colors text-muted hover:text-primary hover:bg-surface-hover focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        title="Sort sessions"
+                        onClick={() => setShowSortMenu(!showSortMenu())}
+                      >
+                        <ArrowDownWideNarrow class="w-4 h-4" />
+                      </button>
+                      <Show when={showSortMenu()}>
+                        <div
+                          class="fixed inset-0 z-40"
+                          onClick={() => setShowSortMenu(false)}
+                        />
+                        <div class="absolute right-0 top-full mt-1 z-50 bg-surface-base border border-base rounded shadow-lg py-1 min-w-[160px]">
+                          <button
+                            type="button"
+                            class="w-full text-left px-3 py-2 text-sm hover:bg-surface-hover transition-colors flex items-center justify-between gap-2"
+                            onClick={() => {
+                              handleSortChange('created')
+                              setShowSortMenu(false)
+                            }}
+                          >
+                            <span class="text-primary">Created Date</span>
+                            <Show when={sortOrder() === 'created'}>
+                              <Check class="w-4 h-4 text-accent" />
+                            </Show>
+                          </button>
+                          <button
+                            type="button"
+                            class="w-full text-left px-3 py-2 text-sm hover:bg-surface-hover transition-colors flex items-center justify-between gap-2"
+                            onClick={() => {
+                              handleSortChange('updated')
+                              setShowSortMenu(false)
+                            }}
+                          >
+                            <span class="text-primary">Last Updated</span>
+                            <Show when={sortOrder() === 'updated'}>
+                              <Check class="w-4 h-4 text-accent" />
+                            </Show>
+                          </button>
+                        </div>
+                      </Show>
+                    </div>
+                    <Show when={!isDesktopLayout() && !showInstanceInfoOverlay()}>
+                      <button
+                        type="button"
+                        class="button-tertiary lg:hidden flex-shrink-0"
+                        onClick={openInstanceInfoOverlay}
+                      >
+                        View Instance Info
+                      </button>
+                    </Show>
+                  </div>
                 </div>
               </div>
               <div class="panel-list panel-list--fill flex-1 min-h-0 overflow-auto">
-                <For each={parentSessions()}>
+                <For each={sortedParentSessions()}>
                   {(session, index) => {
                     const isFocused = () => focusMode() === "sessions" && selectedIndex() === index()
                     return (

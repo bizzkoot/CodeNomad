@@ -45,6 +45,7 @@ export interface Preferences {
   showUsageMetrics: boolean
   autoCleanupBlankSessions: boolean
   listeningMode: ListeningMode
+  sessionSortOrders?: Record<string, 'created' | 'updated'>
 }
 
 
@@ -77,6 +78,7 @@ const defaultPreferences: Preferences = {
   showUsageMetrics: true,
   autoCleanupBlankSessions: true,
   listeningMode: "local",
+  sessionSortOrders: {},
 }
 
 
@@ -102,6 +104,11 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
   const sourceModelRecents = sanitized.modelRecents ?? defaultPreferences.modelRecents
   const modelRecents = sourceModelRecents.map((item) => ({ ...item }))
 
+  const sessionSortOrders = {
+    ...defaultPreferences.sessionSortOrders,
+    ...(sanitized.sessionSortOrders ?? {}),
+  }
+
   return {
     showThinkingBlocks: sanitized.showThinkingBlocks ?? defaultPreferences.showThinkingBlocks,
     thinkingBlocksExpansion: sanitized.thinkingBlocksExpansion ?? defaultPreferences.thinkingBlocksExpansion,
@@ -115,6 +122,7 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
     showUsageMetrics: sanitized.showUsageMetrics ?? defaultPreferences.showUsageMetrics,
     autoCleanupBlankSessions: sanitized.autoCleanupBlankSessions ?? defaultPreferences.autoCleanupBlankSessions,
     listeningMode: sanitized.listeningMode ?? defaultPreferences.listeningMode,
+    sessionSortOrders,
   }
 }
 
@@ -266,10 +274,15 @@ function buildBinaryList(path: string, version: string | undefined, source: Open
 
 function updatePreferences(updates: Partial<Preferences>): void {
   const current = internalConfig().preferences
+  console.log('[Prefs Debug] updatePreferences called with:', JSON.stringify(updates))
+  console.log('[Prefs Debug] Current preferences:', JSON.stringify(current))
   const merged = normalizePreferences({ ...current, ...updates })
+  console.log('[Prefs Debug] Merged preferences:', JSON.stringify(merged))
   if (deepEqual(current, merged)) {
+    console.log('[Prefs Debug] No changes detected, skipping save')
     return
   }
+  console.log('[Prefs Debug] Calling updateConfig with merged preferences')
   updateConfig((draft) => {
     draft.preferences = merged
   })

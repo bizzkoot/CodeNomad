@@ -109,6 +109,7 @@ export type WorkspaceFileSearchResponse = FileSystemEntry[]
 export interface InstanceData {
   messageHistory: string[]
   agentModelSelections: AgentModelSelection
+  sessionSortOrder?: 'created' | 'updated'
 }
 
 export type InstanceStreamStatus = "connecting" | "connected" | "error" | "disconnected"
