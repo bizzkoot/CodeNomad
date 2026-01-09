@@ -10,9 +10,11 @@ import { showToastNotification } from "../lib/notifications"
 import {
   deleteSession,
   ensureSessionParentExpanded,
+  getVisibleSessionIds,
   isSessionParentExpanded,
   loading,
   renameSession,
+  setActiveSessionFromList,
   toggleSessionParentExpanded,
 } from "../stores/sessions"
 import { getLogger } from "../lib/logger"
@@ -84,9 +86,45 @@ const SessionList: Component<SessionListProps> = (props) => {
   const handleDeleteSession = async (event: MouseEvent, sessionId: string) => {
     event.stopPropagation()
     if (isSessionDeleting(sessionId)) return
- 
+
+    const shouldSelectFallback = props.activeSessionId === sessionId
+    let fallbackSessionId: string | undefined
+
+    if (shouldSelectFallback) {
+      const visible = getVisibleSessionIds(props.instanceId)
+      const currentIndex = visible.indexOf(sessionId)
+      const remaining = visible.filter((id) => id !== sessionId)
+
+      if (remaining.length > 0) {
+        if (currentIndex !== -1) {
+          for (let i = currentIndex; i < visible.length; i++) {
+            const candidate = visible[i]
+            if (candidate && candidate !== sessionId) {
+              fallbackSessionId = candidate
+              break
+            }
+          }
+
+          if (!fallbackSessionId) {
+            for (let i = currentIndex - 1; i >= 0; i--) {
+              const candidate = visible[i]
+              if (candidate && candidate !== sessionId) {
+                fallbackSessionId = candidate
+                break
+              }
+            }
+          }
+        }
+
+        fallbackSessionId ??= remaining[0]
+      }
+    }
+
     try {
       await deleteSession(props.instanceId, sessionId)
+      if (fallbackSessionId) {
+        setActiveSessionFromList(props.instanceId, fallbackSessionId)
+      }
     } catch (error) {
       log.error(`Failed to delete session ${sessionId}:`, error)
       showToastNotification({ message: "Unable to delete session", variant: "error" })
