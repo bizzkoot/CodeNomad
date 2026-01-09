@@ -11,6 +11,7 @@ const ROOT_DIR = ".codenomad/background_processes"
 const INDEX_FILE = "index.json"
 const OUTPUT_FILE = "output.txt"
 const STOP_TIMEOUT_MS = 2000
+const EXIT_WAIT_TIMEOUT_MS = 5000
 const MAX_OUTPUT_BYTES = 20 * 1024
 const OUTPUT_PUBLISH_INTERVAL_MS = 1000
 
@@ -21,6 +22,7 @@ interface ManagerDeps {
 }
 
 interface RunningProcess {
+  id: string
   child: ChildProcess
   outputPath: string
   exitPromise: Promise<void>
@@ -61,9 +63,15 @@ export class BackgroundProcessManager {
     const child = spawn("bash", ["-c", command], {
       cwd: workspace.path,
       stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
+    })
+
+    child.on("exit", () => {
+      this.killProcessTree(child, "SIGTERM")
     })
 
     const record: BackgroundProcess = {
+
       id,
       workspaceId,
       title,
@@ -91,7 +99,7 @@ export class BackgroundProcessManager {
       })
     })
 
-    this.running.set(id, { child, outputPath, exitPromise, workspaceId })
+    this.running.set(id, { id, child, outputPath, exitPromise, workspaceId })
 
     let lastPublishAt = 0
     const maybePublishSize = () => {
@@ -128,7 +136,7 @@ export class BackgroundProcessManager {
 
     const running = this.running.get(processId)
     if (running?.child && !running.child.killed) {
-      running.child.kill("SIGTERM")
+      this.killProcessTree(running.child, "SIGTERM")
       await this.waitForExit(running)
     }
 
@@ -149,7 +157,7 @@ export class BackgroundProcessManager {
 
     const running = this.running.get(processId)
     if (running?.child && !running.child.killed) {
-      running.child.kill("SIGTERM")
+      this.killProcessTree(running.child, "SIGTERM")
       await this.waitForExit(running)
     }
 
@@ -255,25 +263,63 @@ export class BackgroundProcessManager {
   private async cleanupWorkspace(workspaceId: string) {
     for (const [, running] of this.running.entries()) {
       if (running.workspaceId !== workspaceId) continue
-      running.child.kill("SIGTERM")
+      this.killProcessTree(running.child, "SIGTERM")
       await this.waitForExit(running)
     }
+
     await this.removeWorkspaceDir(workspaceId)
   }
 
+  private killProcessTree(child: ChildProcess, signal: NodeJS.Signals) {
+    const pid = child.pid
+    if (!pid) return
+
+    if (process.platform !== "win32") {
+      try {
+        process.kill(-pid, signal)
+        return
+      } catch {
+        // Fall back to killing the direct child.
+      }
+    }
+
+    try {
+      child.kill(signal)
+    } catch {
+      // ignore
+    }
+  }
+
   private async waitForExit(running: RunningProcess) {
-    let resolved = false
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        running.child.kill("SIGKILL")
+    let exited = false
+    const exitPromise = running.exitPromise.finally(() => {
+      exited = true
+    })
+
+    const killTimeout = setTimeout(() => {
+      if (!exited) {
+        this.killProcessTree(running.child, "SIGKILL")
       }
     }, STOP_TIMEOUT_MS)
 
-    await running.exitPromise.finally(() => {
-      resolved = true
-      clearTimeout(timeout)
-    })
+    try {
+      await Promise.race([
+        exitPromise,
+        new Promise<void>((resolve) => {
+          setTimeout(resolve, EXIT_WAIT_TIMEOUT_MS)
+        }),
+      ])
+
+      if (!exited) {
+        this.killProcessTree(running.child, "SIGKILL")
+        this.running.delete(running.id)
+        this.deps.logger.warn({ pid: running.child.pid }, "Timed out waiting for background process to exit")
+      }
+    } finally {
+      clearTimeout(killTimeout)
+    }
   }
+
 
   private statusFromExit(code: number | null): BackgroundProcessStatus {
     if (code === null) return "stopped"

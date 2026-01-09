@@ -206,6 +206,58 @@ session-sidebar-controls .selector-trigger-primary {
   font-size: var(--font-size-sm);
 }
 
+
+.session-item-base.session-item-child {
+  padding-left: 2.25rem;
+  position: relative;
+}
+
+.session-item-base.session-item-child::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 1.125rem;
+  width: 1px;
+  background-color: var(--text-secondary);
+  opacity: 0.95;
+  pointer-events: none;
+}
+
+.session-item-base.session-item-child.session-item-child-last::before {
+  bottom: 50%;
+}
+
+.session-item-base.session-item-child::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 1.125rem;
+  width: 0.875rem;
+  height: 1px;
+  background-color: var(--text-secondary);
+  opacity: 0.95;
+  transform: translateY(-0.5px);
+  pointer-events: none;
+}
+
+.session-item-base.session-item-border-user {
+  border-left: 4px solid var(--message-user-border);
+}
+
+.session-item-base.session-item-border-assistant {
+  border-left: 4px solid var(--message-assistant-border);
+}
+
+.session-item-expander {
+  @apply flex-shrink-0 p-0.5 rounded transition-colors;
+}
+
+.session-item-expander--spacer {
+  width: calc(0.875rem + 0.25rem);
+  height: calc(0.875rem + 0.25rem);
+}
+
 .session-item-base:focus-visible {
   @apply ring-2 ring-offset-1;
   ring-color: var(--accent-primary);
@@ -221,7 +273,7 @@ session-sidebar-controls .selector-trigger-primary {
 }
 
 .session-item-title-row {
-  @apply flex items-center gap-2 min-w-0 flex-1;
+  @apply flex items-start gap-2 min-w-0 flex-1;
 }
 
 .session-item-meta {
@@ -247,6 +299,16 @@ session-sidebar-controls .selector-trigger-primary {
   box-shadow: inset 0 0 0 1px var(--list-item-highlight-border);
 }
 
+.session-item-base.session-item-kind-user.session-item-active {
+  background-color: var(--session-user-active-bg);
+}
+
+.session-item-base.session-item-kind-assistant.session-item-active {
+  background-color: var(--session-assistant-active-bg);
+}
+
+
+
 .session-item-inactive {
   color: var(--text-secondary);
 }
@@ -256,6 +318,8 @@ session-sidebar-controls .selector-trigger-primary {
   color: var(--text-primary);
 }
 
+
+
 .session-item-active .session-item-close:hover {
   background-color: var(--surface-hover);
   color: var(--text-primary);
@@ -264,6 +328,14 @@ session-sidebar-controls .selector-trigger-primary {
 .session-item-title {
   @apply flex-1 min-w-0;
   font-weight: inherit;
+}
+
+.session-item-title--clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
 }
 
 .session-item-close {

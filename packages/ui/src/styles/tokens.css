@@ -35,6 +35,10 @@
   --message-tool-bg: #f8f9fa;
   --message-tool-border: #6c757d;
 
+  /* Session list selection tints */
+  --session-user-active-bg: color-mix(in oklab, var(--surface-secondary) 85%, var(--message-user-border));
+  --session-assistant-active-bg: color-mix(in oklab, var(--surface-secondary) 85%, var(--message-assistant-border));
+
   /* Semantic component colors */
   --session-status-working-fg: #b45309;
   --session-status-working-bg: rgba(245, 158, 11, 0.16);

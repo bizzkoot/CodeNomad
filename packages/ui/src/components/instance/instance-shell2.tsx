@@ -26,21 +26,25 @@ import MenuIcon from "@suid/icons-material/Menu"
 import MenuOpenIcon from "@suid/icons-material/MenuOpen"
 import PushPinIcon from "@suid/icons-material/PushPin"
 import PushPinOutlinedIcon from "@suid/icons-material/PushPinOutlined"
+import InfoOutlinedIcon from "@suid/icons-material/InfoOutlined"
 import type { Instance } from "../../types/instance"
 import type { Command } from "../../lib/commands"
 import type { BackgroundProcess } from "../../../../server/src/api-types"
+import type { Session } from "../../types/session"
 import {
   activeParentSessionId,
   activeSessionId as activeSessionMap,
   getSessionFamily,
   getSessionInfo,
+  getSessionThreads,
+  sessions,
+  setActiveParentSession,
   setActiveSession,
 } from "../../stores/sessions"
 import { keyboardRegistry, type KeyboardShortcut } from "../../lib/keyboard-registry"
 import { messageStoreBus } from "../../stores/message-v2/bus"
 import { clearSessionRenderCache } from "../message-block"
-import { buildCustomCommandEntries } from "../../lib/command-utils"
-import { getCommands as getInstanceCommands } from "../../stores/commands"
+
 import { isOpen as isCommandPaletteOpen, hideCommandPalette, showCommandPalette } from "../../stores/command-palette"
 import SessionList from "../session-list"
 import KeyboardHint from "../keyboard-hint"
@@ -50,6 +54,8 @@ import InstanceServiceStatus from "../instance-service-status"
 import AgentSelector from "../agent-selector"
 import ModelSelector from "../model-selector"
 import CommandPalette from "../command-palette"
+import PermissionNotificationBanner from "../permission-notification-banner"
+import PermissionApprovalModal from "../permission-approval-modal"
 import Kbd from "../kbd"
 import { TodoListView } from "../tool-call/renderers/todo"
 import ContextUsagePanel from "../session/context-usage-panel"
@@ -86,7 +92,7 @@ const MAX_SESSION_SIDEBAR_WIDTH = 360
 const RIGHT_DRAWER_WIDTH = 260
 const MIN_RIGHT_DRAWER_WIDTH = 200
 const MAX_RIGHT_DRAWER_WIDTH = 380
-const SESSION_CACHE_LIMIT = 2
+const SESSION_CACHE_LIMIT = 5
 const APP_BAR_HEIGHT = 56
 const LEFT_DRAWER_STORAGE_KEY = "opencode-session-sidebar-width-v8"
 const RIGHT_DRAWER_STORAGE_KEY = "opencode-session-right-drawer-width-v1"
@@ -141,6 +147,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   ])
   const [selectedBackgroundProcess, setSelectedBackgroundProcess] = createSignal<BackgroundProcess | null>(null)
   const [showBackgroundOutput, setShowBackgroundOutput] = createSignal(false)
+  const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
 
@@ -266,6 +273,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     requestAnimationFrame(() => measureDrawerHost())
   })
 
+  const allInstanceSessions = createMemo<Map<string, Session>>(() => {
+    return sessions().get(props.instance.id) ?? new Map()
+  })
+
+  const sessionThreads = createMemo(() => getSessionThreads(props.instance.id))
+
   const activeSessions = createMemo(() => {
     const parentId = activeParentSessionId().get(props.instance.id)
     if (!parentId) return new Map<string, ReturnType<typeof getSessionFamily>[number]>()
@@ -373,9 +386,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     }
   }
 
-  const customCommands = createMemo(() => buildCustomCommandEntries(props.instance.id, getInstanceCommands(props.instance.id)))
-
-  const instancePaletteCommands = createMemo(() => [...props.paletteCommands(), ...customCommands()])
+  const instancePaletteCommands = createMemo(() => props.paletteCommands())
   const paletteOpen = createMemo(() => isCommandPaletteOpen(props.instance.id))
 
   const keyboardShortcuts = createMemo(() =>
@@ -477,7 +488,26 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   })
 
   const handleSessionSelect = (sessionId: string) => {
-    setActiveSession(props.instance.id, sessionId)
+    if (sessionId === "info") {
+      setActiveSession(props.instance.id, sessionId)
+      return
+    }
+
+    const session = allInstanceSessions().get(sessionId)
+    if (!session) return
+
+    if (session.parentId === null) {
+      setActiveParentSession(props.instance.id, sessionId)
+      return
+    }
+
+    const parentId = session.parentId
+    if (!parentId) return
+
+    batch(() => {
+      setActiveParentSession(props.instance.id, parentId)
+      setActiveSession(props.instance.id, sessionId)
+    })
   }
 
 
@@ -522,23 +552,27 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   })
 
   createEffect(() => {
-    const sessionsMap = activeSessions()
-    const parentId = parentSessionIdForInstance()
+    const instanceSessions = allInstanceSessions()
     const activeId = activeSessionIdForInstance()
+
     setCachedSessionIds((current) => {
-      const next: string[] = []
-      const append = (id: string | null) => {
+      const next = current.filter((id) => id !== "info" && instanceSessions.has(id))
+
+      const touch = (id: string | null) => {
         if (!id || id === "info") return
-        if (!sessionsMap.has(id)) return
-        if (next.includes(id)) return
-        next.push(id)
+        if (!instanceSessions.has(id)) return
+
+        const index = next.indexOf(id)
+        if (index !== -1) {
+          next.splice(index, 1)
+        }
+        next.unshift(id)
       }
 
-      append(parentId)
-      append(activeId)
+      touch(activeId)
 
-      const limit = parentId ? SESSION_CACHE_LIMIT + 1 : SESSION_CACHE_LIMIT
-      const trimmed = next.length > limit ? next.slice(0, limit) : next
+      const trimmed = next.length > SESSION_CACHE_LIMIT ? next.slice(0, SESSION_CACHE_LIMIT) : next
+
       const trimmedSet = new Set(trimmed)
       const removed = current.filter((id) => !trimmedSet.has(id))
       if (removed.length) {
@@ -654,7 +688,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   })
 
   type DrawerViewState = "pinned" | "floating-open" | "floating-closed"
- 
+
 
   const leftDrawerState = createMemo<DrawerViewState>(() => {
     if (leftPinned()) return "pinned"
@@ -695,7 +729,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
 
 
-   const pinLeftDrawer = () => {
+  const pinLeftDrawer = () => {
     blurIfInside(leftDrawerContentEl())
     batch(() => {
       setLeftPinned(true)
@@ -814,33 +848,37 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
             </Show>
           </div>
         </div>
-          <div class="flex items-center gap-2">
-            <Show when={!isPhoneLayout()}>
-              <IconButton
-                size="small"
-                color="inherit"
-                aria-label={leftPinned() ? "Unpin left drawer" : "Pin left drawer"}
-                onClick={() => (leftPinned() ? unpinLeftDrawer() : pinLeftDrawer())}
-              >
-                {leftPinned() ? <PushPinIcon fontSize="small" /> : <PushPinOutlinedIcon fontSize="small" />}
-              </IconButton>
-            </Show>
-          </div>
+        <div class="flex items-center gap-2">
+          <IconButton
+            size="small"
+            color="inherit"
+            aria-label="Instance Info"
+            title="Instance Info"
+            onClick={() => handleSessionSelect("info")}
+          >
+            <InfoOutlinedIcon fontSize="small" />
+          </IconButton>
+          <Show when={!isPhoneLayout()}>
+            <IconButton
+              size="small"
+              color="inherit"
+              aria-label={leftPinned() ? "Unpin left drawer" : "Pin left drawer"}
+              onClick={() => (leftPinned() ? unpinLeftDrawer() : pinLeftDrawer())}
+            >
+              {leftPinned() ? <PushPinIcon fontSize="small" /> : <PushPinOutlinedIcon fontSize="small" />}
+            </IconButton>
+          </Show>
+        </div>
 
       </div>
 
       <div class="session-sidebar flex flex-col flex-1 min-h-0">
         <SessionList
           instanceId={props.instance.id}
-          sessions={activeSessions()}
+          sessions={allInstanceSessions()}
+          threads={sessionThreads()}
           activeSessionId={activeSessionIdForInstance()}
           onSelect={handleSessionSelect}
-          onClose={(id) => {
-            const result = props.onCloseSession(id)
-            if (result instanceof Promise) {
-              void result.catch((error) => log.error("Failed to close session:", error))
-            }
-          }}
           onNew={() => {
             const result = props.onNewSession()
             if (result instanceof Promise) {
@@ -1222,6 +1260,10 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                   </IconButton>
 
                   <div class="flex flex-wrap items-center gap-1 justify-center">
+                    <PermissionNotificationBanner
+                      instanceId={props.instance.id}
+                      onClick={() => setPermissionModalOpen(true)}
+                    />
                     <button
                       type="button"
                       class="connection-status-button px-2 py-0.5 text-xs"
@@ -1240,6 +1282,8 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                     >
                       <span class="status-dot" />
                     </span>
+
+
                   </div>
 
                   <IconButton
@@ -1268,46 +1312,52 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
               </div>
             }
           >
-             <div class="session-toolbar-left flex items-center gap-3 min-w-0">
-               <IconButton
-                 ref={setLeftToggleButtonEl}
-                 color="inherit"
-                 onClick={handleLeftAppBarButtonClick}
-                 aria-label={leftAppBarButtonLabel()}
-                 size="small"
-                 aria-expanded={leftDrawerState() !== "floating-closed"}
-                 disabled={leftDrawerState() === "pinned"}
-               >
-                 {leftAppBarButtonIcon()}
-               </IconButton>
+            <div class="session-toolbar-left flex items-center gap-3 min-w-0">
+              <IconButton
+                ref={setLeftToggleButtonEl}
+                color="inherit"
+                onClick={handleLeftAppBarButtonClick}
+                aria-label={leftAppBarButtonLabel()}
+                size="small"
+                aria-expanded={leftDrawerState() !== "floating-closed"}
+                disabled={leftDrawerState() === "pinned"}
+              >
+                {leftAppBarButtonIcon()}
+              </IconButton>
 
-               <Show when={!showingInfoView()}>
-                 <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                   <span class="uppercase text-[10px] tracking-wide text-primary/70">Used</span>
-                   <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
-                 </div>
-                 <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                   <span class="uppercase text-[10px] tracking-wide text-primary/70">Avail</span>
-                   <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
-                 </div>
-               </Show>
-             </div>
+              <Show when={!showingInfoView()}>
+                <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
+                  <span class="uppercase text-[10px] tracking-wide text-primary/70">Used</span>
+                  <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
+                </div>
+                <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
+                  <span class="uppercase text-[10px] tracking-wide text-primary/70">Avail</span>
+                  <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
+                </div>
+              </Show>
+            </div>
 
 
-              <div class="session-toolbar-center flex-1 flex items-center justify-center gap-2 min-w-[160px]">
-                <button
-                  type="button"
-                  class="connection-status-button px-2 py-0.5 text-xs"
-                  onClick={handleCommandPaletteClick}
-                  aria-label="Open command palette"
-                  style={{ flex: "0 0 auto", width: "auto" }}
-                >
-                  Command Palette
-                </button>
-                <span class="connection-status-shortcut-hint">
-                  <Kbd shortcut="cmd+shift+p" />
-                </span>
-              </div>
+            <div class="session-toolbar-center flex-1 flex items-center justify-center gap-2 min-w-[160px]">
+              <PermissionNotificationBanner
+                instanceId={props.instance.id}
+                onClick={() => setPermissionModalOpen(true)}
+              />
+              <button
+                type="button"
+                class="connection-status-button px-2 py-0.5 text-xs"
+                onClick={handleCommandPaletteClick}
+                aria-label="Open command palette"
+                style={{ flex: "0 0 auto", width: "auto" }}
+              >
+                Command Palette
+              </button>
+              <span class="connection-status-shortcut-hint">
+                <Kbd shortcut="cmd+shift+p" />
+              </span>
+
+
+            </div>
 
 
             <div class="session-toolbar-right flex items-center gap-3">
@@ -1428,6 +1478,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         instanceId={props.instance.id}
         process={selectedBackgroundProcess()}
         onClose={closeBackgroundOutput}
+      />
+
+      <PermissionApprovalModal
+        instanceId={props.instance.id}
+        isOpen={permissionModalOpen()}
+        onClose={() => setPermissionModalOpen(false)}
       />
     </>
   )
