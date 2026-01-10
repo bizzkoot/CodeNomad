@@ -57,6 +57,7 @@ import CommandPalette from "../command-palette"
 import FolderTreeBrowser from "../folder-tree-browser"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
+import { AskQuestionWizard } from "../askquestion-wizard"
 import Kbd from "../kbd"
 import { TodoListView } from "../tool-call/renderers/todo"
 import ContextUsagePanel from "../session/context-usage-panel"
@@ -73,6 +74,9 @@ import {
   type SessionSidebarRequestAction,
   type SessionSidebarRequestDetail,
 } from "../../lib/session-sidebar-events"
+import { getPendingQuestion } from "../../stores/questions"
+import type { QuestionAnswer } from "../../types/question"
+import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
 
@@ -152,6 +156,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   const [showBackgroundOutput, setShowBackgroundOutput] = createSignal(false)
   const [folderTreeBrowserOpen, setFolderTreeBrowserOpen] = createSignal(false)
   const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
+  const [questionWizardOpen, setQuestionWizardOpen] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
 
@@ -209,6 +214,67 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         break
     }
   })
+
+  // Auto-open question wizard when a pending question appears
+  createEffect(() => {
+    const pending = getPendingQuestion(props.instance.id)
+    if (pending && !questionWizardOpen()) {
+      setQuestionWizardOpen(true)
+    } else if (!pending && questionWizardOpen()) {
+      setQuestionWizardOpen(false)
+    }
+  })
+
+  // Question wizard handlers - defined at component level for proper binding
+  const handleQuestionSubmit = async (answers: QuestionAnswer[]) => {
+    const question = getPendingQuestion(props.instance.id)
+    if (!question || !props.instance.client) {
+      return
+    }
+
+    try {
+      // Map answers to SDK format: array of string arrays
+      const sdkAnswers = answers.map(answer => {
+        const custom = answer.customText?.trim()
+        if (custom) return [custom]
+        return answer.values
+      })
+
+      await requestData(
+        props.instance.client.question.reply({
+          requestID: question.id,
+          answers: sdkAnswers
+        }),
+        "question.reply"
+      )
+
+      setQuestionWizardOpen(false)
+    } catch (error) {
+      console.error("Failed to submit question answers", error)
+    }
+  }
+
+  const handleQuestionCancel = async () => {
+    const question = getPendingQuestion(props.instance.id)
+    if (!question || !props.instance.client) {
+      setQuestionWizardOpen(false)
+      return
+    }
+
+    try {
+      await requestData(
+        props.instance.client.question.reject({
+          requestID: question.id
+        }),
+        "question.reject"
+      )
+
+      setQuestionWizardOpen(false)
+    } catch (error) {
+      console.error("Failed to reject question", error)
+      setQuestionWizardOpen(false)
+    }
+  }
 
   const measureDrawerHost = () => {
     if (typeof window === "undefined") return
@@ -1520,6 +1586,33 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         isOpen={permissionModalOpen()}
         onClose={() => setPermissionModalOpen(false)}
       />
+
+      <Show when={questionWizardOpen() && getPendingQuestion(props.instance.id)}>
+        {(pending) => {
+          // Map questions to wizard format (like shuvcode does)
+          const mappedQuestions = () => pending().questions.map((question, index) => ({
+            id: `${pending().id}-${index}`,
+            question: question.question,
+            header: question.header,
+            options: question.options.map((option) => ({
+              label: option.label,
+              description: option.description,
+            })),
+            // Default to single-select (like shuvcode)
+            multiple: question.multiple ?? false,
+          }))
+
+          return (
+            <div class="askquestion-wizard-overlay">
+              <AskQuestionWizard
+                questions={mappedQuestions()}
+                onSubmit={handleQuestionSubmit}
+                onCancel={handleQuestionCancel}
+              />
+            </div>
+          )
+        }}
+      </Show>
     </>
   )
 }
