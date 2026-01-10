@@ -78,6 +78,7 @@ This fork includes the following Pull Requests that modify or enhance the origin
 |---|---|---|---|---|
 | [#5](https://github.com/bizzkoot/CodeNomad/pull/5) | Add Lightweight Source Control Panel | @bizzkoot | Closed | Adds VS Code-like Git interface with status tracking, branch management, file staging, commit interface, and syntax-highlighted diff viewer integrated into the right sidebar (8 files changed, 1275 insertions) |
 | [#6](https://github.com/bizzkoot/CodeNomad/pull/6) | Add Folder Tree Browser and Markdown File Preview | @bizzkoot | Closed | Introduces VSCode-style file tree modal for workspace navigation and in-app markdown viewer with GitHub-style rendering and LRU caching (port from origin/dev branch) |
+| [#7](https://github.com/bizzkoot/CodeNomad/pull/7) | Add AskQuestion Tool Integration | @bizzkoot | Closed | Integrates the `askquestion` tool enabling AI agents to request user input via an interactive multi-tab wizard. Features single/multi-select options, custom text inputs, keyboard navigation, and SSE event handling via a minimal SDK passthrough architecture (5 new files, 9 modified) |
 
 > [!NOTE]
 > These PRs are not included in upstream and represent divergent functionality from the original CodeNomad repository. Please ensure you understand these changes before switching between the original fork and this repository.
