@@ -56,80 +56,116 @@ This document provides comprehensive documentation for integrating the `askquest
 - Direct SDK integration for reply/reject ✅
 - Automatic wizard open/close based on question state ✅
 
-### 🚨 CRITICAL BLOCKER: Schema Mismatch (2026-01-10)
+### 🚨 CRITICAL BLOCKER: Schema Mismatch (2026-01-10) - PARTIALLY RESOLVED
 
-**Status:** Phase 2 integration complete but **NON-FUNCTIONAL** due to schema mismatch
+**Status:** Phase 2 integration complete. Frontend schema fixed but **STILL NON-FUNCTIONAL** due to backend not sending required fields.
 
 **Problem:** The actual OpenCode SDK question schema does NOT match the expected schema from shuvcode analysis.
 
-**Expected Schema** (from shuvcode/types):
+**Expected Schema** (from shuvcode/packages/opencode/src/question/index.ts):
 ```typescript
 interface QuestionInfo {
-  id: string                    // ❌ NOT PROVIDED
-  label: string
-  question: string
+  question: string      // ✅ SENT
+  header: string        // ✅ SENT  
   options: Array<{
-    value: string              // ❌ NOT PROVIDED
-    label: string
-    description?: string
+    label: string       // ✅ SENT
+    description: string // ✅ SENT
   }>
-  multiSelect?: boolean        // ❌ NOT PROVIDED
+  multiple?: boolean    // ❌ NOT SENT (shows as undefined)
+}
+
+interface QuestionRequest {
+  id: string           // ❓ UNKNOWN - need SSE event log
+  sessionID: string    
+  questions: QuestionInfo[]
 }
 ```
 
-**Actual SDK Schema** (from runtime logs):
+**Actual Runtime Data** (from console logs 2026-01-10 22:08):
 ```typescript
-interface ActualQuestion {
-  question: string             // ✅ "What would you like me to help you with?"
-  header: string               // ✅ "Task" (used as tab label)
-  options: Array<{
-    label: string             // ✅ "Fix a bug"
-    description: string       // ✅ "Investigate and fix an issue"
-    // NO value field!
-  }>
-  // NO id field!
-  // NO multiSelect field!
+{
+  question: "What would you like me to help you with today?",  // ✅
+  header: "Task Type",                                         // ✅
+  options: [
+    { label: "Bug fix", description: "Fix an issue..." },     // ✅
+    { label: "New feature", description: "Implement..." },    // ✅
+    ...
+  ],
+  // multiple field is MISSING entirely (shows as undefined)
 }
 ```
 
-**Impact:**
-- ❌ `option.value` is `undefined` → Cannot identify which option was selected
-- ❌ `question.id` is `undefined` → Cannot identify which question in reply
-- ❌ `question.multiSelect` is `undefined` → Cannot determine selection mode
-- ❌ ALL user interactions fail (click, keyboard, submit)
-- ✅ UI renders correctly (question text, options visual)
+**Progress Made:**
+- ✅ Fixed type definitions to match shuvcode schema
+- ✅ Changed all `multiSelect` → `multiple` in code
+- ✅ Changed all `option.value` → `option.label` (use label as value)
+- ✅ Changed all `question.label` → `question.header` for tabs
+- ✅ Updated keyboard handlers
+- ✅ Selections now work correctly!
 
-**Console Evidence:**
+**Current Status:**
+- ✅ UI renders perfectly
+- ✅ Options display with labels and descriptions
+- ✅ Single-select works (one option at a time)
+- ❌ Can't determine if multi-select allowed (`multiple: undefined`)
+- ❌ Submit doesn't work (unknown why - need to investigate)
+- ❌ Request ID unknown (need SSE event payload)
+
+**Console Evidence (Latest Test):**
 ```
+[AskQuestionWizard] currentQuestion memo {
+  header: "Task Type",
+  multiple: undefined,    // ← Field not sent by backend!
+  options: Array(4)
+}
+
 [AskQuestionWizard] selectOption called {
-  optionValue: undefined,      // ← Should be option value
-  multiSelect: undefined,      // ← Should be true/false  
+  optionLabel: "Bug fix",  // ← Now works correctly!
+  multiple: undefined,     // ← Still undefined
   currentSelectedValues: Proxy(Array)
 }
 ```
 
-**Attempted Fixes:**
-1. ✅ Fixed Solid.js reactivity scope issues (captured values outside For loop)
-2. ✅ Added null checks and defensive coding
-3. ❌ Core issue remains: missing fields in SDK data structure
+**Remaining Issues:**
 
-**Root Cause:**
-The question data structure received from `question.asked` SSE event doesn't include critical fields (`id`, `value` per option, `multiSelect` flag). This suggests either:
-1. The OpenCode SDK question schema is different from shuvcode
-2. The backend isn't sending complete question data
-3. Our event handler isn't extracting the full payload
+1. **`multiple` field not sent**: Backend/SDK doesn't include `multiple` field
+   - Default behavior: treats all questions as single-select
+   - Workaround: default to `false` if undefined
+   
+2. **Submit button doesn't work**: Unknown cause
+   - Need to check:
+     - Is submit button visible?
+     - Are event handlers firing?
+     - Is request failing?
+     - What errors in console?
+
+3. **Request ID unknown**: Still haven't captured SSE event payload
+   - Added logging to `instances.ts` but user didn't share that log
+   - Need: `"question.asked EVENT RECEIVED"` log output
 
 **Next Steps Required:**
-1. 🔍 Inspect actual `question.asked` SSE event payload structure
-2. 🔍 Check OpenCode SDK source for question types (`@opencode-ai/sdk`)
-3. 🔧 Update type definitions to match actual schema
-4. 🔧 Adapt wizard to use `label` as value (fallback strategy)
-5. 🔧 Determine request ID from event payload, not question object
 
-**Files Affected:**
-- `packages/ui/src/types/question.ts` - Type definitions need update
-- `packages/ui/src/components/askquestion-wizard.tsx` - Logic needs schema adaptation
-- `packages/ui/src/stores/instances.ts` - Event handler may need payload extraction fix
+1. 🔍 **Debug submit failure**:
+   - Add console logs to submit handler
+   - Check if button is enabled
+   - Check if API call is made
+   - Check network tab for errors
+
+2. 🔍 **Get SSE event payload**:
+   - User needs to share `"question.asked EVENT RECEIVED"` log
+   - This will show the full event structure with request ID
+
+3. 🔧 **Fix `multiple` undefined**:
+   - Add default: `const isMultiple = question.multiple ?? false`
+   - Or investigate why backend doesn't send it
+
+4. 🔧 **Test multi-select** (once we know how to trigger it):
+   - Verify toggle behavior
+   - Verify submit sends array of labels
+
+**Files to Check:**
+- `packages/ui/src/components/instance/instance-shell2.tsx` - Submit handler
+- `packages/ui/src/stores/instances.ts` - SSE event handler (has enhanced logging)
 
 ### ⏳ Phase 3: Testing (BLOCKED)
 - [ ] Manual testing checklist
