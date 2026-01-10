@@ -7,16 +7,25 @@ export interface QuestionOption {
 }
 
 export interface QuestionInfo {
+    id?: string           // Optional in SDK response, generated when mapping to wizard
     question: string      // Complete question text
     header: string        // Short tab label (max 12 chars)
     options: QuestionOption[]
     multiple?: boolean    // Allow selecting multiple options (NOTE: not 'multiSelect'!)
 }
 
+/** Mapped question type for the wizard (with required id) */
+export interface WizardQuestion {
+    id: string            // Required for wizard: `${requestId}-${index}`
+    question: string      // Complete question text
+    header: string        // Short tab label (max 12 chars)
+    options: QuestionOption[]
+    multiple: boolean     // Defaults to false
+}
+
 export interface QuestionRequest {
     /** Unique request ID */
     id: string
-    /** Session ID this question belongs to */
     /** Array of questions to ask */
     questions: QuestionInfo[]
     /** Optional tool metadata */

@@ -225,6 +225,57 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     }
   })
 
+  // Question wizard handlers - defined at component level for proper binding
+  const handleQuestionSubmit = async (answers: QuestionAnswer[]) => {
+    const question = getPendingQuestion(props.instance.id)
+    if (!question || !props.instance.client) {
+      return
+    }
+
+    try {
+      // Map answers to SDK format: array of string arrays
+      const sdkAnswers = answers.map(answer => {
+        const custom = answer.customText?.trim()
+        if (custom) return [custom]
+        return answer.values
+      })
+
+      await requestData(
+        props.instance.client.question.reply({
+          requestID: question.id,
+          answers: sdkAnswers
+        }),
+        "question.reply"
+      )
+
+      setQuestionWizardOpen(false)
+    } catch (error) {
+      console.error("Failed to submit question answers", error)
+    }
+  }
+
+  const handleQuestionCancel = async () => {
+    const question = getPendingQuestion(props.instance.id)
+    if (!question || !props.instance.client) {
+      setQuestionWizardOpen(false)
+      return
+    }
+
+    try {
+      await requestData(
+        props.instance.client.question.reject({
+          requestID: question.id
+        }),
+        "question.reject"
+      )
+
+      setQuestionWizardOpen(false)
+    } catch (error) {
+      console.error("Failed to reject question", error)
+      setQuestionWizardOpen(false)
+    }
+  }
+
   const measureDrawerHost = () => {
     if (typeof window === "undefined") return
     const host = drawerHost()
@@ -1537,57 +1588,30 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       />
 
       <Show when={questionWizardOpen() && getPendingQuestion(props.instance.id)}>
-        {(pending) => (
-          <div class="askquestion-wizard-overlay">
-            <AskQuestionWizard
-              questions={pending().questions}
-              onSubmit={async (answers) => {
-                const question = getPendingQuestion(props.instance.id)
-                if (!question || !props.instance.client) return
+        {(pending) => {
+          // Map questions to wizard format (like shuvcode does)
+          const mappedQuestions = () => pending().questions.map((question, index) => ({
+            id: `${pending().id}-${index}`,
+            question: question.question,
+            header: question.header,
+            options: question.options.map((option) => ({
+              label: option.label,
+              description: option.description,
+            })),
+            // Default to single-select (like shuvcode)
+            multiple: question.multiple ?? false,
+          }))
 
-                try {
-                  // Map answers to SDK format
-                  const sdkAnswers = answers.map(answer => {
-                    if (answer.customText?.trim()) {
-                      return [answer.customText.trim()]
-                    }
-                    return answer.values
-                  })
-
-                  await requestData(
-                    (props.instance.client as any).question.reply({
-                      requestID: question.id,
-                      answers: sdkAnswers
-                    }),
-                    "question.reply"
-                  )
-
-                  setQuestionWizardOpen(false)
-                } catch (error) {
-                  log.error("Failed to submit question answers", error)
-                }
-              }}
-              onCancel={async () => {
-                const question = getPendingQuestion(props.instance.id)
-                if (!question || !props.instance.client) return
-
-                try {
-                  await requestData(
-                    (props.instance.client as any).question.reject({
-                      requestID: question.id
-                    }),
-                    "question.reject"
-                  )
-
-                  setQuestionWizardOpen(false)
-                } catch (error) {
-                  log.error("Failed to reject question", error)
-                  setQuestionWizardOpen(false)
-                }
-              }}
-            />
-          </div>
-        )}
+          return (
+            <div class="askquestion-wizard-overlay">
+              <AskQuestionWizard
+                questions={mappedQuestions()}
+                onSubmit={handleQuestionSubmit}
+                onCancel={handleQuestionCancel}
+              />
+            </div>
+          )
+        }}
       </Show>
     </>
   )

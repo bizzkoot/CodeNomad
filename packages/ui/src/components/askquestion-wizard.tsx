@@ -1,9 +1,15 @@
 import { createMemo, For, onMount, onCleanup, Show, type Component } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import type { QuestionInfo, QuestionAnswer } from "../types/question"
+import type { WizardQuestion, QuestionAnswer, QuestionOption } from "../types/question"
+
+// Custom option marker
+const CUSTOM_OPTION_LABEL = "Type something..."
+
+// Extended option type that includes the custom option
+type WizardOption = QuestionOption & { isCustom?: boolean }
 
 export interface AskQuestionWizardProps {
-    questions: QuestionInfo[]
+    questions: WizardQuestion[]
     onSubmit: (answers: QuestionAnswer[]) => void
     onCancel: () => void
 }
@@ -15,11 +21,6 @@ interface QuestionState {
 }
 
 export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
-    console.log('[AskQuestionWizard] Component mounted/updated with props:', {
-        questionsCount: props.questions?.length,
-        questions: props.questions
-    })
-
     // State for the wizard
     const [store, setStore] = createStore({
         activeTab: 0,
@@ -38,24 +39,17 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
     // Current question based on active tab
     const currentQuestion = createMemo(() => {
         const question = props.questions[store.activeTab]
-        console.log('[AskQuestionWizard] currentQuestion memo', {
-            activeTab: store.activeTab,
-            question: question,
-            header: question?.header,
-            multiple: question?.multiple,
-            options: question?.options
-        })
         return question
     })
     const currentState = createMemo(() => store.questionStates[store.activeTab])
 
     // Options including "Type something..." at the end
-    const optionsWithCustom = createMemo(() => {
+    const optionsWithCustom = createMemo((): WizardOption[] => {
         const current = currentQuestion()
         if (!current) return []
         return [
             ...current.options,
-            { value: "__custom__", label: "Type something...", description: "Enter your own response" },
+            { label: CUSTOM_OPTION_LABEL, description: "Enter your own response", isCustom: true },
         ]
     })
 
@@ -71,12 +65,16 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
     })
 
     function handleSubmit() {
-        if (!allAnswered()) return
+        if (!allAnswered()) {
+            return
+        }
+        // Unwrap proxy values to plain arrays/objects before passing to parent
         const answers: QuestionAnswer[] = props.questions.map((q, i) => {
             const state = store.questionStates[i]
             return {
-                questionId: q.id,
-                values: state.selectedValues,
+                questionId: q.id || `q-${i}`,
+                // Convert proxy array to plain array
+                values: [...state.selectedValues],
                 customText: state.customText,
             }
         })
@@ -85,11 +83,6 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
 
     function selectOption(optionLabel: string) {
         const question = currentQuestion()
-        console.log('[AskQuestionWizard] selectOption called', {
-            optionLabel,
-            multiple: question.multiple,
-            currentSelectedValues: currentState().selectedValues
-        })
 
         setStore(
             produce((s) => {
@@ -259,13 +252,12 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             const option = optionsWithCustom()[selectedIdx]
             if (!option) return
 
-            const optionLabel = option.label
-            if (optionLabel === "__custom__" || option.value === "__custom__") {
+            if (option.isCustom) {
                 openCustomInput()
                 return
             }
 
-            selectOption(optionLabel)
+            selectOption(option.label)
             return
         }
 
@@ -277,8 +269,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             const option = optionsWithCustom()[selectedIdx]
             if (!option) return
 
-            const optionLabel = option.label
-            if (optionLabel === "__custom__" || option.value === "__custom__") {
+            if (option.isCustom) {
                 openCustomInput()
                 return
             }
@@ -291,12 +282,12 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                     return
                 }
                 // If nothing selected yet, toggle the current option
-                selectOption(optionLabel)
+                selectOption(option.label)
                 return
             }
 
             // Single-select: select and advance
-            selectOption(optionLabel)
+            selectOption(option.label)
             return
         }
 
@@ -356,7 +347,17 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                 <button
                     type="button"
                     class="askquestion-wizard-close"
-                    onClick={props.onCancel}
+                    onClick={() => {
+                        console.log('[AskQuestionWizard] Close button clicked, calling onCancel')
+                        console.log('[AskQuestionWizard] props.onCancel type:', typeof props.onCancel)
+                        console.log('[AskQuestionWizard] props.onCancel:', props.onCancel)
+                        try {
+                            props.onCancel()
+                            console.log('[AskQuestionWizard] onCancel called successfully')
+                        } catch (err) {
+                            console.error('[AskQuestionWizard] onCancel threw error:', err)
+                        }
+                    }}
                     aria-label="Cancel"
                     title="Cancel (Esc)"
                 >
@@ -412,7 +413,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             {/* Current question */}
             <div class="askquestion-wizard-question">
                 <h3 class="askquestion-wizard-question-text">{currentQuestion().question}</h3>
-                <Show when={currentQuestion().multiSelect}>
+                <Show when={currentQuestion().multiple}>
                     <p class="askquestion-wizard-question-hint">(select multiple, press Enter to confirm)</p>
                 </Show>
             </div>
@@ -424,15 +425,15 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                         const optionLabel = option.label  // Use label as value
                         const optionLabelText = option.label
                         const optionDescription = option.description
+                        const isCustomOption = option.isCustom === true
 
                         const isSelected = createMemo(() => currentState().selectedOption === index())
                         const isChosen = createMemo(() => {
-                            if (optionLabel === "__custom__") {
+                            if (isCustomOption) {
                                 return !!currentState().customText
                             }
                             return currentState().selectedValues.includes(optionLabel)
                         })
-                        const isCustomOption = optionLabel === "__custom__"
 
                         return (
                             <button
