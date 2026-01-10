@@ -57,6 +57,7 @@ import CommandPalette from "../command-palette"
 import FolderTreeBrowser from "../folder-tree-browser"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
+import { AskQuestionWizard } from "../askquestion-wizard"
 import Kbd from "../kbd"
 import { TodoListView } from "../tool-call/renderers/todo"
 import ContextUsagePanel from "../session/context-usage-panel"
@@ -73,6 +74,9 @@ import {
   type SessionSidebarRequestAction,
   type SessionSidebarRequestDetail,
 } from "../../lib/session-sidebar-events"
+import { getPendingQuestion } from "../../stores/questions"
+import type { QuestionAnswer } from "../../types/question"
+import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
 
@@ -152,6 +156,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   const [showBackgroundOutput, setShowBackgroundOutput] = createSignal(false)
   const [folderTreeBrowserOpen, setFolderTreeBrowserOpen] = createSignal(false)
   const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
+  const [questionWizardOpen, setQuestionWizardOpen] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
 
@@ -207,6 +212,16 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         setRightPinned(false)
         setRightOpen(false)
         break
+    }
+  })
+
+  // Auto-open question wizard when a pending question appears
+  createEffect(() => {
+    const pending = getPendingQuestion(props.instance.id)
+    if (pending && !questionWizardOpen()) {
+      setQuestionWizardOpen(true)
+    } else if (!pending && questionWizardOpen()) {
+      setQuestionWizardOpen(false)
     }
   })
 
@@ -1520,6 +1535,60 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         isOpen={permissionModalOpen()}
         onClose={() => setPermissionModalOpen(false)}
       />
+
+      <Show when={questionWizardOpen() && getPendingQuestion(props.instance.id)}>
+        {(pending) => (
+          <div class="askquestion-wizard-overlay">
+            <AskQuestionWizard
+              questions={pending().questions}
+              onSubmit={async (answers) => {
+                const question = getPendingQuestion(props.instance.id)
+                if (!question || !props.instance.client) return
+
+                try {
+                  // Map answers to SDK format
+                  const sdkAnswers = answers.map(answer => {
+                    if (answer.customText?.trim()) {
+                      return [answer.customText.trim()]
+                    }
+                    return answer.values
+                  })
+
+                  await requestData(
+                    (props.instance.client as any).question.reply({
+                      requestID: question.id,
+                      answers: sdkAnswers
+                    }),
+                    "question.reply"
+                  )
+
+                  setQuestionWizardOpen(false)
+                } catch (error) {
+                  log.error("Failed to submit question answers", error)
+                }
+              }}
+              onCancel={async () => {
+                const question = getPendingQuestion(props.instance.id)
+                if (!question || !props.instance.client) return
+
+                try {
+                  await requestData(
+                    (props.instance.client as any).question.reject({
+                      requestID: question.id
+                    }),
+                    "question.reject"
+                  )
+
+                  setQuestionWizardOpen(false)
+                } catch (error) {
+                  log.error("Failed to reject question", error)
+                  setQuestionWizardOpen(false)
+                }
+              }}
+            />
+          </div>
+        )}
+      </Show>
     </>
   )
 }

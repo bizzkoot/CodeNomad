@@ -4,10 +4,11 @@
 
 This document provides comprehensive documentation for integrating the `askquestion` tool from shuvcode into CodeNomad. It covers research findings, architecture analysis, approach evaluation, and detailed implementation plan.
 
-**Status:** Phase 1 Complete ✅  
+**Status:** Phase 2 Complete ✅  
 **Approach:** Minimal Integration (SDK Passthrough)  
 **Started:** 2026-01-10  
 **Phase 1 Completed:** 2026-01-10  
+**Phase 2 Completed:** 2026-01-10  
 **Author:** AI Assistant
 
 ## Implementation Status
@@ -28,12 +29,32 @@ This document provides comprehensive documentation for integrating the `askquest
 **Files Modified:**
 - `packages/ui/src/styles/controls.css` (added import)
 
-### 🔄 Phase 2: Integration (IN PROGRESS)
-- [ ] Update SSE event handler for question events
-- [ ] Integrate wizard into workspace page
-- [ ] Wire up OpenCode SDK calls (reply/reject)
-- [ ] Add error handling and retry logic
-- [ ] Handle session abort and edge cases
+### ✅ Phase 2: Integration (COMPLETE)
+- [x] Updated SSE event handler for question events
+- [x] Integrated wizard into workspace page
+- [x] Wired up OpenCode SDK calls (reply/reject)
+- [x] Added error handling and retry logic
+- [x] Handled session abort and edge cases (auto open/close)
+
+**Files Modified:**
+- `packages/ui/src/lib/sse-manager.ts` (+18 lines)
+  - Added `question.asked`, `question.replied`, `question.rejected` event types
+  - Added event handler callbacks
+- `packages/ui/src/stores/instances.ts` (+25 lines)
+  - Added question store imports
+  - Wired up SSE callbacks to question queue
+  - Added cleanup on instance removal
+- `packages/ui/src/components/instance/instance-shell2.tsx` (+68 lines)
+  - Integrated AskQuestionWizard component
+  - Added auto-open/close logic with createEffect
+  - Implemented submit/cancel handlers using OpenCode SDK
+  - Added proper error handling
+
+**Integration Details:**
+- Zero backend changes required ✅
+- Uses existing SSE infrastructure ✅
+- Direct SDK integration for reply/reject ✅
+- Automatic wizard open/close based on question state ✅
 
 ### ⏳ Phase 3: Testing (PENDING)
 - [ ] Manual testing checklist
