@@ -28,7 +28,8 @@ async function runGitCommand(cwd: string, args: string): Promise<string> {
             cwd,
             maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large diffs
         })
-        return stdout.trim()
+        // Only trim trailing whitespace to preserve leading spaces in porcelain format
+        return stdout.trimEnd()
     } catch (error) {
         const execError = error as { stderr?: string; message?: string }
         throw new Error(execError.stderr || execError.message || "Git command failed")
@@ -44,8 +45,8 @@ async function isGitRepository(cwd: string): Promise<boolean> {
     }
 }
 
-function parseStatusLine(line: string): GitFileChange | null {
-    if (line.length < 3) return null
+function parseStatusLine(line: string): GitFileChange[] {
+    if (line.length < 3) return []
 
     const indexStatus = line[0]
     const worktreeStatus = line[1]
@@ -60,17 +61,31 @@ function parseStatusLine(line: string): GitFileChange | null {
         actualPath = parts[1]
     }
 
-    // Determine status and staging state
-    let status: GitFileStatus
-    let staged = false
+    const changes: GitFileChange[] = []
 
+    // Handle untracked files
     if (indexStatus === "?" && worktreeStatus === "?") {
-        status = "untracked"
-    } else if (indexStatus === "!" && worktreeStatus === "!") {
-        status = "ignored"
-    } else if (indexStatus !== " " && indexStatus !== "?") {
-        // File has staged changes
-        staged = true
+        changes.push({
+            path: actualPath,
+            status: "untracked",
+            staged: false,
+        })
+        return changes
+    }
+
+    // Handle ignored files
+    if (indexStatus === "!" && worktreeStatus === "!") {
+        changes.push({
+            path: actualPath,
+            status: "ignored",
+            staged: false,
+        })
+        return changes
+    }
+
+    // Handle staged changes (index status is not space or question mark)
+    if (indexStatus !== " " && indexStatus !== "?") {
+        let status: GitFileStatus
         switch (indexStatus) {
             case "M":
                 status = "modified"
@@ -90,8 +105,18 @@ function parseStatusLine(line: string): GitFileChange | null {
             default:
                 status = "modified"
         }
-    } else {
-        // File has unstaged changes
+
+        changes.push({
+            path: actualPath,
+            status,
+            staged: true,
+            originalPath,
+        })
+    }
+
+    // Handle unstaged changes (worktree status is not space or question mark)
+    if (worktreeStatus !== " " && worktreeStatus !== "?") {
+        let status: GitFileStatus
         switch (worktreeStatus) {
             case "M":
                 status = "modified"
@@ -102,14 +127,15 @@ function parseStatusLine(line: string): GitFileChange | null {
             default:
                 status = "modified"
         }
+
+        changes.push({
+            path: actualPath,
+            status,
+            staged: false,
+        })
     }
 
-    return {
-        path: actualPath,
-        status,
-        staged,
-        originalPath,
-    }
+    return changes
 }
 
 async function getGitStatus(cwd: string): Promise<GitStatus> {
@@ -155,10 +181,8 @@ async function getGitStatus(cwd: string): Promise<GitStatus> {
 
     if (statusOutput) {
         for (const line of statusOutput.split("\n")) {
-            const change = parseStatusLine(line)
-            if (change) {
-                changes.push(change)
-            }
+            const lineChanges = parseStatusLine(line)
+            changes.push(...lineChanges)
         }
     }
 

@@ -90,6 +90,51 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         }
     }
 
+    const renderDiffLine = (line: string, index: number) => {
+        // Skip file metadata lines (diff --git, index, ---, +++)
+        if (line.startsWith("diff --git") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++")) {
+            return null
+        }
+
+        // Skip hunk headers (@@ line numbers) - too confusing
+        if (line.startsWith("@@")) {
+            return null
+        }
+
+        // Determine line type and styling
+        let bgClass = ""
+        let textClass = "text-primary"
+        let borderClass = ""
+        let prefix = line.substring(0, 1)
+        let content = line.substring(1)
+
+        if (line.startsWith("+")) {
+            // Added line
+            bgClass = "bg-green-500/10"
+            borderClass = "border-l-2 border-green-500"
+            textClass = "text-green-400"
+        } else if (line.startsWith("-")) {
+            // Removed line
+            bgClass = "bg-red-500/10"
+            borderClass = "border-l-2 border-red-500"
+            textClass = "text-red-400"
+        } else {
+            // Context line
+            textClass = "text-secondary"
+            prefix = " "
+            content = line
+        }
+
+        return (
+            <div class={`px-2 py-0.5 ${bgClass} ${borderClass} hover:bg-surface-tertiary/50`}>
+                <span class={`${textClass} font-mono text-xs whitespace-pre`}>
+                    <span class="select-none inline-block w-4 text-gray-500">{prefix}</span>
+                    <span class="whitespace-pre-wrap break-all">{content}</span>
+                </span>
+            </div>
+        )
+    }
+
     const handleBranchSelect = async (branch: string) => {
         setShowBranchPicker(false)
         await checkoutBranch(props.workspaceId, branch)
@@ -136,14 +181,17 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         showDiscard?: boolean
     }> = (itemProps) => (
         <div class="group flex items-center gap-2 px-2 py-1 hover:bg-surface-tertiary rounded text-xs">
-            <span class={`font-mono w-4 text-center ${getStatusColor(itemProps.file.status)}`}>
+            <span 
+                class={`font-mono w-4 text-center ${getStatusColor(itemProps.file.status)}`}
+                title={itemProps.file.status}
+            >
                 {getStatusIcon(itemProps.file.status)}
             </span>
             <button
                 type="button"
                 class="flex-1 text-left truncate text-primary hover:underline"
                 onClick={() => handleViewDiff(itemProps.file)}
-                title={itemProps.file.path}
+                title={`View diff: ${itemProps.file.path}`}
             >
                 {itemProps.file.path.split("/").pop()}
             </button>
@@ -153,7 +201,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                         type="button"
                         class="p-1 hover:bg-surface-secondary rounded"
                         onClick={() => handleStage(itemProps.file.path)}
-                        title="Stage"
+                        title="Stage this file for commit"
                     >
                         <Plus class="h-3 w-3" />
                     </button>
@@ -163,7 +211,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                         type="button"
                         class="p-1 hover:bg-surface-secondary rounded"
                         onClick={() => handleUnstage(itemProps.file.path)}
-                        title="Unstage"
+                        title="Remove from staging"
                     >
                         <Minus class="h-3 w-3" />
                     </button>
@@ -173,7 +221,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                         type="button"
                         class="p-1 hover:bg-surface-secondary rounded text-red-500"
                         onClick={() => handleDiscard(itemProps.file.path)}
-                        title="Discard Changes"
+                        title="Discard changes"
                     >
                         <Undo2 class="h-3 w-3" />
                     </button>
@@ -199,6 +247,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                                 fetchGitBranches(props.workspaceId)
                                 setShowBranchPicker(!showBranchPicker())
                             }}
+                            title="Switch branch"
                         >
                             <GitBranch class="h-3 w-3" />
                             <span class="flex-1 text-left truncate">{git.currentBranch() || "No branch"}</span>
@@ -213,6 +262,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                                             class={`w-full text-left px-3 py-1.5 text-xs hover:bg-surface-tertiary ${branch.current ? "bg-surface-tertiary font-semibold" : ""
                                                 }`}
                                             onClick={() => handleBranchSelect(branch.name)}
+                                            title={branch.name}
                                         >
                                             {branch.name}
                                             <Show when={branch.current}>
@@ -249,6 +299,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                         class="w-full px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
                         disabled={!commitMessage().trim() || git.stagedChanges().length === 0 || git.loading()}
                         onClick={handleCommit}
+                        title="Commit"
                     >
                         Commit ({git.stagedChanges().length} staged)
                     </button>
@@ -271,6 +322,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                                     current.includes("staged") ? current.filter((s) => s !== "staged") : [...current, "staged"],
                                 )
                             }}
+                            title="Toggle staged changes section"
                         >
                             <span>Staged ({git.stagedChanges().length})</span>
                             <div class="flex items-center gap-1">
@@ -313,6 +365,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                                     current.includes("changes") ? current.filter((s) => s !== "changes") : [...current, "changes"],
                                 )
                             }}
+                            title="Toggle unstaged changes section"
                         >
                             <span>Changes ({git.unstagedChanges().length})</span>
                             <div class="flex items-center gap-1">
@@ -357,6 +410,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                                     current.includes("untracked") ? current.filter((s) => s !== "untracked") : [...current, "untracked"],
                                 )
                             }}
+                            title="Toggle untracked files section"
                         >
                             <span>Untracked ({git.untrackedChanges().length})</span>
                             <ChevronDown
@@ -387,13 +441,17 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                     >
                         <div class="flex items-center justify-between px-4 py-2 border-b border-base">
                             <span class="font-semibold text-sm">{diffPath()}</span>
-                            <button type="button" class="p-1 hover:bg-surface-secondary rounded" onClick={() => setShowDiff(false)}>
+                            <button type="button" class="p-1 hover:bg-surface-secondary rounded" onClick={() => setShowDiff(false)} title="Close">
                                 ×
                             </button>
                         </div>
-                        <div class="flex-1 overflow-auto p-2">
-                            <Show when={diffContent()} fallback={<p class="text-secondary text-sm">No changes</p>}>
-                                <pre class="text-xs font-mono whitespace-pre-wrap">{diffContent()}</pre>
+                        <div class="flex-1 overflow-auto bg-surface-secondary">
+                            <Show when={diffContent()} fallback={<p class="text-secondary text-sm p-4">No changes</p>}>
+                                <div class="font-mono text-xs leading-relaxed">
+                                    <For each={diffContent().split("\n")}>
+                                        {(line, index) => renderDiffLine(line, index())}
+                                    </For>
+                                </div>
                             </Show>
                         </div>
                     </div>
