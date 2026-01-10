@@ -68,13 +68,3 @@ jobs:
       tag: ${{ needs.prepare-release.outputs.tag }}
       release_name: ${{ needs.prepare-release.outputs.release_name }}
     secrets: inherit
-
-  publish-server:
-    needs:
-      - prepare-release
-      - build-and-upload
-    uses: ./.github/workflows/manual-npm-publish.yml
-    with:
-      version: ${{ needs.prepare-release.outputs.version }}
-      dist_tag: ${{ inputs.dist_tag }}
-    secrets: inherit

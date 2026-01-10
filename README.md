@@ -40,20 +40,23 @@ We are also working on a lightweight, high-performance version built with [Tauri
 - **Download**: Experimental builds are available on the [Releases Page](https://github.com/shantur/CodeNomad/releases).
 - **Source**: Check out `packages/tauri-app` if you're interested in contributing.
 
-### 💻 CodeNomad Server
-Run CodeNomad as a local server and access it via your web browser. Perfect for remote development (SSH/VPN) or running as a service.
+### 💻 Build from Source
+Run CodeNomad as a local server by building from source. Perfect for remote development (SSH/VPN) or running as a service.
 
 ```bash
-npx @neuralnomads/codenomad --launch
+# Clone the repository
+git clone https://github.com/bizzkoot/CodeNomad.git
+cd CodeNomad
+
+# Install dependencies
+npm install --workspaces
+
+# Build and launch the server
+npm run build --workspace @neuralnomads/codenomad
+npm run start --workspace @neuralnomads/codenomad
 ```
 
-For dev version
-
-```bash
-npx @neuralnomads/codenomad@dev --launch
-```
-
-This command starts the server and opens the web client in your default browser.
+This will start the server and you can access it at http://localhost:3000
 
 ## Highlights
 
