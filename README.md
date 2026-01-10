@@ -4,6 +4,9 @@
 
 CodeNomad is built for people who live inside OpenCode for hours on end and need a cockpit, not a kiosk. It delivers a premium, low-latency workspace that favors speed, clarity, and direct control.
 
+> [!IMPORTANT]
+> **This is a fork of the original [shantur/CodeNomad](https://github.com/shantur/CodeNomad) repository.** This fork includes enhancements from PRs that diverge from the upstream main branch. These changes are included in all builds generated from this repository.
+
 ![Multi-instance workspace](docs/screenshots/newSession.png)
 _Manage multiple OpenCode sessions side-by-side._
 
@@ -63,6 +66,20 @@ This command starts the server and opens the web client in your default browser.
 
 - **[OpenCode CLI](https://opencode.ai)**: Must be installed and available in your `PATH`.
 - **Node.js 18+**: Required if running the CLI server or building from source.
+
+## Diverging PRs
+
+This fork includes the following Pull Requests that modify or enhance the original repository's functionality:
+
+| PR | Title | Author | Status | Description |
+|---|---|---|---|---|
+| [#5](https://github.com/bizzkoot/CodeNomad/pull/5) | Add Lightweight Source Control Panel | @bizzkoot | Closed | Adds VS Code-like Git interface with status tracking, branch management, file staging, commit interface, and syntax-highlighted diff viewer integrated into the right sidebar (8 files changed, 1275 insertions) |
+| [#6](https://github.com/bizzkoot/CodeNomad/pull/6) | Add Folder Tree Browser and Markdown File Preview | @bizzkoot | Closed | Introduces VSCode-style file tree modal for workspace navigation and in-app markdown viewer with GitHub-style rendering and LRU caching (port from origin/dev branch) |
+
+> [!NOTE]
+> These PRs are not included in upstream and represent divergent functionality from the original CodeNomad repository. Please ensure you understand these changes before switching between the original fork and this repository.
+
+_Last updated: 2026-01-10_
 
 ## Troubleshooting
 
