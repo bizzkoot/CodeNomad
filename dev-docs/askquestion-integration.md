@@ -56,11 +56,88 @@ This document provides comprehensive documentation for integrating the `askquest
 - Direct SDK integration for reply/reject ✅
 - Automatic wizard open/close based on question state ✅
 
-### ⏳ Phase 3: Testing (PENDING)
+### 🚨 CRITICAL BLOCKER: Schema Mismatch (2026-01-10)
+
+**Status:** Phase 2 integration complete but **NON-FUNCTIONAL** due to schema mismatch
+
+**Problem:** The actual OpenCode SDK question schema does NOT match the expected schema from shuvcode analysis.
+
+**Expected Schema** (from shuvcode/types):
+```typescript
+interface QuestionInfo {
+  id: string                    // ❌ NOT PROVIDED
+  label: string
+  question: string
+  options: Array<{
+    value: string              // ❌ NOT PROVIDED
+    label: string
+    description?: string
+  }>
+  multiSelect?: boolean        // ❌ NOT PROVIDED
+}
+```
+
+**Actual SDK Schema** (from runtime logs):
+```typescript
+interface ActualQuestion {
+  question: string             // ✅ "What would you like me to help you with?"
+  header: string               // ✅ "Task" (used as tab label)
+  options: Array<{
+    label: string             // ✅ "Fix a bug"
+    description: string       // ✅ "Investigate and fix an issue"
+    // NO value field!
+  }>
+  // NO id field!
+  // NO multiSelect field!
+}
+```
+
+**Impact:**
+- ❌ `option.value` is `undefined` → Cannot identify which option was selected
+- ❌ `question.id` is `undefined` → Cannot identify which question in reply
+- ❌ `question.multiSelect` is `undefined` → Cannot determine selection mode
+- ❌ ALL user interactions fail (click, keyboard, submit)
+- ✅ UI renders correctly (question text, options visual)
+
+**Console Evidence:**
+```
+[AskQuestionWizard] selectOption called {
+  optionValue: undefined,      // ← Should be option value
+  multiSelect: undefined,      // ← Should be true/false  
+  currentSelectedValues: Proxy(Array)
+}
+```
+
+**Attempted Fixes:**
+1. ✅ Fixed Solid.js reactivity scope issues (captured values outside For loop)
+2. ✅ Added null checks and defensive coding
+3. ❌ Core issue remains: missing fields in SDK data structure
+
+**Root Cause:**
+The question data structure received from `question.asked` SSE event doesn't include critical fields (`id`, `value` per option, `multiSelect` flag). This suggests either:
+1. The OpenCode SDK question schema is different from shuvcode
+2. The backend isn't sending complete question data
+3. Our event handler isn't extracting the full payload
+
+**Next Steps Required:**
+1. 🔍 Inspect actual `question.asked` SSE event payload structure
+2. 🔍 Check OpenCode SDK source for question types (`@opencode-ai/sdk`)
+3. 🔧 Update type definitions to match actual schema
+4. 🔧 Adapt wizard to use `label` as value (fallback strategy)
+5. 🔧 Determine request ID from event payload, not question object
+
+**Files Affected:**
+- `packages/ui/src/types/question.ts` - Type definitions need update
+- `packages/ui/src/components/askquestion-wizard.tsx` - Logic needs schema adaptation
+- `packages/ui/src/stores/instances.ts` - Event handler may need payload extraction fix
+
+### ⏳ Phase 3: Testing (BLOCKED)
 - [ ] Manual testing checklist
 - [ ] Unit tests for wizard component
 - [ ] Integration tests for SSE + SDK flow
 - [ ] Cross-browser and mobile testing
+
+> **Blocked by:** Schema mismatch must be resolved before testing can proceed
 
 ### ⏳ Phase 4: Polish (PENDING)
 - [ ] Add keyboard shortcuts documentation

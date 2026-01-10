@@ -628,7 +628,14 @@ sseManager.onLspUpdated = async (instanceId) => {
 
 // Question event handlers
 sseManager.onQuestionAsked = (instanceId, event) => {
-  log.info("question.asked", { instanceId, event })
+  log.info("question.asked EVENT RECEIVED", {
+    instanceId,
+    eventType: event.type,
+    fullEvent: event,
+    properties: event.properties,
+    propertiesKeys: event.properties ? Object.keys(event.properties) : [],
+    stringified: JSON.stringify(event, null, 2)
+  })
   if (event.properties) {
     addQuestionToQueue(instanceId, event.properties)
   }

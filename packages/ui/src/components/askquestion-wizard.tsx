@@ -15,6 +15,11 @@ interface QuestionState {
 }
 
 export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
+    console.log('[AskQuestionWizard] Component mounted/updated with props:', {
+        questionsCount: props.questions?.length,
+        questions: props.questions
+    })
+
     // State for the wizard
     const [store, setStore] = createStore({
         activeTab: 0,
@@ -31,14 +36,28 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
     let inputRef: HTMLInputElement | undefined
 
     // Current question based on active tab
-    const currentQuestion = createMemo(() => props.questions[store.activeTab])
+    const currentQuestion = createMemo(() => {
+        const question = props.questions[store.activeTab]
+        console.log('[AskQuestionWizard] currentQuestion memo', {
+            activeTab: store.activeTab,
+            question: question,
+            id: question?.id,
+            multiSelect: question?.multiSelect,
+            options: question?.options
+        })
+        return question
+    })
     const currentState = createMemo(() => store.questionStates[store.activeTab])
 
     // Options including "Type something..." at the end
-    const optionsWithCustom = createMemo(() => [
-        ...currentQuestion().options,
-        { value: "__custom__", label: "Type something...", description: "Enter your own response" },
-    ])
+    const optionsWithCustom = createMemo(() => {
+        const current = currentQuestion()
+        if (!current) return []
+        return [
+            ...current.options,
+            { value: "__custom__", label: "Type something...", description: "Enter your own response" },
+        ]
+    })
 
     // Check if all questions have at least one answer
     const allAnswered = createMemo(() =>
@@ -66,6 +85,12 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
 
     function selectOption(optionValue: string) {
         const question = currentQuestion()
+        console.log('[AskQuestionWizard] selectOption called', {
+            optionValue,
+            multiSelect: question.multiSelect,
+            currentSelectedValues: currentState().selectedValues
+        })
+
         setStore(
             produce((s) => {
                 const state = s.questionStates[s.activeTab]
@@ -74,10 +99,24 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                 if (question.multiSelect) {
                     // Toggle for multi-select
                     const idx = state.selectedValues.indexOf(optionValue)
+                    console.log('[AskQuestionWizard] Multi-select toggle', {
+                        optionValue,
+                        currentIndex: idx,
+                        currentArray: [...state.selectedValues]
+                    })
+
                     if (idx >= 0) {
+                        // Remove  if already selected
                         state.selectedValues.splice(idx, 1)
+                        console.log('[AskQuestionWizard] Removed from selection', {
+                            newArray: [...state.selectedValues]
+                        })
                     } else {
+                        // Add if not selected
                         state.selectedValues.push(optionValue)
+                        console.log('[AskQuestionWizard] Added to selection', {
+                            newArray: [...state.selectedValues]
+                        })
                     }
                 } else {
                     // Select for single-select and auto-advance
@@ -218,13 +257,15 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             evt.stopPropagation()
             const selectedIdx = currentState().selectedOption
             const option = optionsWithCustom()[selectedIdx]
+            if (!option) return
 
-            if (option.value === "__custom__") {
+            const optionValue = option.value
+            if (optionValue === "__custom__") {
                 openCustomInput()
                 return
             }
 
-            selectOption(option.value)
+            selectOption(optionValue)
             return
         }
 
@@ -234,8 +275,10 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             evt.stopPropagation()
             const selectedIdx = currentState().selectedOption
             const option = optionsWithCustom()[selectedIdx]
+            if (!option) return
 
-            if (option.value === "__custom__") {
+            const optionValue = option.value
+            if (optionValue === "__custom__") {
                 openCustomInput()
                 return
             }
@@ -248,12 +291,12 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                     return
                 }
                 // If nothing selected yet, toggle the current option
-                selectOption(option.value)
+                selectOption(optionValue)
                 return
             }
 
             // Single-select: select and advance
-            selectOption(option.value)
+            selectOption(optionValue)
             return
         }
 
@@ -264,7 +307,9 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             const idx = parseInt(evt.key) - 1
             if (idx < currentQuestion().options.length) {
                 const option = currentQuestion().options[idx]
-                selectOption(option.value)
+                if (option) {
+                    selectOption(option.value)
+                }
             }
             return
         }
@@ -376,14 +421,19 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             <div class="askquestion-wizard-options">
                 <For each={optionsWithCustom()}>
                     {(option, index) => {
+                        // Capture the option value outside reactive scope to prevent undefined
+                        const optionValue = option.value
+                        const optionLabel = option.label
+                        const optionDescription = option.description
+
                         const isSelected = createMemo(() => currentState().selectedOption === index())
                         const isChosen = createMemo(() => {
-                            if (option.value === "__custom__") {
+                            if (optionValue === "__custom__") {
                                 return !!currentState().customText
                             }
-                            return currentState().selectedValues.includes(option.value)
+                            return currentState().selectedValues.includes(optionValue)
                         })
-                        const isCustomOption = option.value === "__custom__"
+                        const isCustomOption = optionValue === "__custom__"
 
                         return (
                             <button
@@ -394,17 +444,22 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                                     "askquestion-wizard-option-chosen": isChosen(),
                                 }}
                                 onClick={() => {
+                                    // Update selectedOption for visual feedback
                                     setStore(
                                         produce((s) => {
                                             s.questionStates[s.activeTab].selectedOption = index()
                                         }),
                                     )
+                                    // Handle click
                                     if (isCustomOption) {
                                         openCustomInput()
                                     } else {
-                                        selectOption(option.value)
+                                        // For multi-select, selectOption toggles the value
+                                        // Use captured optionValue to avoid undefined
+                                        selectOption(optionValue)
                                     }
                                 }}
+
                             >
                                 {/* Selection indicator */}
                                 <span class="askquestion-wizard-option-indicator">
@@ -420,9 +475,9 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                                 </span>
                                 {/* Option label */}
                                 <div class="askquestion-wizard-option-content">
-                                    <span class="askquestion-wizard-option-label">{option.label}</span>
-                                    <Show when={option.description && !isCustomOption}>
-                                        <span class="askquestion-wizard-option-description">{option.description}</span>
+                                    <span class="askquestion-wizard-option-label">{optionLabel}</span>
+                                    <Show when={optionDescription && !isCustomOption}>
+                                        <span class="askquestion-wizard-option-description">{optionDescription}</span>
                                     </Show>
                                 </div>
                             </button>
