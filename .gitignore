@@ -8,4 +8,4 @@ release/
 out/
 .dir-locals.el
 .opencode/bashOutputs/
-shuvcode-analysis/
+#shuvcode-analysis/

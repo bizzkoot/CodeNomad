@@ -1,34 +1,22 @@
-/**
- * Question types matching OpenCode SDK and shuvcode patterns
- */
+// Question types matching OpenCode SDK schema
+// Based on shuvcode/packages/opencode/src/question/index.ts
 
 export interface QuestionOption {
-    /** Short identifier for the option */
-    value: string
-    /** Display label for the option */
-    label: string
-    /** Additional context for the option */
-    description?: string
+    label: string        // Display text (use this as the value too!)
+    description: string  // Explanation of choice
 }
 
 export interface QuestionInfo {
-    /** Unique identifier for the question */
-    id: string
-    /** Short tab label (e.g., "UI Framework") */
-    label: string
-    /** The full question text to display */
-    question: string
-    /** 2-8 suggested answer options */
+    question: string      // Complete question text
+    header: string        // Short tab label (max 12 chars)
     options: QuestionOption[]
-    /** Allow selecting multiple options */
-    multiSelect?: boolean
+    multiple?: boolean    // Allow selecting multiple options (NOTE: not 'multiSelect'!)
 }
 
 export interface QuestionRequest {
     /** Unique request ID */
     id: string
     /** Session ID this question belongs to */
-    sessionID: string
     /** Array of questions to ask */
     questions: QuestionInfo[]
     /** Optional tool metadata */

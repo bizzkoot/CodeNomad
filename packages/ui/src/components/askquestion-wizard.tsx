@@ -41,8 +41,8 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
         console.log('[AskQuestionWizard] currentQuestion memo', {
             activeTab: store.activeTab,
             question: question,
-            id: question?.id,
-            multiSelect: question?.multiSelect,
+            header: question?.header,
+            multiple: question?.multiple,
             options: question?.options
         })
         return question
@@ -83,11 +83,11 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
         props.onSubmit(answers)
     }
 
-    function selectOption(optionValue: string) {
+    function selectOption(optionLabel: string) {
         const question = currentQuestion()
         console.log('[AskQuestionWizard] selectOption called', {
-            optionValue,
-            multiSelect: question.multiSelect,
+            optionLabel,
+            multiple: question.multiple,
             currentSelectedValues: currentState().selectedValues
         })
 
@@ -96,31 +96,31 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                 const state = s.questionStates[s.activeTab]
                 state.customText = undefined
 
-                if (question.multiSelect) {
-                    // Toggle for multi-select
-                    const idx = state.selectedValues.indexOf(optionValue)
+                if (question.multiple) {
+                    // Toggle for multi-select (use label as value)
+                    const idx = state.selectedValues.indexOf(optionLabel)
                     console.log('[AskQuestionWizard] Multi-select toggle', {
-                        optionValue,
+                        optionLabel,
                         currentIndex: idx,
                         currentArray: [...state.selectedValues]
                     })
 
                     if (idx >= 0) {
-                        // Remove  if already selected
+                        // Remove if already selected
                         state.selectedValues.splice(idx, 1)
                         console.log('[AskQuestionWizard] Removed from selection', {
                             newArray: [...state.selectedValues]
                         })
                     } else {
                         // Add if not selected
-                        state.selectedValues.push(optionValue)
+                        state.selectedValues.push(optionLabel)
                         console.log('[AskQuestionWizard] Added to selection', {
                             newArray: [...state.selectedValues]
                         })
                     }
                 } else {
                     // Select for single-select and auto-advance
-                    state.selectedValues = [optionValue]
+                    state.selectedValues = [optionLabel]
                     if (s.activeTab < props.questions.length - 1) {
                         s.activeTab++
                     }
@@ -128,7 +128,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             }),
         )
         // Auto-submit if single-select on last question and all answered
-        if (!question.multiSelect) {
+        if (!question.multiple) {
             setTimeout(() => {
                 if (allAnswered()) {
                     handleSubmit()
@@ -259,13 +259,13 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             const option = optionsWithCustom()[selectedIdx]
             if (!option) return
 
-            const optionValue = option.value
-            if (optionValue === "__custom__") {
+            const optionLabel = option.label
+            if (optionLabel === "__custom__" || option.value === "__custom__") {
                 openCustomInput()
                 return
             }
 
-            selectOption(optionValue)
+            selectOption(optionLabel)
             return
         }
 
@@ -277,26 +277,26 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             const option = optionsWithCustom()[selectedIdx]
             if (!option) return
 
-            const optionValue = option.value
-            if (optionValue === "__custom__") {
+            const optionLabel = option.label
+            if (optionLabel === "__custom__" || option.value === "__custom__") {
                 openCustomInput()
                 return
             }
 
             const question = currentQuestion()
-            if (question.multiSelect) {
+            if (question.multiple) {
                 // For multi-select: Enter confirms current selections and advances
                 if (currentAnswered()) {
                     navigateQuestion("right")
                     return
                 }
                 // If nothing selected yet, toggle the current option
-                selectOption(optionValue)
+                selectOption(optionLabel)
                 return
             }
 
             // Single-select: select and advance
-            selectOption(optionValue)
+            selectOption(optionLabel)
             return
         }
 
@@ -308,7 +308,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             if (idx < currentQuestion().options.length) {
                 const option = currentQuestion().options[idx]
                 if (option) {
-                    selectOption(option.value)
+                    selectOption(option.label)
                 }
             }
             return
@@ -391,7 +391,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                                 >
                                     {isAnswered() ? "●" : "○"}
                                 </span>
-                                <span class="askquestion-wizard-tab-label">{question.label}</span>
+                                <span class="askquestion-wizard-tab-label">{question.header}</span>
                             </button>
                         )
                     }}
@@ -421,19 +421,18 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             <div class="askquestion-wizard-options">
                 <For each={optionsWithCustom()}>
                     {(option, index) => {
-                        // Capture the option value outside reactive scope to prevent undefined
-                        const optionValue = option.value
-                        const optionLabel = option.label
+                        const optionLabel = option.label  // Use label as value
+                        const optionLabelText = option.label
                         const optionDescription = option.description
 
                         const isSelected = createMemo(() => currentState().selectedOption === index())
                         const isChosen = createMemo(() => {
-                            if (optionValue === "__custom__") {
+                            if (optionLabel === "__custom__") {
                                 return !!currentState().customText
                             }
-                            return currentState().selectedValues.includes(optionValue)
+                            return currentState().selectedValues.includes(optionLabel)
                         })
-                        const isCustomOption = optionValue === "__custom__"
+                        const isCustomOption = optionLabel === "__custom__"
 
                         return (
                             <button
@@ -455,8 +454,8 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                                         openCustomInput()
                                     } else {
                                         // For multi-select, selectOption toggles the value
-                                        // Use captured optionValue to avoid undefined
-                                        selectOption(optionValue)
+                                        // Use label as value (since options don't have value field)
+                                        selectOption(optionLabel)
                                     }
                                 }}
 
@@ -465,7 +464,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                                 <span class="askquestion-wizard-option-indicator">
                                     {isCustomOption
                                         ? "›"
-                                        : currentQuestion().multiSelect
+                                        : currentQuestion().multiple
                                             ? isChosen()
                                                 ? "[✓]"
                                                 : "[ ]"
@@ -475,7 +474,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                                 </span>
                                 {/* Option label */}
                                 <div class="askquestion-wizard-option-content">
-                                    <span class="askquestion-wizard-option-label">{optionLabel}</span>
+                                    <span class="askquestion-wizard-option-label">{optionLabelText}</span>
                                     <Show when={optionDescription && !isCustomOption}>
                                         <span class="askquestion-wizard-option-description">{optionDescription}</span>
                                     </Show>
@@ -532,7 +531,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             {/* Instructions - desktop only */}
             <div class="askquestion-wizard-instructions">
                 <p>
-                    {currentQuestion().multiSelect
+                    {currentQuestion().multiple
                         ? "Space to toggle · Enter to confirm · ↑↓ to navigate · Esc to cancel"
                         : "Enter/Space to select · ↑↓ to navigate · Esc to cancel"}
                 </p>
