@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import type { ToolState } from "@opencode-ai/sdk"
 import { Accordion } from "@kobalte/core"
-import { ChevronDown, TerminalSquare, Trash2, XOctagon } from "lucide-solid"
+import { ChevronDown, TerminalSquare, Trash2, XOctagon, FolderTree } from "lucide-solid"
 import AppBar from "@suid/material/AppBar"
 import Box from "@suid/material/Box"
 import Divider from "@suid/material/Divider"
@@ -54,6 +54,7 @@ import InstanceServiceStatus from "../instance-service-status"
 import AgentSelector from "../agent-selector"
 import ModelSelector from "../model-selector"
 import CommandPalette from "../command-palette"
+import FolderTreeBrowser from "../folder-tree-browser"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
 import Kbd from "../kbd"
@@ -149,6 +150,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   ])
   const [selectedBackgroundProcess, setSelectedBackgroundProcess] = createSignal<BackgroundProcess | null>(null)
   const [showBackgroundOutput, setShowBackgroundOutput] = createSignal(false)
+  const [folderTreeBrowserOpen, setFolderTreeBrowserOpen] = createSignal(false)
   const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
@@ -1264,10 +1266,25 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                   </IconButton>
 
                   <div class="flex flex-wrap items-center gap-1 justify-center">
-                    <PermissionNotificationBanner
-                      instanceId={props.instance.id}
-                      onClick={() => setPermissionModalOpen(true)}
-                    />
+                    <Show when={!showingInfoView()}>
+                      <button
+                        type="button"
+                        class="connection-status-button px-2 py-0.5 text-xs flex items-center gap-1 whitespace-nowrap"
+                        onClick={() => setFolderTreeBrowserOpen(true)}
+                        aria-label="Browse workspace files"
+                        style={{ flex: "0 0 auto" }}
+                      >
+                        <FolderTree size={14} />
+                        <span class="file-button-label">Files</span>
+                      </button>
+                    </Show>
+
+                    <div style={{ flex: "0 0 auto", display: "flex", "align-items": "center" }}>
+                      <PermissionNotificationBanner
+                        instanceId={props.instance.id}
+                        onClick={() => setPermissionModalOpen(true)}
+                      />
+                    </div>
                     <button
                       type="button"
                       class="connection-status-button px-2 py-0.5 text-xs"
@@ -1343,10 +1360,25 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
 
             <div class="session-toolbar-center flex-1 flex items-center justify-center gap-2 min-w-[160px]">
-              <PermissionNotificationBanner
-                instanceId={props.instance.id}
-                onClick={() => setPermissionModalOpen(true)}
-              />
+              <Show when={!showingInfoView()}>
+                <button
+                  type="button"
+                  class="connection-status-button px-2 py-0.5 text-xs flex items-center gap-1 whitespace-nowrap"
+                  onClick={() => setFolderTreeBrowserOpen(true)}
+                  aria-label="Browse workspace files"
+                  style={{ flex: "0 0 auto" }}
+                >
+                  <FolderTree size={14} />
+                  <span class="file-button-label">Files</span>
+                </button>
+              </Show>
+
+              <div style={{ flex: "0 0 auto", display: "flex", "align-items": "center" }}>
+                <PermissionNotificationBanner
+                  instanceId={props.instance.id}
+                  onClick={() => setPermissionModalOpen(true)}
+                />
+              </div>
               <button
                 type="button"
                 class="connection-status-button px-2 py-0.5 text-xs"
@@ -1482,6 +1514,13 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         instanceId={props.instance.id}
         process={selectedBackgroundProcess()}
         onClose={closeBackgroundOutput}
+      />
+
+      <FolderTreeBrowser
+        isOpen={folderTreeBrowserOpen()}
+        workspaceId={props.instance.id}
+        workspaceName={props.instance.folder}
+        onClose={() => setFolderTreeBrowserOpen(false)}
       />
 
       <PermissionApprovalModal
