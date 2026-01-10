@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import type { ToolState } from "@opencode-ai/sdk"
 import { Accordion } from "@kobalte/core"
-import { ChevronDown, TerminalSquare, Trash2, XOctagon } from "lucide-solid"
+import { ChevronDown, TerminalSquare, Trash2, XOctagon, FolderTree } from "lucide-solid"
 import AppBar from "@suid/material/AppBar"
 import Box from "@suid/material/Box"
 import Divider from "@suid/material/Divider"
@@ -54,6 +54,7 @@ import InstanceServiceStatus from "../instance-service-status"
 import AgentSelector from "../agent-selector"
 import ModelSelector from "../model-selector"
 import CommandPalette from "../command-palette"
+import FolderTreeBrowser from "../folder-tree-browser"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
 import Kbd from "../kbd"
@@ -149,6 +150,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   ])
   const [selectedBackgroundProcess, setSelectedBackgroundProcess] = createSignal<BackgroundProcess | null>(null)
   const [showBackgroundOutput, setShowBackgroundOutput] = createSignal(false)
+  const [folderTreeBrowserOpen, setFolderTreeBrowserOpen] = createSignal(false)
   const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
@@ -1249,70 +1251,77 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
           <Show
             when={!isPhoneLayout()}
             fallback={
-              <div class="flex flex-col w-full gap-1.5">
-                <div class="flex flex-wrap items-center justify-between gap-2 w-full">
-                  <IconButton
-                    ref={setLeftToggleButtonEl}
-                    color="inherit"
-                    onClick={handleLeftAppBarButtonClick}
-                    aria-label={leftAppBarButtonLabel()}
-                    size="small"
-                    aria-expanded={leftDrawerState() !== "floating-closed"}
-                    disabled={leftDrawerState() === "pinned"}
-                  >
-                    {leftAppBarButtonIcon()}
-                  </IconButton>
+              <div class="flex items-center gap-1.5 w-full">
+                <IconButton
+                  ref={setLeftToggleButtonEl}
+                  color="inherit"
+                  onClick={handleLeftAppBarButtonClick}
+                  aria-label={leftAppBarButtonLabel()}
+                  size="small"
+                  aria-expanded={leftDrawerState() !== "floating-closed"}
+                  disabled={leftDrawerState() === "pinned"}
+                  class="flex-shrink-0"
+                >
+                  {leftAppBarButtonIcon()}
+                </IconButton>
 
-                  <div class="flex flex-wrap items-center gap-1 justify-center">
-                    <PermissionNotificationBanner
-                      instanceId={props.instance.id}
-                      onClick={() => setPermissionModalOpen(true)}
-                    />
-                    <button
-                      type="button"
-                      class="connection-status-button px-2 py-0.5 text-xs"
-                      onClick={handleCommandPaletteClick}
-                      aria-label="Open command palette"
-                      style={{ flex: "0 0 auto", width: "auto" }}
-                    >
-                      Command Palette
-                    </button>
-                    <span class="connection-status-shortcut-hint">
-                      <Kbd shortcut="cmd+shift+p" />
-                    </span>
-                    <span
-                      class={`status-indicator ${connectionStatusClass()}`}
-                      aria-label={`Connection ${connectionStatus()}`}
-                    >
-                      <span class="status-dot" />
-                    </span>
-
-
-                  </div>
-
-                  <IconButton
-                    ref={setRightToggleButtonEl}
-                    color="inherit"
-                    onClick={handleRightAppBarButtonClick}
-                    aria-label={rightAppBarButtonLabel()}
-                    size="small"
-                    aria-expanded={rightDrawerState() !== "floating-closed"}
-                    disabled={rightDrawerState() === "pinned"}
-                  >
-                    {rightAppBarButtonIcon()}
-                  </IconButton>
+                <div class="inline-flex items-center gap-1 rounded-md border border-base px-1.5 py-0.5 text-[11px] text-primary flex-shrink-0">
+                  <span class="uppercase text-[9px] tracking-wide text-primary/70">U</span>
+                  <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
+                </div>
+                <div class="inline-flex items-center gap-1 rounded-md border border-base px-1.5 py-0.5 text-[11px] text-primary flex-shrink-0">
+                  <span class="uppercase text-[9px] tracking-wide text-primary/70">A</span>
+                  <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
                 </div>
 
-                <div class="flex flex-wrap items-center justify-center gap-2 pb-1">
-                  <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                    <span class="uppercase text-[10px] tracking-wide text-primary/70">Used</span>
-                    <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
-                  </div>
-                  <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                    <span class="uppercase text-[10px] tracking-wide text-primary/70">Avail</span>
-                    <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
-                  </div>
-                </div>
+                <Show when={!showingInfoView()}>
+                  <button
+                    type="button"
+                    class="phone-icon-button"
+                    onClick={() => setFolderTreeBrowserOpen(true)}
+                    aria-label="Browse workspace files"
+                    title="Files"
+                  >
+                    <FolderTree size={16} />
+                  </button>
+                </Show>
+
+                <PermissionNotificationBanner
+                  instanceId={props.instance.id}
+                  onClick={() => setPermissionModalOpen(true)}
+                />
+
+                <button
+                  type="button"
+                  class="connection-status-button px-2 py-0.5 text-xs whitespace-nowrap flex-shrink-1 min-w-0"
+                  onClick={handleCommandPaletteClick}
+                  aria-label="Open command palette"
+                >
+                  Command Palette
+                </button>
+                <span class="connection-status-shortcut-hint flex-shrink-0">
+                  <Kbd shortcut="cmd+shift+p" />
+                </span>
+
+                <span
+                  class={`status-indicator ${connectionStatusClass()} flex-shrink-0`}
+                  aria-label={`Connection ${connectionStatus()}`}
+                >
+                  <span class="status-dot" />
+                </span>
+
+                <IconButton
+                  ref={setRightToggleButtonEl}
+                  color="inherit"
+                  onClick={handleRightAppBarButtonClick}
+                  aria-label={rightAppBarButtonLabel()}
+                  size="small"
+                  aria-expanded={rightDrawerState() !== "floating-closed"}
+                  disabled={rightDrawerState() === "pinned"}
+                  class="flex-shrink-0"
+                >
+                  {rightAppBarButtonIcon()}
+                </IconButton>
               </div>
             }
           >
@@ -1343,10 +1352,25 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
 
             <div class="session-toolbar-center flex-1 flex items-center justify-center gap-2 min-w-[160px]">
-              <PermissionNotificationBanner
-                instanceId={props.instance.id}
-                onClick={() => setPermissionModalOpen(true)}
-              />
+              <Show when={!showingInfoView()}>
+                <button
+                  type="button"
+                  class="connection-status-button p-1.5 flex items-center justify-center"
+                  onClick={() => setFolderTreeBrowserOpen(true)}
+                  aria-label="Browse workspace files"
+                  title="Files"
+                  style={{ flex: "0 0 auto", width: "32px", height: "32px" }}
+                >
+                  <FolderTree size={16} />
+                </button>
+              </Show>
+
+              <div style={{ flex: "0 0 auto", display: "flex", "align-items": "center" }}>
+                <PermissionNotificationBanner
+                  instanceId={props.instance.id}
+                  onClick={() => setPermissionModalOpen(true)}
+                />
+              </div>
               <button
                 type="button"
                 class="connection-status-button px-2 py-0.5 text-xs"
@@ -1482,6 +1506,13 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         instanceId={props.instance.id}
         process={selectedBackgroundProcess()}
         onClose={closeBackgroundOutput}
+      />
+
+      <FolderTreeBrowser
+        isOpen={folderTreeBrowserOpen()}
+        workspaceId={props.instance.id}
+        workspaceName={props.instance.folder}
+        onClose={() => setFolderTreeBrowserOpen(false)}
       />
 
       <PermissionApprovalModal
