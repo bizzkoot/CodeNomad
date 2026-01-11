@@ -1,34 +1,45 @@
-import type {
-  QuestionRequest,
-  EventQuestionReplied,
-  EventQuestionRejected,
-} from "@opencode-ai/sdk/v2"
+// Question types matching OpenCode SDK schema
+// Based on shuvcode/packages/opencode/src/question/index.ts
 
-export type { QuestionRequest }
-
-export function getQuestionId(question: QuestionRequest | null | undefined): string {
-  return question?.id ?? ""
+export interface QuestionOption {
+    label: string        // Display text (use this as the value too!)
+    description: string  // Explanation of choice
 }
 
-export function getQuestionSessionId(question: QuestionRequest | null | undefined): string | undefined {
-  return question?.sessionID
+export interface QuestionInfo {
+    id?: string           // Optional in SDK response, generated when mapping to wizard
+    question: string      // Complete question text
+    header: string        // Short tab label (max 12 chars)
+    options: QuestionOption[]
+    multiple?: boolean    // Allow selecting multiple options (NOTE: not 'multiSelect'!)
 }
 
-export function getQuestionMessageId(question: QuestionRequest | null | undefined): string | undefined {
-  return question?.tool?.messageID
+/** Mapped question type for the wizard (with required id) */
+export interface WizardQuestion {
+    id: string            // Required for wizard: `${requestId}-${index}`
+    question: string      // Complete question text
+    header: string        // Short tab label (max 12 chars)
+    options: QuestionOption[]
+    multiple: boolean     // Defaults to false
 }
 
-export function getQuestionCallId(question: QuestionRequest | null | undefined): string | undefined {
-  return question?.tool?.callID
+export interface QuestionRequest {
+    /** Unique request ID */
+    id: string
+    /** Array of questions to ask */
+    questions: QuestionInfo[]
+    /** Optional tool metadata */
+    tool?: {
+        messageID: string
+        callID: string
+    }
 }
 
-export function getQuestionCreatedAt(question: QuestionRequest | null | undefined): number {
-  // v2 schema doesn't include created time; best effort for ordering.
-  return Date.now()
-}
-
-export function getRequestIdFromQuestionReply(
-  properties: EventQuestionReplied["properties"] | EventQuestionRejected["properties"] | null | undefined,
-): string | undefined {
-  return properties?.requestID
+export interface QuestionAnswer {
+    /** ID of the question being answered */
+    questionId: string
+    /** Selected option value(s) */
+    values: string[]
+    /** Custom text if user typed their own response */
+    customText?: string
 }

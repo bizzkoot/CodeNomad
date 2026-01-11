@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import type { ToolState } from "@opencode-ai/sdk"
 import { Accordion } from "@kobalte/core"
-import { ChevronDown, TerminalSquare, Trash2, XOctagon } from "lucide-solid"
+import { ChevronDown, TerminalSquare, Trash2, XOctagon, FolderTree } from "lucide-solid"
 import AppBar from "@suid/material/AppBar"
 import Box from "@suid/material/Box"
 import Divider from "@suid/material/Divider"
@@ -54,8 +54,10 @@ import InstanceServiceStatus from "../instance-service-status"
 import AgentSelector from "../agent-selector"
 import ModelSelector from "../model-selector"
 import CommandPalette from "../command-palette"
+import FolderTreeBrowser from "../folder-tree-browser"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
+import { AskQuestionWizard } from "../askquestion-wizard"
 import Kbd from "../kbd"
 import { TodoListView } from "../tool-call/renderers/todo"
 import ContextUsagePanel from "../session/context-usage-panel"
@@ -66,11 +68,15 @@ import { getLogger } from "../../lib/logger"
 import { serverApi } from "../../lib/api-client"
 import { getBackgroundProcesses, loadBackgroundProcesses } from "../../stores/background-processes"
 import { BackgroundProcessOutputDialog } from "../background-process-output-dialog"
+import SourceControlPanel from "../source-control/source-control-panel"
 import {
   SESSION_SIDEBAR_EVENT,
   type SessionSidebarRequestAction,
   type SessionSidebarRequestDetail,
 } from "../../lib/session-sidebar-events"
+import { getPendingQuestion } from "../../stores/questions"
+import type { QuestionAnswer } from "../../types/question"
+import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
 
@@ -139,6 +145,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   const [resizeStartX, setResizeStartX] = createSignal(0)
   const [resizeStartWidth, setResizeStartWidth] = createSignal(0)
   const [rightPanelExpandedItems, setRightPanelExpandedItems] = createSignal<string[]>([
+    "source-control",
     "plan",
     "background-processes",
     "mcp",
@@ -147,7 +154,9 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   ])
   const [selectedBackgroundProcess, setSelectedBackgroundProcess] = createSignal<BackgroundProcess | null>(null)
   const [showBackgroundOutput, setShowBackgroundOutput] = createSignal(false)
+  const [folderTreeBrowserOpen, setFolderTreeBrowserOpen] = createSignal(false)
   const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
+  const [questionWizardOpen, setQuestionWizardOpen] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
 
@@ -205,6 +214,67 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         break
     }
   })
+
+  // Auto-open question wizard when a pending question appears
+  createEffect(() => {
+    const pending = getPendingQuestion(props.instance.id)
+    if (pending && !questionWizardOpen()) {
+      setQuestionWizardOpen(true)
+    } else if (!pending && questionWizardOpen()) {
+      setQuestionWizardOpen(false)
+    }
+  })
+
+  // Question wizard handlers - defined at component level for proper binding
+  const handleQuestionSubmit = async (answers: QuestionAnswer[]) => {
+    const question = getPendingQuestion(props.instance.id)
+    if (!question || !props.instance.client) {
+      return
+    }
+
+    try {
+      // Map answers to SDK format: array of string arrays
+      const sdkAnswers = answers.map(answer => {
+        const custom = answer.customText?.trim()
+        if (custom) return [custom]
+        return answer.values
+      })
+
+      await requestData(
+        props.instance.client.question.reply({
+          requestID: question.id,
+          answers: sdkAnswers
+        }),
+        "question.reply"
+      )
+
+      setQuestionWizardOpen(false)
+    } catch (error) {
+      console.error("Failed to submit question answers", error)
+    }
+  }
+
+  const handleQuestionCancel = async () => {
+    const question = getPendingQuestion(props.instance.id)
+    if (!question || !props.instance.client) {
+      setQuestionWizardOpen(false)
+      return
+    }
+
+    try {
+      await requestData(
+        props.instance.client.question.reject({
+          requestID: question.id
+        }),
+        "question.reject"
+      )
+
+      setQuestionWizardOpen(false)
+    } catch (error) {
+      console.error("Failed to reject question", error)
+      setQuestionWizardOpen(false)
+    }
+  }
 
   const measureDrawerHost = () => {
     if (typeof window === "undefined") return
@@ -997,6 +1067,11 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
     const sections = [
       {
+        id: "source-control",
+        label: "Source Control",
+        render: () => <SourceControlPanel workspaceId={props.instance.id} />,
+      },
+      {
         id: "plan",
         label: "Plan",
         render: renderPlanSectionContent,
@@ -1044,11 +1119,8 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       },
     ]
 
-    createEffect(() => {
-      const currentExpanded = new Set(rightPanelExpandedItems())
-      if (sections.every((section) => currentExpanded.has(section.id))) return
-      setRightPanelExpandedItems(sections.map((section) => section.id))
-    })
+    // Accordion state is managed by user interaction via handleAccordionChange
+    // No need to force all sections to be expanded
 
     const handleAccordionChange = (values: string[]) => {
       setRightPanelExpandedItems(values)
@@ -1245,70 +1317,77 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
           <Show
             when={!isPhoneLayout()}
             fallback={
-              <div class="flex flex-col w-full gap-1.5">
-                <div class="flex flex-wrap items-center justify-between gap-2 w-full">
-                  <IconButton
-                    ref={setLeftToggleButtonEl}
-                    color="inherit"
-                    onClick={handleLeftAppBarButtonClick}
-                    aria-label={leftAppBarButtonLabel()}
-                    size="small"
-                    aria-expanded={leftDrawerState() !== "floating-closed"}
-                    disabled={leftDrawerState() === "pinned"}
-                  >
-                    {leftAppBarButtonIcon()}
-                  </IconButton>
+              <div class="flex items-center gap-1.5 w-full">
+                <IconButton
+                  ref={setLeftToggleButtonEl}
+                  color="inherit"
+                  onClick={handleLeftAppBarButtonClick}
+                  aria-label={leftAppBarButtonLabel()}
+                  size="small"
+                  aria-expanded={leftDrawerState() !== "floating-closed"}
+                  disabled={leftDrawerState() === "pinned"}
+                  class="flex-shrink-0"
+                >
+                  {leftAppBarButtonIcon()}
+                </IconButton>
 
-                  <div class="flex flex-wrap items-center gap-1 justify-center">
-                    <PermissionNotificationBanner
-                      instanceId={props.instance.id}
-                      onClick={() => setPermissionModalOpen(true)}
-                    />
-                    <button
-                      type="button"
-                      class="connection-status-button px-2 py-0.5 text-xs"
-                      onClick={handleCommandPaletteClick}
-                      aria-label="Open command palette"
-                      style={{ flex: "0 0 auto", width: "auto" }}
-                    >
-                      Command Palette
-                    </button>
-                    <span class="connection-status-shortcut-hint">
-                      <Kbd shortcut="cmd+shift+p" />
-                    </span>
-                    <span
-                      class={`status-indicator ${connectionStatusClass()}`}
-                      aria-label={`Connection ${connectionStatus()}`}
-                    >
-                      <span class="status-dot" />
-                    </span>
-
-
-                  </div>
-
-                  <IconButton
-                    ref={setRightToggleButtonEl}
-                    color="inherit"
-                    onClick={handleRightAppBarButtonClick}
-                    aria-label={rightAppBarButtonLabel()}
-                    size="small"
-                    aria-expanded={rightDrawerState() !== "floating-closed"}
-                    disabled={rightDrawerState() === "pinned"}
-                  >
-                    {rightAppBarButtonIcon()}
-                  </IconButton>
+                <div class="inline-flex items-center gap-1 rounded-md border border-base px-1.5 py-0.5 text-[11px] text-primary flex-shrink-0">
+                  <span class="uppercase text-[9px] tracking-wide text-primary/70">U</span>
+                  <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
+                </div>
+                <div class="inline-flex items-center gap-1 rounded-md border border-base px-1.5 py-0.5 text-[11px] text-primary flex-shrink-0">
+                  <span class="uppercase text-[9px] tracking-wide text-primary/70">A</span>
+                  <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
                 </div>
 
-                <div class="flex flex-wrap items-center justify-center gap-2 pb-1">
-                  <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                    <span class="uppercase text-[10px] tracking-wide text-primary/70">Used</span>
-                    <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
-                  </div>
-                  <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                    <span class="uppercase text-[10px] tracking-wide text-primary/70">Avail</span>
-                    <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
-                  </div>
-                </div>
+                <Show when={!showingInfoView()}>
+                  <button
+                    type="button"
+                    class="phone-icon-button"
+                    onClick={() => setFolderTreeBrowserOpen(true)}
+                    aria-label="Browse workspace files"
+                    title="Files"
+                  >
+                    <FolderTree size={16} />
+                  </button>
+                </Show>
+
+                <PermissionNotificationBanner
+                  instanceId={props.instance.id}
+                  onClick={() => setPermissionModalOpen(true)}
+                />
+
+                <button
+                  type="button"
+                  class="connection-status-button px-2 py-0.5 text-xs whitespace-nowrap flex-shrink-1 min-w-0"
+                  onClick={handleCommandPaletteClick}
+                  aria-label="Open command palette"
+                >
+                  Command Palette
+                </button>
+                <span class="connection-status-shortcut-hint flex-shrink-0">
+                  <Kbd shortcut="cmd+shift+p" />
+                </span>
+
+                <span
+                  class={`status-indicator ${connectionStatusClass()} flex-shrink-0`}
+                  aria-label={`Connection ${connectionStatus()}`}
+                >
+                  <span class="status-dot" />
+                </span>
+
+                <IconButton
+                  ref={setRightToggleButtonEl}
+                  color="inherit"
+                  onClick={handleRightAppBarButtonClick}
+                  aria-label={rightAppBarButtonLabel()}
+                  size="small"
+                  aria-expanded={rightDrawerState() !== "floating-closed"}
+                  disabled={rightDrawerState() === "pinned"}
+                  class="flex-shrink-0"
+                >
+                  {rightAppBarButtonIcon()}
+                </IconButton>
               </div>
             }
           >
@@ -1339,10 +1418,25 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
 
             <div class="session-toolbar-center flex-1 flex items-center justify-center gap-2 min-w-[160px]">
-              <PermissionNotificationBanner
-                instanceId={props.instance.id}
-                onClick={() => setPermissionModalOpen(true)}
-              />
+              <Show when={!showingInfoView()}>
+                <button
+                  type="button"
+                  class="connection-status-button p-1.5 flex items-center justify-center"
+                  onClick={() => setFolderTreeBrowserOpen(true)}
+                  aria-label="Browse workspace files"
+                  title="Files"
+                  style={{ flex: "0 0 auto", width: "32px", height: "32px" }}
+                >
+                  <FolderTree size={16} />
+                </button>
+              </Show>
+
+              <div style={{ flex: "0 0 auto", display: "flex", "align-items": "center" }}>
+                <PermissionNotificationBanner
+                  instanceId={props.instance.id}
+                  onClick={() => setPermissionModalOpen(true)}
+                />
+              </div>
               <button
                 type="button"
                 class="connection-status-button px-2 py-0.5 text-xs"
@@ -1480,11 +1574,45 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         onClose={closeBackgroundOutput}
       />
 
+      <FolderTreeBrowser
+        isOpen={folderTreeBrowserOpen()}
+        workspaceId={props.instance.id}
+        workspaceName={props.instance.folder}
+        onClose={() => setFolderTreeBrowserOpen(false)}
+      />
+
       <PermissionApprovalModal
         instanceId={props.instance.id}
         isOpen={permissionModalOpen()}
         onClose={() => setPermissionModalOpen(false)}
       />
+
+      <Show when={questionWizardOpen() && getPendingQuestion(props.instance.id)}>
+        {(pending) => {
+          // Map questions to wizard format (like shuvcode does)
+          const mappedQuestions = () => pending().questions.map((question, index) => ({
+            id: `${pending().id}-${index}`,
+            question: question.question,
+            header: question.header,
+            options: question.options.map((option) => ({
+              label: option.label,
+              description: option.description,
+            })),
+            // Default to single-select (like shuvcode)
+            multiple: question.multiple ?? false,
+          }))
+
+          return (
+            <div class="askquestion-wizard-overlay">
+              <AskQuestionWizard
+                questions={mappedQuestions()}
+                onSubmit={handleQuestionSubmit}
+                onCancel={handleQuestionCancel}
+              />
+            </div>
+          )
+        }}
+      </Show>
     </>
   )
 }

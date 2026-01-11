@@ -27,6 +27,7 @@ import { upsertPermissionV2, removePermissionV2, upsertQuestionV2, removeQuestio
 import { clearCacheForInstance } from "../lib/global-cache"
 import { getLogger } from "../lib/logger"
 import { mergeInstanceMetadata, clearInstanceMetadata } from "./instance-metadata"
+import { addQuestionToQueue, removeQuestionFromQueue, clearQuestionQueue } from "./questions"
 
 const log = getLogger("api")
 
@@ -896,6 +897,36 @@ sseManager.onLspUpdated = async (instanceId) => {
     log.error("Failed to refresh LSP status", error)
   }
 }
+
+// Question event handlers
+sseManager.onQuestionAsked = (instanceId, event) => {
+  log.info("question.asked EVENT RECEIVED", {
+    instanceId,
+    eventType: event.type,
+    fullEvent: event,
+    properties: event.properties,
+    propertiesKeys: event.properties ? Object.keys(event.properties) : [],
+    stringified: JSON.stringify(event, null, 2)
+  })
+  if (event.properties) {
+    addQuestionToQueue(instanceId, event.properties)
+  }
+}
+
+sseManager.onQuestionReplied = (instanceId, event) => {
+  log.info("question.replied", { instanceId, event })
+  if (event.properties?.requestID) {
+    removeQuestionFromQueue(instanceId, event.properties.requestID)
+  }
+}
+
+sseManager.onQuestionRejected = (instanceId, event) => {
+  log.info("question.rejected", { instanceId, event })
+  if (event.properties?.requestID) {
+    removeQuestionFromQueue(instanceId, event.properties.requestID)
+  }
+}
+
 
 async function acknowledgeDisconnectedInstance(): Promise<void> {
   const pending = disconnectedInstance()

@@ -64,7 +64,8 @@ type SSEEvent =
   | { type: "permission.updated" | "permission.asked"; properties?: any }
   | { type: "permission.replied"; properties?: any }
   | { type: "question.asked"; properties?: any }
-  | { type: "question.replied" | "question.rejected"; properties?: any }
+  | { type: "question.replied"; properties?: any }
+  | { type: "question.rejected"; properties?: any }
   | EventLspUpdated
   | TuiToastEvent
   | BackgroundProcessUpdatedEvent
@@ -162,6 +163,15 @@ class SSEManager {
       case "background.process.removed":
         this.onBackgroundProcessRemoved?.(instanceId, event as BackgroundProcessRemovedEvent)
         break
+      case "question.asked":
+        this.onQuestionAsked?.(instanceId, event as any)
+        break
+      case "question.replied":
+        this.onQuestionReplied?.(instanceId, event as any)
+        break
+      case "question.rejected":
+        this.onQuestionRejected?.(instanceId, event as any)
+        break
       default:
         log.warn("Unknown SSE event type", { type: event.type })
     }
@@ -192,6 +202,9 @@ class SSEManager {
   onLspUpdated?: (instanceId: string, event: EventLspUpdated) => void
   onBackgroundProcessUpdated?: (instanceId: string, event: BackgroundProcessUpdatedEvent) => void
   onBackgroundProcessRemoved?: (instanceId: string, event: BackgroundProcessRemovedEvent) => void
+  onQuestionAsked?: (instanceId: string, event: any) => void
+  onQuestionReplied?: (instanceId: string, event: any) => void
+  onQuestionRejected?: (instanceId: string, event: any) => void
   onConnectionLost?: (instanceId: string, reason: string) => void | Promise<void>
 
   getStatus(instanceId: string): ConnectionStatus | null {
