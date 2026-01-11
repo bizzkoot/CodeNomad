@@ -46,9 +46,27 @@ export default function PromptInput(props: PromptInputProps) {
   const [pasteCount, setPasteCount] = createSignal(0)
   const [imageCount, setImageCount] = createSignal(0)
   const [mode, setMode] = createSignal<"normal" | "shell">("normal")
+  const [expandState, setExpandState] = createSignal<"normal" | "fifty" | "eighty">("normal")
   const SELECTION_INSERT_MAX_LENGTH = 2000
   let textareaRef: HTMLTextAreaElement | undefined
   let containerRef: HTMLDivElement | undefined
+
+  const calculateContainerHeight = () => {
+    if (!containerRef) return 0
+    const rect = containerRef.getBoundingClientRect()
+    const root = containerRef.closest(".session-view")
+    if (!root) return 0
+    const rootRect = root.getBoundingClientRect()
+    return rootRect.height - rect.top
+  }
+
+  const getExpandedHeight = (): string => {
+    const state = expandState()
+    if (state === "normal") return "auto"
+    const containerHeight = calculateContainerHeight()
+    if (state === "fifty") return `${containerHeight * 0.5}px`
+    return `${containerHeight * 0.8}px`
+  }
 
 
 
