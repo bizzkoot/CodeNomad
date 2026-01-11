@@ -8,6 +8,7 @@ interface ExpandButtonProps {
 
 export default function ExpandButton(props: ExpandButtonProps) {
   const [clickTime, setClickTime] = createSignal<number>(0)
+  const [clickTimer, setClickTimer] = createSignal<number | null>(null)
   const DOUBLE_CLICK_THRESHOLD = 300
 
   function handleClick() {
@@ -15,30 +16,42 @@ export default function ExpandButton(props: ExpandButtonProps) {
     const lastClick = clickTime()
     const isDoubleClick = now - lastClick < DOUBLE_CLICK_THRESHOLD
 
-    setClickTime(now)
+    // Clear any pending single-click timer
+    const timer = clickTimer()
+    if (timer !== null) {
+      clearTimeout(timer)
+      setClickTimer(null)
+    }
 
     const current = props.expandState()
 
     if (isDoubleClick) {
-      // Double click behavior
+      // Double click behavior - execute immediately
       if (current === "normal") {
-        props.onToggleExpand("fifty")
+        props.onToggleExpand("eighty")
       } else if (current === "fifty") {
         props.onToggleExpand("eighty")
       } else {
-        props.onToggleExpand("normal")
-      }
-    } else {
-      // Single click behavior
-      if (current === "normal") {
         props.onToggleExpand("fifty")
-      } else {
-        props.onToggleExpand("normal")
       }
-    }
+      // Reset click time to prevent triple-click issues
+      setClickTime(0)
+    } else {
+      // Single click behavior - delay to wait for potential double-click
+      setClickTime(now)
 
-    // Reset click timer after threshold
-    setTimeout(() => setClickTime(0), DOUBLE_CLICK_THRESHOLD)
+      const newTimer = window.setTimeout(() => {
+        const currentState = props.expandState()
+        if (currentState === "normal") {
+          props.onToggleExpand("fifty")
+        } else {
+          props.onToggleExpand("normal")
+        }
+        setClickTimer(null)
+      }, DOUBLE_CLICK_THRESHOLD)
+
+      setClickTimer(newTimer)
+    }
   }
 
   const getTooltip = () => {
@@ -48,7 +61,7 @@ export default function ExpandButton(props: ExpandButtonProps) {
     } else if (current === "fifty") {
       return "Double-click to expand to 80% • Click to minimize"
     } else {
-      return "Click to minimize • Double-click to expand to 50%"
+      return "Click to minimize • Double-click to reduce to 50%"
     }
   }
 
@@ -59,7 +72,7 @@ export default function ExpandButton(props: ExpandButtonProps) {
       onClick={handleClick}
       disabled={false}
       aria-label="Toggle chat input height"
-      title={getTooltip()}
+      data-tooltip={getTooltip()}
     >
       <Show
         when={props.expandState() === "normal"}

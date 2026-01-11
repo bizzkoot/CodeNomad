@@ -1,4 +1,4 @@
-import { createSignal, Show, onMount, For, onCleanup, createEffect, on, untrack } from "solid-js"
+import { createSignal, Show, onMount, For, onCleanup, createEffect, on, untrack, createMemo } from "solid-js"
 import { ArrowBigUp, ArrowBigDown } from "lucide-solid"
 import UnifiedPicker from "./unified-picker"
 import ExpandButton from "./expand-button"
@@ -52,22 +52,35 @@ export default function PromptInput(props: PromptInputProps) {
   let textareaRef: HTMLTextAreaElement | undefined
   let containerRef: HTMLDivElement | undefined
 
-  const calculateContainerHeight = () => {
-    if (!containerRef) return 0
-    const rect = containerRef.getBoundingClientRect()
-    const root = containerRef.closest(".session-view")
-    if (!root) return 0
-    const rootRect = root.getBoundingClientRect()
-    return rootRect.height - rect.top
-  }
+   const calculateExpandedHeight = () => {
+     if (!containerRef) {
+       return 0
+     }
 
-  const getExpandedHeight = (): string => {
-    const state = expandState()
-    if (state === "normal") return "auto"
-    const containerHeight = calculateContainerHeight()
-    if (state === "fifty") return `${containerHeight * 0.5}px`
-    return `${containerHeight * 0.8}px`
-  }
+     const root = containerRef.closest(".session-view")
+     if (!root) {
+       return 0
+     }
+     const rootRect = root.getBoundingClientRect()
+
+     // Reserve minimum space for message section (200px minimum)
+     const MIN_MESSAGE_SPACE = 200
+     const availableForInput = rootRect.height - MIN_MESSAGE_SPACE
+
+     return availableForInput
+   }
+
+   const expandedHeight = createMemo(() => {
+     const state = expandState()
+     if (state === "normal") return "auto"
+
+     const availableHeight = calculateExpandedHeight()
+
+     if (state === "fifty") {
+       return `${availableHeight * 0.5}px`
+     }
+     return `${availableHeight * 0.8}px`
+   })
 
 
 
@@ -721,11 +734,11 @@ export default function PromptInput(props: PromptInputProps) {
     void props.onAbortSession()
   }
 
-  function handleExpandToggle(nextState: "normal" | "fifty" | "eighty") {
-    setExpandState(nextState)
-    // Keep focus on textarea
-    textareaRef?.focus()
-  }
+   function handleExpandToggle(nextState: "normal" | "fifty" | "eighty") {
+     setExpandState(nextState)
+     // Keep focus on textarea
+     textareaRef?.focus()
+   }
   
   function handleInput(e: Event) {
 
@@ -1186,7 +1199,13 @@ export default function PromptInput(props: PromptInputProps) {
               </For>
             </div>
           </Show>
-          <div class="prompt-input-field-container">
+          <div 
+            class="prompt-input-field-container"
+            style={{
+              "height": expandedHeight(),
+              "transition": "height 0.25s ease",
+            }}
+          >
             <div class="prompt-input-field">
               <textarea
               ref={textareaRef}
@@ -1204,12 +1223,10 @@ export default function PromptInput(props: PromptInputProps) {
               onBlur={() => setIsFocused(false)}
               disabled={props.disabled}
               rows={4}
-              style={{
-                "padding-top": attachments().length > 0 ? "8px" : "0",
-                "height": getExpandedHeight(),
-                "overflow-y": expandState() !== "normal" ? "auto" : "visible",
-                "transition": "height 0.25s ease",
-              }}
+               style={{
+                 "padding-top": attachments().length > 0 ? "8px" : "0",
+                 "overflow-y": expandState() !== "normal" ? "auto" : "visible",
+               }}
               spellcheck={false}
               autocorrect="off"
               autoCapitalize="off"
