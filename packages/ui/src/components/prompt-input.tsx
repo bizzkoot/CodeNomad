@@ -1,6 +1,7 @@
 import { createSignal, Show, onMount, For, onCleanup, createEffect, on, untrack } from "solid-js"
 import { ArrowBigUp, ArrowBigDown } from "lucide-solid"
 import UnifiedPicker from "./unified-picker"
+import ExpandButton from "./expand-button"
 import { addToHistory, getHistory } from "../stores/message-history"
 import { getAttachments, addAttachment, clearAttachments, removeAttachment } from "../stores/attachments"
 import { resolvePastedPlaceholders } from "../lib/prompt-placeholders"
@@ -719,7 +720,13 @@ export default function PromptInput(props: PromptInputProps) {
     if (!props.onAbortSession || !props.isSessionBusy) return
     void props.onAbortSession()
   }
- 
+
+  function handleExpandToggle(nextState: "normal" | "fifty" | "eighty") {
+    setExpandState(nextState)
+    // Keep focus on textarea
+    textareaRef?.focus()
+  }
+  
   function handleInput(e: Event) {
 
     const target = e.target as HTMLTextAreaElement
@@ -1197,7 +1204,12 @@ export default function PromptInput(props: PromptInputProps) {
               onBlur={() => setIsFocused(false)}
               disabled={props.disabled}
               rows={4}
-              style={attachments().length > 0 ? { "padding-top": "8px" } : {}}
+              style={{
+                "padding-top": attachments().length > 0 ? "8px" : "0",
+                "height": getExpandedHeight(),
+                "overflow-y": expandState() !== "normal" ? "auto" : "visible",
+                "transition": "height 0.25s ease",
+              }}
               spellcheck={false}
               autocorrect="off"
               autoCapitalize="off"
@@ -1227,6 +1239,12 @@ export default function PromptInput(props: PromptInputProps) {
                 </button>
               </div>
             </Show>
+            <div class="prompt-expand-top">
+              <ExpandButton
+                expandState={expandState}
+                onToggleExpand={handleExpandToggle}
+              />
+            </div>
             <Show when={shouldShowOverlay()}>
               <div class={`prompt-input-overlay ${mode() === "shell" ? "shell-mode" : ""}`}>
                 <Show
