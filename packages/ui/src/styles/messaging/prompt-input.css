@@ -163,9 +163,15 @@
   backdrop-filter: blur(8px);
 }
 
-.prompt-expand-button:hover::after {
+/* Only show tooltip on hover for Electron (desktop-mode) */
+.prompt-expand-button.desktop-mode:hover::after {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* Web/Mobile: No tooltip (data-tooltip will be undefined anyway) */
+.prompt-expand-button.web-mode::after {
+  display: none;
 }
 
 .prompt-overlay-text {

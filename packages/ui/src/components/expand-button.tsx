@@ -1,9 +1,10 @@
 import { createSignal, Show } from "solid-js"
 import { Maximize2, Minimize2 } from "lucide-solid"
+import { isElectronHost } from "../lib/runtime-env"
 
 interface ExpandButtonProps {
-  expandState: () => "normal" | "fifty" | "eighty"
-  onToggleExpand: (nextState: "normal" | "fifty" | "eighty") => void
+  expandState: () => "normal" | "fifty" | "eighty" | "expanded"
+  onToggleExpand: (nextState: "normal" | "fifty" | "eighty" | "expanded") => void
 }
 
 export default function ExpandButton(props: ExpandButtonProps) {
@@ -11,7 +12,23 @@ export default function ExpandButton(props: ExpandButtonProps) {
   const [clickTimer, setClickTimer] = createSignal<number | null>(null)
   const DOUBLE_CLICK_THRESHOLD = 300
 
+  // Check if we're in Electron (desktop app with 3-state support)
+  const isDesktopApp = isElectronHost()
+
   function handleClick() {
+    const current = props.expandState()
+
+    if (!isDesktopApp) {
+      // Web/Mobile: Simple 2-state toggle (instant, no delay)
+      if (current === "normal") {
+        props.onToggleExpand("expanded")
+      } else {
+        props.onToggleExpand("normal")
+      }
+      return
+    }
+
+    // Electron: 3-state with double-click detection
     const now = Date.now()
     const lastClick = clickTime()
     const isDoubleClick = now - lastClick < DOUBLE_CLICK_THRESHOLD
@@ -22,8 +39,6 @@ export default function ExpandButton(props: ExpandButtonProps) {
       clearTimeout(timer)
       setClickTimer(null)
     }
-
-    const current = props.expandState()
 
     if (isDoubleClick) {
       // Double click behavior - execute immediately
@@ -55,6 +70,11 @@ export default function ExpandButton(props: ExpandButtonProps) {
   }
 
   const getTooltip = () => {
+    // No tooltip for web/mobile - only Electron gets tooltips
+    if (!isDesktopApp) {
+      return undefined
+    }
+
     const current = props.expandState()
     if (current === "normal") {
       return "Click to expand (50%) • Double-click to expand further (80%)"
@@ -65,17 +85,22 @@ export default function ExpandButton(props: ExpandButtonProps) {
     }
   }
 
+  const isExpanded = () => {
+    const state = props.expandState()
+    return state !== "normal"
+  }
+
   return (
     <button
       type="button"
-      class="prompt-expand-button"
+      class={`prompt-expand-button ${isDesktopApp ? "desktop-mode" : "web-mode"}`}
       onClick={handleClick}
       disabled={false}
       aria-label="Toggle chat input height"
       data-tooltip={getTooltip()}
     >
       <Show
-        when={props.expandState() === "normal"}
+        when={!isExpanded()}
         fallback={<Minimize2 class="h-5 w-5" aria-hidden="true" />}
       >
         <Maximize2 class="h-5 w-5" aria-hidden="true" />
