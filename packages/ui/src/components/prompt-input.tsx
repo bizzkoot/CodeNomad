@@ -90,30 +90,9 @@ export default function PromptInput(props: PromptInputProps) {
     return `${Math.max(maxHeight, 150)}px` // Minimum 150px to be useful
   })
 
-  // Responsive placeholder text - shorter on mobile to avoid overlap with expand button
-  const [isMobileWidth, setIsMobileWidth] = createSignal(false)
-
-  const updateMobileWidth = () => {
-    if (typeof window !== "undefined") {
-      setIsMobileWidth(window.innerWidth <= 640)
-    }
-  }
-
-  onMount(() => {
-    updateMobileWidth()
-    window.addEventListener("resize", updateMobileWidth)
-    onCleanup(() => {
-      window.removeEventListener("resize", updateMobileWidth)
-    })
-  })
-
   const getPlaceholder = () => {
     if (mode() === "shell") {
       return "Run a shell command (Esc to exit)..."
-    }
-    // Use shorter placeholder on mobile to prevent overlap with expand button
-    if (isMobileWidth()) {
-      return "Type message, @file, @agent..."
     }
     return "Type your message, @file, @agent, or paste images and text..."
   }
