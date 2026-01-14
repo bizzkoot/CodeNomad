@@ -1,6 +1,7 @@
-import { createSignal, Show, onMount, For, onCleanup, createEffect, on, untrack } from "solid-js"
+import { createSignal, Show, onMount, For, onCleanup, createEffect, on, untrack, createMemo } from "solid-js"
 import { ArrowBigUp, ArrowBigDown } from "lucide-solid"
 import UnifiedPicker from "./unified-picker"
+import ExpandButton from "./expand-button"
 import { addToHistory, getHistory } from "../stores/message-history"
 import { getAttachments, addAttachment, clearAttachments, removeAttachment } from "../stores/attachments"
 import { resolvePastedPlaceholders } from "../lib/prompt-placeholders"
@@ -46,9 +47,55 @@ export default function PromptInput(props: PromptInputProps) {
   const [pasteCount, setPasteCount] = createSignal(0)
   const [imageCount, setImageCount] = createSignal(0)
   const [mode, setMode] = createSignal<"normal" | "shell">("normal")
+  const [expandState, setExpandState] = createSignal<"normal" | "expanded">("normal")
   const SELECTION_INSERT_MAX_LENGTH = 2000
   let textareaRef: HTMLTextAreaElement | undefined
   let containerRef: HTMLDivElement | undefined
+
+  // Fixed line height for expanded state (15 lines as suggested by dev)
+
+  // Fixed line height for web/mobile expanded state (15 lines as suggested)
+  const EXPANDED_LINES = 15
+  const LINE_HEIGHT = 24
+  const FIXED_EXPANDED_HEIGHT = EXPANDED_LINES * LINE_HEIGHT // 360px
+
+  const calculateExpandedHeight = () => {
+    if (!containerRef) {
+      return 0
+    }
+
+    const root = containerRef.closest(".session-view")
+    if (!root) {
+      return 0
+    }
+    const rootRect = root.getBoundingClientRect()
+
+    // Reserve minimum space for message section
+    // Use larger reserve for landscape orientation (less vertical space)
+    const isLandscape = typeof window !== "undefined" && window.innerWidth > window.innerHeight
+    const MIN_MESSAGE_SPACE = isLandscape ? 150 : 200
+    const availableForInput = rootRect.height - MIN_MESSAGE_SPACE
+
+    return availableForInput
+  }
+
+  const expandedHeight = createMemo(() => {
+    const state = expandState()
+    if (state === "normal") return "auto"
+
+    // Use fixed height, but cap at available space
+    // This prevents overflow in landscape or small screens
+    const availableHeight = calculateExpandedHeight()
+    const maxHeight = Math.min(FIXED_EXPANDED_HEIGHT, availableHeight * 0.6)
+    return `${Math.max(maxHeight, 150)}px` // Minimum 150px to be useful
+  })
+
+  const getPlaceholder = () => {
+    if (mode() === "shell") {
+      return "Run a shell command (Esc to exit)..."
+    }
+    return "Type your message, @file, @agent, or paste images and text..."
+  }
 
 
 
@@ -615,7 +662,7 @@ export default function PromptInput(props: PromptInputProps) {
       // Record attempted slash commands even if execution fails.
       void refreshHistory()
     }
- 
+
     try {
       if (isShellMode) {
         if (props.onRunShell) {
@@ -642,7 +689,7 @@ export default function PromptInput(props: PromptInputProps) {
       textareaRef?.focus()
     }
   }
- 
+
   function focusTextareaEnd() {
     if (!textareaRef) return
     setTimeout(() => {
@@ -652,7 +699,7 @@ export default function PromptInput(props: PromptInputProps) {
       textareaRef.focus()
     }, 0)
   }
- 
+
   function canUseHistory(force = false) {
     if (force) return true
     if (showPicker()) return false
@@ -660,29 +707,29 @@ export default function PromptInput(props: PromptInputProps) {
     if (!textarea) return false
     return textarea.selectionStart === 0 && textarea.selectionEnd === 0
   }
- 
+
   function selectPreviousHistory(force = false) {
     const entries = history()
     if (entries.length === 0) return false
     if (!canUseHistory(force)) return false
- 
+
     if (historyIndex() === -1) {
       setHistoryDraft(prompt())
     }
- 
+
     const newIndex = historyIndex() === -1 ? 0 : Math.min(historyIndex() + 1, entries.length - 1)
     setHistoryIndex(newIndex)
     setPrompt(entries[newIndex])
     focusTextareaEnd()
     return true
   }
- 
+
   function selectNextHistory(force = false) {
     const entries = history()
     if (entries.length === 0) return false
     if (!canUseHistory(force)) return false
     if (historyIndex() === -1) return false
- 
+
     const newIndex = historyIndex() - 1
     if (newIndex >= 0) {
       setHistoryIndex(newIndex)
@@ -696,12 +743,18 @@ export default function PromptInput(props: PromptInputProps) {
     focusTextareaEnd()
     return true
   }
- 
+
   function handleAbort() {
     if (!props.onAbortSession || !props.isSessionBusy) return
     void props.onAbortSession()
   }
- 
+
+  function handleExpandToggle(nextState: "normal" | "expanded") {
+    setExpandState(nextState)
+    // Keep focus on textarea
+    textareaRef?.focus()
+  }
+
   function handleInput(e: Event) {
 
     const target = e.target as HTMLTextAreaElement
@@ -765,9 +818,9 @@ export default function PromptInput(props: PromptInputProps) {
     item:
       | { type: "agent"; agent: Agent }
       | {
-          type: "file"
-          file: { path: string; relativePath?: string; isGitFile: boolean; isDirectory?: boolean }
-        }
+        type: "file"
+        file: { path: string; relativePath?: string; isGitFile: boolean; isDirectory?: boolean }
+      }
       | { type: "command"; command: SDKCommand },
   ) {
     if (item.type === "command") {
@@ -1018,18 +1071,18 @@ export default function PromptInput(props: PromptInputProps) {
   }
 
   const canStop = () => Boolean(props.isSessionBusy && props.onAbortSession)
- 
+
   const hasHistory = () => history().length > 0
   const canHistoryGoPrevious = () => hasHistory() && (historyIndex() === -1 || historyIndex() < history().length - 1)
   const canHistoryGoNext = () => historyIndex() >= 0
- 
+
   const canSend = () => {
     if (props.disabled) return false
     const hasText = prompt().trim().length > 0
     if (mode() === "shell") return hasText
     return hasText || attachments().length > 0
   }
- 
+
   const shellHint = () => (mode() === "shell" ? { key: "Esc", text: "to exit shell mode" } : { key: "!", text: "Shell mode" })
   const commandHint = () => ({ key: "/", text: "Commands" })
 
@@ -1161,94 +1214,101 @@ export default function PromptInput(props: PromptInputProps) {
               </For>
             </div>
           </Show>
-          <div class="prompt-input-field-container">
+          <div
+            class="prompt-input-field-container"
+            style={{
+              "height": expandedHeight(),
+              "transition": "height 0.25s ease",
+            }}
+          >
             <div class="prompt-input-field">
               <textarea
-              ref={textareaRef}
-              class={`prompt-input ${mode() === "shell" ? "shell-mode" : ""}`}
-              placeholder={
-                mode() === "shell"
-                  ? "Run a shell command (Esc to exit)..."
-                  : "Type your message, @file, @agent, or paste images and text..."
-              }
-              value={prompt()}
-              onInput={handleInput}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              disabled={props.disabled}
-              rows={4}
-              style={attachments().length > 0 ? { "padding-top": "8px" } : {}}
-              spellcheck={false}
-              autocorrect="off"
-              autoCapitalize="off"
-              autocomplete="off"
-            />
-            <Show when={hasHistory()}>
-              <div class="prompt-history-top">
-                <button
-                  type="button"
-                  class="prompt-history-button"
-                  onClick={() => selectPreviousHistory(true)}
-                  disabled={!canHistoryGoPrevious()}
-                  aria-label="Previous prompt"
-                >
-                  <ArrowBigUp class="h-5 w-5" aria-hidden="true" />
-                </button>
+                ref={textareaRef}
+                class={`prompt-input ${mode() === "shell" ? "shell-mode" : ""}`}
+                placeholder={getPlaceholder()}
+                value={prompt()}
+                onInput={handleInput}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                disabled={props.disabled}
+                rows={4}
+                style={{
+                  "padding-top": attachments().length > 0 ? "8px" : "0",
+                  "overflow-y": expandState() !== "normal" ? "auto" : "visible",
+                }}
+                spellcheck={false}
+                autocorrect="off"
+                autoCapitalize="off"
+                autocomplete="off"
+              />
+              <div class="prompt-nav-buttons">
+                <ExpandButton
+                  expandState={expandState}
+                  onToggleExpand={handleExpandToggle}
+                />
+                <Show when={hasHistory()}>
+                  <button
+                    type="button"
+                    class="prompt-history-button"
+                    onClick={() => selectPreviousHistory(true)}
+                    disabled={!canHistoryGoPrevious()}
+                    aria-label="Previous prompt"
+                  >
+                    <ArrowBigUp class="h-5 w-5" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    class="prompt-history-button"
+                    onClick={() => selectNextHistory(true)}
+                    disabled={!canHistoryGoNext()}
+                    aria-label="Next prompt"
+                  >
+                    <ArrowBigDown class="h-5 w-5" aria-hidden="true" />
+                  </button>
+                </Show>
               </div>
-              <div class="prompt-history-bottom">
-                <button
-                  type="button"
-                  class="prompt-history-button"
-                  onClick={() => selectNextHistory(true)}
-                  disabled={!canHistoryGoNext()}
-                  aria-label="Next prompt"
-                >
-                  <ArrowBigDown class="h-5 w-5" aria-hidden="true" />
-                </button>
-              </div>
-            </Show>
-            <Show when={shouldShowOverlay()}>
-              <div class={`prompt-input-overlay ${mode() === "shell" ? "shell-mode" : ""}`}>
-                <Show
-                  when={props.escapeInDebounce}
-                  fallback={
-                    <>
-                      <span class="prompt-overlay-text">
-                        <Kbd>Enter</Kbd> New line • <Kbd shortcut="cmd+enter" /> Send • <Kbd>@</Kbd> Files/agents • <Kbd>↑↓</Kbd> History
-                      </span>
-                      <Show when={attachments().length > 0}>
-                        <span class="prompt-overlay-text prompt-overlay-muted">• {attachments().length} file(s) attached</span>
-                      </Show>
-                      <span class="prompt-overlay-text">
-                        • <Kbd>{shellHint().key}</Kbd> {shellHint().text}
-                      </span>
-                      <Show when={mode() !== "shell"}>
+              <Show when={shouldShowOverlay()}>
+                <div class={`prompt-input-overlay ${mode() === "shell" ? "shell-mode" : ""}`}>
+                  <Show
+                    when={props.escapeInDebounce}
+                    fallback={
+                      <>
                         <span class="prompt-overlay-text">
-                          • <Kbd>{commandHint().key}</Kbd> {commandHint().text}
+                          <Kbd>Enter</Kbd> New line • <Kbd shortcut="cmd+enter" /> Send • <Kbd>@</Kbd> Files/agents • <Kbd>↑↓</Kbd> History
                         </span>
-                      </Show>
+                        <Show when={attachments().length > 0}>
+                          <span class="prompt-overlay-text prompt-overlay-muted">• {attachments().length} file(s) attached</span>
+                        </Show>
+                        <span class="prompt-overlay-text">
+                          • <Kbd>{shellHint().key}</Kbd> {shellHint().text}
+                        </span>
+                        <Show when={mode() !== "shell"}>
+                          <span class="prompt-overlay-text">
+                            • <Kbd>{commandHint().key}</Kbd> {commandHint().text}
+                          </span>
+                        </Show>
+                        <Show when={mode() === "shell"}>
+                          <span class="prompt-overlay-shell-active">Shell mode active</span>
+                        </Show>
+                      </>
+                    }
+                  >
+                    <>
+                      <span class="prompt-overlay-text prompt-overlay-warning">
+                        Press <Kbd>Esc</Kbd> again to abort session
+                      </span>
                       <Show when={mode() === "shell"}>
                         <span class="prompt-overlay-shell-active">Shell mode active</span>
                       </Show>
                     </>
-                  }
-                >
-                  <>
-                    <span class="prompt-overlay-text prompt-overlay-warning">
-                      Press <Kbd>Esc</Kbd> again to abort session
-                    </span>
-                    <Show when={mode() === "shell"}>
-                      <span class="prompt-overlay-shell-active">Shell mode active</span>
-                    </Show>
-                  </>
-                </Show>
-              </div>
-            </Show>
+                  </Show>
+                </div>
+              </Show>
+            </div>
           </div>
         </div>
-      </div>
 
         <div class="prompt-input-actions">
           <button
