@@ -145,6 +145,9 @@ const [options, setOptionsState] = createSignal<SearchOptions>({
 const [instanceId, setInstanceId] = createSignal<string | null>(null)
 const [sessionId, setSessionId] = createSignal<string | null>(null)
 
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+const DEBOUNCE_MS = 400
+
 /**
  * Open search panel
  * @param scopeInstanceId - Instance ID to search within (null for all)
@@ -160,6 +163,11 @@ export function openSearch(scopeInstanceId?: string, scopeSessionId?: string) {
  * Close search panel and clear results
  */
 export function closeSearch() {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+
   batch(() => {
     setIsOpen(false)
     setQuery("")
@@ -322,11 +330,28 @@ export function updateOptions(newOptions: Partial<SearchOptions>, store?: Instan
 }
 
 /**
- * Set the search query
+ * Set the search query with debounced auto-search
  * @param newQuery - New query string
+ * @param store - Message store for search execution (optional)
  */
-export function setQueryInput(newQuery: string) {
+export function setQueryInput(newQuery: string, store?: InstanceMessageStore) {
   setQuery(newQuery)
+
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+
+  if (!newQuery || newQuery.length < 1) {
+    clearResults()
+    return
+  }
+
+  searchDebounceTimer = setTimeout(() => {
+    if (store) {
+      executeSearch(store)
+    }
+  }, DEBOUNCE_MS)
 }
 
 /**
@@ -334,8 +359,13 @@ export function setQueryInput(newQuery: string) {
  * @param store - Message store to search through
  */
 export function executeSearchOnEnter(store: InstanceMessageStore) {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = null
+  }
+
   const currentQuery = query()
-  
+
   if (currentQuery && currentQuery.length > 0) {
     executeSearch(store)
   } else {

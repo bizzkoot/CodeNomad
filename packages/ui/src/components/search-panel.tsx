@@ -122,7 +122,7 @@ export default function SearchPanel(props: SearchPanelProps) {
   // Handle query input change
   function handleQueryChange(e: Event) {
     const target = e.target as HTMLInputElement
-    setQueryInput(target.value)
+    setQueryInput(target.value, props.store())
     setError(null)
   }
 
@@ -222,7 +222,7 @@ export default function SearchPanel(props: SearchPanelProps) {
               <button
                 type="button"
                 class="search-panel-clear-button"
-                onClick={() => setQueryInput("")}
+                onClick={() => setQueryInput("", props.store())}
                 aria-label="Clear search"
               >
                 <X class="w-3 h-3" />
