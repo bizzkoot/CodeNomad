@@ -18,6 +18,73 @@ import type { SearchMatch, SearchOptions, SearchState } from "../types/search"
 import type { InstanceMessageStore } from "./message-v2/instance-store"
 import type { ClientPart } from "../types/message"
 
+/**
+ * Find the closest match to the current viewport position
+ * Uses message anchors to estimate position without relying on mark elements
+ */
+function findClosestMatchToViewport(allMatches: SearchMatch[]): number {
+  if (allMatches.length === 0) return -1
+
+  // Get the scroll container
+  const scrollContainer = document.querySelector('.message-stream')
+  if (!scrollContainer) return 0
+
+  const viewportCenter = scrollContainer.scrollTop + (scrollContainer.clientHeight / 2)
+
+  let closestIndex = 0
+  let closestDistance = Infinity
+
+  // Get all message anchors in order
+  const anchors = Array.from(document.querySelectorAll('[id^="message-anchor-"]'))
+  
+  // Create a map of message ID to anchor position
+  const anchorPositions = new Map<string, number>()
+  anchors.forEach(anchor => {
+    const messageId = anchor.id.replace('message-anchor-', '')
+    const rect = anchor.getBoundingClientRect()
+    const anchorCenter = rect.top + (rect.height / 2)
+    anchorPositions.set(messageId, anchorCenter)
+  })
+
+  // Find the message anchor closest to viewport center
+  let closestMessageId: string | null = null
+  let closestMessageDistance = Infinity
+
+  anchorPositions.forEach((position, messageId) => {
+    const distance = Math.abs(position - viewportCenter)
+    if (distance < closestMessageDistance) {
+      closestMessageDistance = distance
+      closestMessageId = messageId
+    }
+  })
+
+  if (!closestMessageId) return 0
+
+  // Now find the first match in the closest message
+  for (let i = 0; i < allMatches.length; i++) {
+    const match = allMatches[i]
+    if (match.messageId === closestMessageId) {
+      closestIndex = i
+      break
+    }
+  }
+
+  return closestIndex
+}
+
+/**
+ * Build CSS selector for a search match element
+ */
+function buildMatchSelector(match: SearchMatch): string {
+  return (
+    'mark[data-search-match="true"]' +
+    `[data-search-message-id="${CSS.escape(match.messageId)}"]` +
+    `[data-search-part-index="${match.partIndex}"]` +
+    `[data-search-start="${match.startIndex}"]` +
+    `[data-search-end="${match.endIndex}"]`
+  )
+}
+
 const MAX_MATCHES = 100
 
 function extractTextForSearch(part: ClientPart, currentOptions: SearchOptions): string {
@@ -195,10 +262,11 @@ export function executeSearch(store: InstanceMessageStore) {
       }
     }
 
-    // Update matches and set first as current
+    // Update matches and set closest to viewport as current
+    const closestMatchIndex = findClosestMatchToViewport(allMatches)
     batch(() => {
       setMatches(allMatches)
-      setCurrentIndex(allMatches.length > 0 ? 0 : -1)
+      setCurrentIndex(closestMatchIndex)
     })
   } catch (error) {
     console.error("Search execution error:", error)
