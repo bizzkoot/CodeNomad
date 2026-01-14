@@ -1,6 +1,7 @@
-import { Component, createSignal, Show, For } from "solid-js"
+import { Component, createSignal, Show, For, createEffect, onCleanup } from "solid-js"
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen } from "lucide-solid"
 import type { FileSystemEntry } from "../../../server/src/api-types"
+import { SECTION_EXPANSION_EVENT, type SectionExpansionRequest } from "../lib/section-expansion"
 
 /**
  * Props for FolderTreeNode component
@@ -37,6 +38,25 @@ const FolderTreeNode: Component<FolderTreeNodeProps> = (props) => {
   const [children, setChildren] = createSignal<FileSystemEntry[]>([])
   const [isLoading, setIsLoading] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
+
+  // Listen for folder expansion requests from search system
+  createEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SectionExpansionRequest>).detail
+      if (
+        detail.action === "expand-folder-node" &&
+        detail.elementId === props.entry.path
+      ) {
+        // Auto-expand the folder
+        setIsExpanded(true)
+      }
+    }
+
+    window.addEventListener(SECTION_EXPANSION_EVENT, handler)
+    onCleanup(() => window.removeEventListener(SECTION_EXPANSION_EVENT, handler))
+  })
 
   const isDirectory = () => props.entry.type === "directory"
   const isMarkdownFile = () => {
@@ -123,7 +143,7 @@ const FolderTreeNode: Component<FolderTreeNodeProps> = (props) => {
   }
 
   return (
-    <div class="folder-tree-node" data-level={props.level}>
+    <div class="folder-tree-node" data-node-id={props.entry.path} data-level={props.level}>
       {/* Node row */}
       <div
         class="folder-tree-node-row"

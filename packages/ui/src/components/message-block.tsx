@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { FoldVertical } from "lucide-solid"
 import MessageItem from "./message-item"
 import ToolCall from "./tool-call"
@@ -11,6 +11,7 @@ import { messageStoreBus } from "../stores/message-v2/bus"
 import { formatTokenTotal } from "../lib/formatters"
 import { sessions, setActiveParentSession, setActiveSession } from "../stores/sessions"
 import { setActiveInstanceId } from "../stores/instances"
+import { SECTION_EXPANSION_EVENT, type SectionExpansionRequest } from "../lib/section-expansion"
 
 const TOOL_ICON = "🔧"
 const USER_BORDER_COLOR = "var(--message-user-border)"
@@ -671,6 +672,25 @@ interface ReasoningCardProps {
 
 function ReasoningCard(props: ReasoningCardProps) {
   const [expanded, setExpanded] = createSignal(Boolean(props.defaultExpanded))
+
+  // Listen for expansion requests from search system
+  createEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SectionExpansionRequest>).detail
+      if (
+        detail.action === "expand-reasoning" &&
+        detail.messageId === props.part.messageID &&
+        detail.instanceId === props.instanceId
+      ) {
+        setExpanded(true)
+      }
+    }
+
+    window.addEventListener(SECTION_EXPANSION_EVENT, handler)
+    onCleanup(() => window.removeEventListener(SECTION_EXPANSION_EVENT, handler))
+  })
 
   createEffect(() => {
     setExpanded(Boolean(props.defaultExpanded))

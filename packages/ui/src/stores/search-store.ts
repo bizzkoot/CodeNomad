@@ -13,6 +13,7 @@
 
 import { batch, createSignal } from "solid-js"
 import { findMatches } from "../lib/search-algorithm"
+import { expandSectionsForMatch, waitForExpansionCompletion } from "../lib/section-expansion"
 import type { SearchMatch, SearchOptions, SearchState } from "../types/search"
 import type { InstanceMessageStore } from "./message-v2/instance-store"
 import type { ClientPart } from "../types/message"
@@ -288,61 +289,87 @@ export function clearResults() {
  * Scroll to current match element in viewport
  * This is called automatically after navigation
  */
-function scrollToCurrentMatch() {
+async function scrollToCurrentMatch() {
   const currentMatch = getCurrentMatch()
   if (!currentMatch) return
 
-  // Prefer scrolling to the specific mark corresponding to the current match.
-  // This is reliable for plain-text highlighting where we render marks with identity attributes.
-  const markSelector =
-    'mark[data-search-match="true"]' +
-    `[data-search-message-id="${CSS.escape(currentMatch.messageId)}"]` +
-    `[data-search-part-index="${currentMatch.partIndex}"]` +
-    `[data-search-start="${currentMatch.startIndex}"]` +
-    `[data-search-end="${currentMatch.endIndex}"]`
+  // Get current instance ID
+  const currentInstanceId = instanceId()
+  if (!currentInstanceId) return
 
-  const targetMark = document.querySelector(markSelector)
-  if (targetMark) {
-    targetMark.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" })
-    return
+  // Step 1: Try to expand any collapsed sections containing the match
+  const didExpand = expandSectionsForMatch(currentInstanceId, currentMatch)
+
+  // Step 2: Wait for DOM to update if we expanded something
+  if (didExpand) {
+    await waitForExpansionCompletion(500)
   }
 
-  // Secondary: markdown highlights can't be mapped to start/end indices reliably,
-  // so we tag them with an occurrence index per (messageId, partIndex).
-  const partMatches = matches()
-    .filter((m) => m.messageId === currentMatch.messageId && m.partIndex === currentMatch.partIndex)
-    .slice()
-    .sort((a, b) => a.startIndex - b.startIndex)
-
-  const occurrenceIndex = partMatches.findIndex(
-    (m) =>
-      m.startIndex === currentMatch.startIndex &&
-      m.endIndex === currentMatch.endIndex &&
-      m.messageId === currentMatch.messageId &&
-      m.partIndex === currentMatch.partIndex,
-  )
-
-  if (occurrenceIndex >= 0) {
-    const occSelector =
+  // Step 3: Try to scroll to the match element
+  let scrollToTarget = async () => {
+    // Prefer scrolling to the specific mark corresponding to the current match.
+    // This is reliable for plain-text highlighting where we render marks with identity attributes.
+    const markSelector =
       'mark[data-search-match="true"]' +
       `[data-search-message-id="${CSS.escape(currentMatch.messageId)}"]` +
       `[data-search-part-index="${currentMatch.partIndex}"]` +
-      `[data-search-occurrence="${occurrenceIndex}"]`
+      `[data-search-start="${currentMatch.startIndex}"]` +
+      `[data-search-end="${currentMatch.endIndex}"]`
 
-    const occMark = document.querySelector(occSelector)
-    if (occMark) {
-      occMark.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" })
-      return
+    const targetMark = document.querySelector(markSelector)
+    if (targetMark) {
+      targetMark.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" })
+      return true
     }
+
+    // Secondary: markdown highlights can't be mapped to start/end indices reliably,
+    // so we tag them with an occurrence index per (messageId, partIndex).
+    const partMatches = matches()
+      .filter((m) => m.messageId === currentMatch.messageId && m.partIndex === currentMatch.partIndex)
+      .slice()
+      .sort((a, b) => a.startIndex - b.startIndex)
+
+    const occurrenceIndex = partMatches.findIndex(
+      (m) =>
+        m.startIndex === currentMatch.startIndex &&
+        m.endIndex === currentMatch.endIndex &&
+        m.messageId === currentMatch.messageId &&
+        m.partIndex === currentMatch.partIndex,
+    )
+
+    if (occurrenceIndex >= 0) {
+      const occSelector =
+        'mark[data-search-match="true"]' +
+        `[data-search-message-id="${CSS.escape(currentMatch.messageId)}"]` +
+        `[data-search-part-index="${currentMatch.partIndex}"]` +
+        `[data-search-occurrence="${occurrenceIndex}"]`
+
+      const occMark = document.querySelector(occSelector)
+      if (occMark) {
+        occMark.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" })
+        return true
+      }
+    }
+
+    // Fallback: scroll to message anchor if mark not found
+    const messageId = currentMatch.messageId
+    const elementId = `message-anchor-${messageId}`
+    
+    const element = document.getElementById(elementId)
+    if (element) {
+      element.scrollIntoView({ block: "start", inline: "nearest", behavior: "smooth" })
+      return true
+    }
+
+    return false
   }
 
-  // Fallback: scroll to message anchor if mark not found
-  const messageId = currentMatch.messageId
-  const elementId = `message-anchor-${messageId}`
-  
-  const element = document.getElementById(elementId)
-  if (element) {
-    element.scrollIntoView({ block: "start", inline: "nearest", behavior: "smooth" })
+  // Try scrolling once, if we expanded and it failed, retry once
+  const scrolled = await scrollToTarget()
+  if (!scrolled && didExpand) {
+    // Wait a bit more and retry
+    await new Promise(resolve => setTimeout(resolve, 200))
+    await scrollToTarget()
   }
 }
 

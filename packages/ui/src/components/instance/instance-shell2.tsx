@@ -31,6 +31,7 @@ import type { Instance } from "../../types/instance"
 import type { Command } from "../../lib/commands"
 import type { BackgroundProcess } from "../../../../server/src/api-types"
 import type { Session } from "../../types/session"
+import { SECTION_EXPANSION_EVENT, type SectionExpansionRequest } from "../../lib/section-expansion"
 import {
   activeParentSessionId,
   activeSessionId as activeSessionMap,
@@ -1143,6 +1144,27 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     const handleAccordionChange = (values: string[]) => {
       setRightPanelExpandedItems(values)
     }
+
+    // Listen for sidebar accordion expansion requests from search system
+    createEffect(() => {
+      if (typeof window === "undefined") return
+
+      const handler = (event: Event) => {
+        const detail = (event as CustomEvent<SectionExpansionRequest>).detail
+        if (
+          detail.action === "expand-sidebar-accordion" &&
+          detail.instanceId === props.instance.id
+        ) {
+          const sectionId = detail.sectionId
+          if (sectionId && !rightPanelExpandedItems().includes(sectionId)) {
+            setRightPanelExpandedItems((prev) => [...prev, sectionId])
+          }
+        }
+      }
+
+      window.addEventListener(SECTION_EXPANSION_EVENT, handler)
+      onCleanup(() => window.removeEventListener(SECTION_EXPANSION_EVENT, handler))
+    })
 
     const isSectionExpanded = (id: string) => rightPanelExpandedItems().includes(id)
 
