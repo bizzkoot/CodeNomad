@@ -323,7 +323,8 @@ export function expandSectionsForMatch(instanceId: string, match: SearchMatch): 
   const matchElement = document.querySelector(selector)
   
   if (!matchElement) {
-    console.warn(`Match element not found: ${selector}`)
+    // Silently skip - element may not exist yet (e.g., in collapsed section)
+    // Expansion will be triggered based on metadata
     return false
   }
 
@@ -336,7 +337,7 @@ export function expandSectionsForMatch(instanceId: string, match: SearchMatch): 
   const { type, identifiers } = identifyCollapsibleParent(matchElement)
   
   if (!type) {
-    console.warn('Could not identify collapsible parent for match', match)
+    // Silently skip - couldn't identify collapsible parent
     return false
   }
 
