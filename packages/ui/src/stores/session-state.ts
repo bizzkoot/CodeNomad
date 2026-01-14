@@ -58,8 +58,8 @@ type InstanceIndicatorCounts = {
 
 const [instanceIndicatorCounts, setInstanceIndicatorCounts] = createSignal<Map<string, InstanceIndicatorCounts>>(new Map())
 
-function getIndicatorBucket(session: Pick<Session, "status" | "pendingPermission">): InstanceSessionIndicatorStatus | "idle" {
-  if (session.pendingPermission) {
+function getIndicatorBucket(session: Pick<Session, "status" | "pendingPermission" | "pendingQuestion">): InstanceSessionIndicatorStatus | "idle" {
+  if (session.pendingPermission || session.pendingQuestion) {
     return "permission"
   }
   const status = session.status ?? "idle"
@@ -126,7 +126,7 @@ function recomputeIndicatorCounts(instanceId: string, instanceSessions: Map<stri
   let compacting = 0
 
   for (const session of instanceSessions.values()) {
-    if (session.pendingPermission) {
+    if (session.pendingPermission || session.pendingQuestion) {
       permission += 1
       continue
     }
@@ -305,6 +305,13 @@ function setSessionPendingPermission(instanceId: string, sessionId: string, pend
   })
 }
 
+function setSessionPendingQuestion(instanceId: string, sessionId: string, pending: boolean): void {
+  withSession(instanceId, sessionId, (session) => {
+    if (session.pendingQuestion === pending) return false
+    session.pendingQuestion = pending
+  })
+}
+
 function setActiveSession(instanceId: string, sessionId: string): void {
   setActiveSessionId((prev) => {
     const next = new Map(prev)
@@ -383,9 +390,35 @@ function getSessionFamily(instanceId: string, parentId: string): Session[] {
   return [parent, ...children]
 }
 
+type SessionThreadCacheEntry = {
+  signature: string
+  thread: SessionThread
+}
+
+type SessionThreadCache = {
+  byParentId: Map<string, SessionThreadCacheEntry>
+}
+
+const sessionThreadCache = new Map<string, SessionThreadCache>()
+
+function getOrCreateSessionThreadCache(instanceId: string): SessionThreadCache {
+  let cache = sessionThreadCache.get(instanceId)
+  if (!cache) {
+    cache = { byParentId: new Map() }
+    sessionThreadCache.set(instanceId, cache)
+  }
+  return cache
+}
+
 function getSessionThreads(instanceId: string): SessionThread[] {
   const instanceSessions = sessions().get(instanceId)
-  if (!instanceSessions || instanceSessions.size === 0) return []
+  if (!instanceSessions || instanceSessions.size === 0) {
+    sessionThreadCache.delete(instanceId)
+    return []
+  }
+
+  const cache = getOrCreateSessionThreadCache(instanceId)
+  const seenParents = new Set<string>()
 
   const parents: Session[] = []
   const childrenByParent = new Map<string, Session[]>()
@@ -409,6 +442,8 @@ function getSessionThreads(instanceId: string): SessionThread[] {
   const threads: SessionThread[] = []
 
   for (const parent of parents) {
+    seenParents.add(parent.id)
+
     const children = childrenByParent.get(parent.id) ?? []
     if (children.length > 1) {
       children.sort((a, b) => (b.time.updated ?? 0) - (a.time.updated ?? 0))
@@ -418,7 +453,23 @@ function getSessionThreads(instanceId: string): SessionThread[] {
     const latestChild = children[0]?.time.updated ?? 0
     const latestUpdated = Math.max(parentUpdated, latestChild)
 
-    threads.push({ parent, children, latestUpdated })
+    const childIds = children.map((child) => child.id).join(",")
+    const signature = `${parentUpdated}:${latestChild}:${childIds}`
+
+    const cached = cache.byParentId.get(parent.id)
+    if (cached && cached.signature === signature) {
+      threads.push(cached.thread)
+    } else {
+      const thread: SessionThread = { parent, children, latestUpdated }
+      cache.byParentId.set(parent.id, { signature, thread })
+      threads.push(thread)
+    }
+  }
+
+  for (const parentId of Array.from(cache.byParentId.keys())) {
+    if (!seenParents.has(parentId)) {
+      cache.byParentId.delete(parentId)
+    }
   }
 
   threads.sort((a, b) => {
@@ -660,6 +711,7 @@ export {
   pruneDraftPrompts,
   withSession,
   setSessionPendingPermission,
+  setSessionPendingQuestion,
   setSessionStatus,
   setActiveSession,
  

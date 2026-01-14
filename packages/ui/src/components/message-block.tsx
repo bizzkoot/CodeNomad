@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, untrack } from "solid-js"
 import { FoldVertical } from "lucide-solid"
 import MessageItem from "./message-item"
 import ToolCall from "./tool-call"
@@ -235,16 +235,11 @@ export default function MessageBlock(props: MessageBlockProps) {
     const index = props.messageIndex
     const lastAssistantIdx = props.lastAssistantIndex()
     const isQueued = current.role === "user" && (lastAssistantIdx === -1 || index > lastAssistantIdx)
-    const info = messageInfo()
-    const infoTime = (info?.time ?? {}) as { created?: number; updated?: number; completed?: number }
-    const infoTimestamp =
-      typeof infoTime.completed === "number"
-        ? infoTime.completed
-        : typeof infoTime.updated === "number"
-          ? infoTime.updated
-          : infoTime.created ?? 0
-    const infoError = (info as { error?: { name?: string } } | undefined)?.error
-    const infoErrorName = typeof infoError?.name === "string" ? infoError.name : ""
+
+    // Intentionally untracked: messageInfoVersion updates should not trigger
+    // a full message block rebuild; record revision is the invalidation key.
+    const info = untrack(messageInfo)
+
     const cacheSignature = [
       current.id,
       current.revision,
@@ -252,8 +247,6 @@ export default function MessageBlock(props: MessageBlockProps) {
       props.showThinking() ? 1 : 0,
       props.thinkingDefaultExpanded() ? 1 : 0,
       props.showUsageMetrics() ? 1 : 0,
-      infoTimestamp,
-      infoErrorName,
     ].join("|")
 
     const cachedBlock = sessionCache.messageBlocks.get(current.id)

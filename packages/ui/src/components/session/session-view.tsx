@@ -1,10 +1,12 @@
-import { Show, createMemo, createEffect, type Component } from "solid-js"
+import { Show, For, createMemo, createEffect, type Component } from "solid-js"
 import type { Session } from "../../types/session"
 import type { Attachment } from "../../types/attachment"
 import type { ClientPart } from "../../types/message"
 import MessageSection from "../message-section"
 import { messageStoreBus } from "../../stores/message-v2/bus"
 import PromptInput from "../prompt-input"
+import AttachmentChip from "../attachment-chip"
+import { getAttachments, removeAttachment } from "../../stores/attachments"
 import { instances } from "../../stores/instances"
 import { loadMessages, sendMessage, forkSession, isSessionMessagesLoading, setActiveParentSession, setActiveSession, runShellCommand, abortSession } from "../../stores/sessions"
 import { isSessionBusy as getSessionBusyStatus } from "../../stores/session-status"
@@ -39,6 +41,14 @@ export const SessionView: Component<SessionViewProps> = (props) => {
     if (!currentSession) return false
     return getSessionBusyStatus(props.instanceId, currentSession.id)
   })
+
+  const sessionNeedsInput = createMemo(() => {
+    const currentSession = session()
+    if (!currentSession) return false
+    return Boolean(currentSession.pendingPermission || (currentSession as any).pendingQuestion)
+  })
+
+  const attachments = createMemo(() => getAttachments(props.instanceId, props.sessionId))
   let scrollToBottomHandle: (() => void) | undefined
   let rootRef: HTMLDivElement | undefined
   function scheduleScrollToBottom() {
@@ -224,17 +234,31 @@ export const SessionView: Component<SessionViewProps> = (props) => {
              />
 
 
-            <PromptInput
-              instanceId={props.instanceId}
-              instanceFolder={props.instanceFolder}
-              sessionId={activeSession.id}
-              onSend={handleSendMessage}
-              onRunShell={handleRunShell}
-              escapeInDebounce={props.escapeInDebounce}
-              isSessionBusy={sessionBusy()}
-              onAbortSession={handleAbortSession}
-              registerQuoteHandler={registerQuoteHandler}
-            />
+              <Show when={attachments().length > 0}>
+                <div class="flex flex-wrap gap-1.5 border-t px-3 py-2" style="border-color: var(--border-base);">
+                  <For each={attachments()}>
+                    {(attachment) => (
+                      <AttachmentChip
+                        attachment={attachment}
+                        onRemove={() => removeAttachment(props.instanceId, props.sessionId, attachment.id)}
+                      />
+                    )}
+                  </For>
+                </div>
+              </Show>
+
+              <PromptInput
+               instanceId={props.instanceId}
+               instanceFolder={props.instanceFolder}
+               sessionId={activeSession.id}
+               onSend={handleSendMessage}
+               onRunShell={handleRunShell}
+               escapeInDebounce={props.escapeInDebounce}
+               isSessionBusy={sessionBusy()}
+               disabled={sessionNeedsInput()}
+               onAbortSession={handleAbortSession}
+               registerQuoteHandler={registerQuoteHandler}
+             />
           </div>
         )
       }}
