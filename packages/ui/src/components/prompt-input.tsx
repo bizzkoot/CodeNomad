@@ -1,4 +1,4 @@
-import { createSignal, Show, onMount, For, onCleanup, createEffect, on, untrack, createMemo } from "solid-js"
+import { createSignal, Show, onMount, For, onCleanup, createEffect, on, untrack } from "solid-js"
 import { ArrowBigUp, ArrowBigDown } from "lucide-solid"
 import UnifiedPicker from "./unified-picker"
 import ExpandButton from "./expand-button"
@@ -50,45 +50,6 @@ export default function PromptInput(props: PromptInputProps) {
   const [expandState, setExpandState] = createSignal<"normal" | "expanded">("normal")
   const SELECTION_INSERT_MAX_LENGTH = 2000
   let textareaRef: HTMLTextAreaElement | undefined
-  let containerRef: HTMLDivElement | undefined
-
-  // Fixed line height for expanded state (15 lines as suggested by dev)
-
-  // Fixed line height for web/mobile expanded state (15 lines as suggested)
-  const EXPANDED_LINES = 15
-  const LINE_HEIGHT = 24
-  const FIXED_EXPANDED_HEIGHT = EXPANDED_LINES * LINE_HEIGHT // 360px
-
-  const calculateExpandedHeight = () => {
-    if (!containerRef) {
-      return 0
-    }
-
-    const root = containerRef.closest(".session-view")
-    if (!root) {
-      return 0
-    }
-    const rootRect = root.getBoundingClientRect()
-
-    // Reserve minimum space for message section
-    // Use larger reserve for landscape orientation (less vertical space)
-    const isLandscape = typeof window !== "undefined" && window.innerWidth > window.innerHeight
-    const MIN_MESSAGE_SPACE = isLandscape ? 150 : 200
-    const availableForInput = rootRect.height - MIN_MESSAGE_SPACE
-
-    return availableForInput
-  }
-
-  const expandedHeight = createMemo(() => {
-    const state = expandState()
-    if (state === "normal") return "auto"
-
-    // Use fixed height, but cap at available space
-    // This prevents overflow in landscape or small screens
-    const availableHeight = calculateExpandedHeight()
-    const maxHeight = Math.min(FIXED_EXPANDED_HEIGHT, availableHeight * 0.6)
-    return `${Math.max(maxHeight, 150)}px` // Minimum 150px to be useful
-  })
 
   const getPlaceholder = () => {
     if (mode() === "shell") {
@@ -1093,7 +1054,6 @@ export default function PromptInput(props: PromptInputProps) {
   return (
     <div class="prompt-input-container">
       <div
-        ref={containerRef}
         class={`prompt-input-wrapper relative ${isDragging() ? "border-2" : ""}`}
         style={
           isDragging()
@@ -1214,17 +1174,11 @@ export default function PromptInput(props: PromptInputProps) {
               </For>
             </div>
           </Show>
-          <div
-            class="prompt-input-field-container"
-            style={{
-              "height": expandedHeight(),
-              "transition": "height 0.25s ease",
-            }}
-          >
-            <div class="prompt-input-field">
+          <div class={`prompt-input-field-container ${expandState() === "expanded" ? "is-expanded" : ""}`}>
+            <div class={`prompt-input-field ${expandState() === "expanded" ? "is-expanded" : ""}`}>
               <textarea
                 ref={textareaRef}
-                class={`prompt-input ${mode() === "shell" ? "shell-mode" : ""}`}
+                class={`prompt-input ${mode() === "shell" ? "shell-mode" : ""} ${expandState() === "expanded" ? "is-expanded" : ""}`}
                 placeholder={getPlaceholder()}
                 value={prompt()}
                 onInput={handleInput}
@@ -1233,11 +1187,8 @@ export default function PromptInput(props: PromptInputProps) {
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 disabled={props.disabled}
-                rows={4}
-                style={{
-                  "padding-top": attachments().length > 0 ? "8px" : "0",
-                  "overflow-y": expandState() !== "normal" ? "auto" : "visible",
-                }}
+                rows={expandState() === "expanded" ? 15 : 4}
+                style={attachments().length > 0 ? { "padding-top": "8px" } : undefined}
                 spellcheck={false}
                 autocorrect="off"
                 autoCapitalize="off"
