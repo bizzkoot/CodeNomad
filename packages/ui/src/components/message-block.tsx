@@ -82,8 +82,20 @@ interface TaskSessionLocation {
   parentId: string | null
 }
 
-function findTaskSessionLocation(sessionId: string): TaskSessionLocation | null {
+function findTaskSessionLocation(sessionId: string, preferredInstanceId?: string): TaskSessionLocation | null {
   if (!sessionId) return null
+
+  if (preferredInstanceId) {
+    const session = sessions().get(preferredInstanceId)?.get(sessionId)
+    if (session) {
+      return {
+        sessionId: session.id,
+        instanceId: preferredInstanceId,
+        parentId: session.parentId ?? null,
+      }
+    }
+  }
+
   const allSessions = sessions()
   for (const [instanceId, sessionMap] of allSessions) {
     const session = sessionMap?.get(sessionId)
@@ -440,7 +452,7 @@ export default function MessageBlock(props: MessageBlockProps) {
                     const hasToolState =
                       Boolean(toolState) && (isToolStateRunning(toolState) || isToolStateCompleted(toolState) || isToolStateError(toolState))
                     const taskSessionId = hasToolState ? extractTaskSessionId(toolState) : ""
-                    const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId) : null
+                    const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId, props.instanceId) : null
                     const handleGoToTaskSession = (event: MouseEvent) => {
                       event.preventDefault()
                       event.stopPropagation()
