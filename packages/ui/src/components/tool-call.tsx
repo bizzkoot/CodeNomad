@@ -1174,6 +1174,13 @@ export default function ToolCall(props: ToolCallProps) {
                       <Show when={active()}>
                         <div class="mt-2 flex items-center gap-2">
                           <input
+                            ref={(el) => {
+                              const activeEl = document.activeElement
+                              if (activeEl?.getAttribute?.('data-question-index') === String(i())) {
+                                queueMicrotask(() => el?.focus())
+                              }
+                            }}
+                            data-question-index={i()}
                             class="flex-1 rounded-md border border-base/50 bg-surface px-2 py-1 text-sm"
                             type="text"
                             placeholder="Type your own answer"
