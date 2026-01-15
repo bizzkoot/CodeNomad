@@ -4,10 +4,12 @@ import {
   BinaryUpdateRequest,
   BinaryValidationResult,
 } from "../api-types"
+import { spawnSync } from "child_process"
 import { ConfigStore } from "./store"
 import { EventBus } from "../events/bus"
 import type { ConfigFile } from "./schema"
 import { Logger } from "../logger"
+import { buildSpawnSpec } from "../workspaces/runtime"
 
 export class BinaryRegistry {
   constructor(
@@ -135,8 +137,42 @@ export class BinaryRegistry {
   }
 
   private validateRecord(record: BinaryRecord): BinaryValidationResult {
-    // TODO: call actual binary -v check.
-    return { valid: true, version: record.version }
+    const inputPath = record.path
+    if (!inputPath) {
+      return { valid: false, error: "Missing binary path" }
+    }
+
+    const spec = buildSpawnSpec(inputPath, ["--version"])
+
+    try {
+      const result = spawnSync(spec.command, spec.args, {
+        encoding: "utf8",
+        windowsVerbatimArguments: Boolean((spec.options as { windowsVerbatimArguments?: boolean }).windowsVerbatimArguments),
+      })
+
+      if (result.error) {
+        return { valid: false, error: result.error.message }
+      }
+
+      if (result.status !== 0) {
+        const stderr = result.stderr?.trim()
+        const stdout = result.stdout?.trim()
+        const combined = stderr || stdout
+        const error = combined ? `Exited with code ${result.status}: ${combined}` : `Exited with code ${result.status}`
+        return { valid: false, error }
+      }
+
+      const stdout = (result.stdout ?? "").trim()
+      const firstLine = stdout.split(/\r?\n/).find((line) => line.trim().length > 0)
+      const normalized = firstLine?.trim()
+
+      const versionMatch = normalized?.match(/([0-9]+\.[0-9]+\.[0-9A-Za-z.-]+)/)
+      const version = versionMatch?.[1]
+
+      return { valid: true, version }
+    } catch (error) {
+      return { valid: false, error: error instanceof Error ? error.message : String(error) }
+    }
   }
 
   private buildFallbackRecord(path: string): BinaryRecord {
