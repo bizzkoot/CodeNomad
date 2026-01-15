@@ -10,7 +10,7 @@ import {
   setActivePermissionIdForInstance,
   setActiveQuestionIdForInstance,
 } from "../stores/instances"
-import { loadMessages, setActiveSession } from "../stores/sessions"
+import { ensureSessionParentExpanded, loadMessages, sessions as sessionStateSessions, setActiveSessionFromList } from "../stores/sessions"
 import { messageStoreBus } from "../stores/message-v2/bus"
 import ToolCall from "./tool-call"
 
@@ -201,7 +201,14 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
 
   function handleGoToSession(sessionId: string) {
     if (!sessionId) return
-    setActiveSession(props.instanceId, sessionId)
+
+    const session = sessionStateSessions().get(props.instanceId)?.get(sessionId)
+    const parentId = session?.parentId ?? session?.id
+    if (parentId) {
+      ensureSessionParentExpanded(props.instanceId, parentId)
+    }
+
+    setActiveSessionFromList(props.instanceId, sessionId)
     props.onClose()
   }
 
