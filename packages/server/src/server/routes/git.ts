@@ -14,6 +14,7 @@ import type {
     GitCommitResponse,
     GitCheckoutRequest,
     GitStageRequest,
+    GitPushResponse,
 } from "../../api-types"
 
 const execAsync = promisify(exec)
@@ -482,4 +483,34 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
             }
         },
     )
+
+    // POST /api/workspaces/:id/git/push
+    app.post<{ Params: { id: string } }>("/api/workspaces/:id/git/push", async (request, reply) => {
+        const workspacePath = getWorkspacePath(request.params.id)
+        if (!workspacePath) {
+            return reply.status(404).send({ error: "Workspace not found" })
+        }
+
+        if (!(await isGitRepository(workspacePath))) {
+            return reply.status(400).send({ error: "Not a git repository" })
+        }
+
+        try {
+            await runGitCommand(workspacePath, "push")
+            const response: GitPushResponse = {
+                success: true,
+                pushed: true,
+                message: "Pushed successfully",
+            }
+            return response
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to push"
+            const response: GitPushResponse = {
+                success: false,
+                pushed: false,
+                message,
+            }
+            return reply.status(500).send(response)
+        }
+    })
 }

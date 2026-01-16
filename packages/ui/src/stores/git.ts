@@ -187,3 +187,22 @@ export async function commitChanges(workspaceId: string, message: string): Promi
 export async function refreshGit(workspaceId: string): Promise<void> {
     await Promise.all([fetchGitStatus(workspaceId), fetchGitBranches(workspaceId)])
 }
+
+export async function pushChanges(workspaceId: string): Promise<boolean> {
+    const store = getOrCreateStore(workspaceId)
+    store.loading = true
+    store.error = null
+    notifyUpdate()
+
+    try {
+        await serverApi.pushChanges(workspaceId)
+        await fetchGitBranches(workspaceId)
+        return true
+    } catch (error) {
+        store.error = error instanceof Error ? error.message : "Failed to push"
+        return false
+    } finally {
+        store.loading = false
+        notifyUpdate()
+    }
+}

@@ -23,6 +23,7 @@ import type {
   GitBranchListResponse,
   GitDiffResponse,
   GitCommitResponse,
+  GitPushResponse,
 } from "../../../server/src/api-types"
 import { getLogger } from "./logger"
 
@@ -320,6 +321,11 @@ export const serverApi = {
     return request<GitCommitResponse>(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/commit`, {
       method: "POST",
       body: JSON.stringify({ message }),
+    })
+  },
+  pushChanges(workspaceId: string): Promise<GitPushResponse> {
+    return request<GitPushResponse>(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/push`, {
+      method: "POST",
     })
   },
   connectEvents(onEvent: (event: WorkspaceEventPayload) => void, onError?: () => void) {

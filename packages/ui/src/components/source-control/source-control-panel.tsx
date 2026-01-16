@@ -1,5 +1,5 @@
 import { Component, Show, For, createSignal, createEffect, onMount } from "solid-js"
-import { ChevronDown, RefreshCw, GitBranch, Plus, Minus, Undo2, Check } from "lucide-solid"
+import { ChevronDown, RefreshCw, GitBranch, Plus, Minus, Undo2, Check, UploadCloud } from "lucide-solid"
 import type { GitFileChange } from "../../../../server/src/api-types"
 import {
     useGitStore,
@@ -10,6 +10,7 @@ import {
     commitChanges,
     checkoutBranch,
     refreshGit,
+    pushChanges,
 } from "../../stores/git"
 import { serverApi } from "../../lib/api-client"
 
@@ -77,6 +78,10 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         if (success) {
             setCommitMessage("")
         }
+    }
+
+    const handlePush = async () => {
+        await pushChanges(props.workspaceId)
     }
 
     const handleViewDiff = async (file: GitFileChange) => {
@@ -181,7 +186,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         showDiscard?: boolean
     }> = (itemProps) => (
         <div class="group flex items-center gap-2 px-2 py-1 hover:bg-surface-tertiary rounded text-xs">
-            <span 
+            <span
                 class={`font-mono w-4 text-center ${getStatusColor(itemProps.file.status)}`}
                 title={itemProps.file.status}
             >
@@ -204,7 +209,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                     return path.split("/").pop() || path
                 })()}
             </button>
-            <div class="hidden group-hover:flex items-center gap-1">
+            <div class="flex items-center gap-1">
                 <Show when={itemProps.showStage}>
                     <button
                         type="button"
@@ -228,9 +233,9 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                 <Show when={itemProps.showDiscard}>
                     <button
                         type="button"
-                        class="p-1 hover:bg-surface-secondary rounded text-red-500"
+                        class="p-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 rounded text-red-500"
                         onClick={() => handleDiscard(itemProps.file.path)}
-                        title="Discard changes"
+                        title="Discard changes (danger)"
                     >
                         <Undo2 class="h-3 w-3" />
                     </button>
@@ -303,15 +308,26 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                         value={commitMessage()}
                         onInput={(e) => setCommitMessage(e.currentTarget.value)}
                     />
-                    <button
-                        type="button"
-                        class="w-full px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
-                        disabled={!commitMessage().trim() || git.stagedChanges().length === 0 || git.loading()}
-                        onClick={handleCommit}
-                        title="Commit"
-                    >
-                        Commit ({git.stagedChanges().length} staged)
-                    </button>
+                    <div class="flex items-center gap-1">
+                        <button
+                            type="button"
+                            class="flex-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
+                            disabled={!commitMessage().trim() || git.stagedChanges().length === 0 || git.loading()}
+                            onClick={handleCommit}
+                            title="Commit"
+                        >
+                            Commit ({git.stagedChanges().length} staged)
+                        </button>
+                        <button
+                            type="button"
+                            class="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50"
+                            disabled={git.loading() || (git.status()?.ahead ?? 0) <= 0}
+                            onClick={handlePush}
+                            title="Push to remote"
+                        >
+                            <UploadCloud class="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
 
                 <Show when={git.error()}>
