@@ -388,3 +388,32 @@
   z-index: 1000;
   padding: var(--space-lg);
 }
+
+/* Custom Scrollbar Styling */
+.askquestion-wizard-question::-webkit-scrollbar,
+.askquestion-wizard-options::-webkit-scrollbar {
+  width: 8px;
+}
+
+.askquestion-wizard-question::-webkit-scrollbar-track,
+.askquestion-wizard-options::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.askquestion-wizard-question::-webkit-scrollbar-thumb,
+.askquestion-wizard-options::-webkit-scrollbar-thumb {
+  background: var(--border-base);
+  border-radius: var(--radius-sm);
+}
+
+.askquestion-wizard-question::-webkit-scrollbar-thumb:hover,
+.askquestion-wizard-options::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Firefox scrollbar styling */
+.askquestion-wizard-question,
+.askquestion-wizard-options {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-base) transparent;
+}
