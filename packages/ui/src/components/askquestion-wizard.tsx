@@ -1,7 +1,8 @@
-import { createMemo, For, onMount, onCleanup, Show, type Component } from "solid-js"
+import { createMemo, For, onMount, onCleanup, Show, type Component, createSignal } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createEffect } from "solid-js"
 import type { WizardQuestion, QuestionAnswer, QuestionOption } from "../types/question"
+import { renderMarkdown } from "../lib/markdown"
 
 // Custom option marker
 const CUSTOM_OPTION_LABEL = "Type something..."
@@ -45,6 +46,25 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
         return question
     })
     const currentState = createMemo(() => store.questionStates[store.activeTab])
+
+    // Rendered markdown for the question text
+    const [questionHtml, setQuestionHtml] = createSignal("")
+
+    // Render question text as markdown
+    createEffect(async () => {
+        const question = currentQuestion()
+        if (question && question.question) {
+            try {
+                const html = await renderMarkdown(question.question)
+                setQuestionHtml(html)
+            } catch (error) {
+                console.error("[AskQuestionWizard] Failed to render question markdown:", error)
+                setQuestionHtml(question.question) // Fallback to plain text
+            }
+        } else {
+            setQuestionHtml("")
+        }
+    })
 
     // Options including "Type something..." at the end
     const optionsWithCustom = createMemo((): WizardOption[] => {
@@ -449,7 +469,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
 
             {/* Current question */}
             <div class="askquestion-wizard-question">
-                <h3 class="askquestion-wizard-question-text">{currentQuestion().question}</h3>
+                <div class="askquestion-wizard-question-text markdown-body" innerHTML={questionHtml()} />
                 <Show when={currentQuestion().multiple}>
                     <p class="askquestion-wizard-question-hint">(select multiple, press Enter to confirm)</p>
                 </Show>
