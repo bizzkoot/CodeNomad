@@ -57,6 +57,7 @@ import CommandPalette from "../command-palette"
 import FolderTreeBrowser from "../folder-tree-browser"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
+import QuestionNotificationBanner from "../question-notification-banner"
 import { AskQuestionWizard } from "../askquestion-wizard"
 import Kbd from "../kbd"
 import { TodoListView } from "../tool-call/renderers/todo"
@@ -157,6 +158,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   const [folderTreeBrowserOpen, setFolderTreeBrowserOpen] = createSignal(false)
   const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
   const [questionWizardOpen, setQuestionWizardOpen] = createSignal(false)
+  const [questionWizardMinimized, setQuestionWizardMinimized] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
 
@@ -215,13 +217,16 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     }
   })
 
-  // Auto-open question wizard when a pending question appears
+  // Auto-open question wizard when a pending question appears (unless minimized)
   createEffect(() => {
     const pending = getPendingQuestion(props.instance.id)
-    if (pending && !questionWizardOpen()) {
+    if (pending && !questionWizardMinimized()) {
+      // Auto-open only if user hasn't minimized
       setQuestionWizardOpen(true)
-    } else if (!pending && questionWizardOpen()) {
+    } else if (!pending) {
+      // Reset states when no pending questions
       setQuestionWizardOpen(false)
+      setQuestionWizardMinimized(false)
     }
   })
 
@@ -274,6 +279,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       console.error("Failed to reject question", error)
       setQuestionWizardOpen(false)
     }
+  }
+
+  const handleQuestionMinimize = () => {
+    setQuestionWizardMinimized(true)
+    setQuestionWizardOpen(false)
+    // Question remains in queue, notification banner will show
   }
 
   const measureDrawerHost = () => {
@@ -1357,6 +1368,16 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                   onClick={() => setPermissionModalOpen(true)}
                 />
 
+                <Show when={questionWizardMinimized() && getPendingQuestion(props.instance.id)}>
+                  <QuestionNotificationBanner
+                    instanceId={props.instance.id}
+                    onClick={() => {
+                      setQuestionWizardMinimized(false)
+                      setQuestionWizardOpen(true)
+                    }}
+                  />
+                </Show>
+
                 <button
                   type="button"
                   class="connection-status-button px-2 py-0.5 text-xs whitespace-nowrap flex-shrink-1 min-w-0"
@@ -1431,11 +1452,20 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 </button>
               </Show>
 
-              <div style={{ flex: "0 0 auto", display: "flex", "align-items": "center" }}>
+              <div style={{ flex: "0 0 auto", display: "flex", "align-items": "center", gap: "8px" }}>
                 <PermissionNotificationBanner
                   instanceId={props.instance.id}
                   onClick={() => setPermissionModalOpen(true)}
                 />
+                <Show when={questionWizardMinimized() && getPendingQuestion(props.instance.id)}>
+                  <QuestionNotificationBanner
+                    instanceId={props.instance.id}
+                    onClick={() => {
+                      setQuestionWizardMinimized(false)
+                      setQuestionWizardOpen(true)
+                    }}
+                  />
+                </Show>
               </div>
               <button
                 type="button"
@@ -1608,6 +1638,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 questions={mappedQuestions()}
                 onSubmit={handleQuestionSubmit}
                 onCancel={handleQuestionCancel}
+                onMinimize={handleQuestionMinimize}
               />
             </div>
           )
