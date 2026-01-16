@@ -1,6 +1,7 @@
 import { createMemo, For, onMount, onCleanup, Show, type Component, createSignal } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { createEffect } from "solid-js"
+import { Minus } from "lucide-solid"
 import type { WizardQuestion, QuestionAnswer, QuestionOption } from "../types/question"
 import { renderMarkdown } from "../lib/markdown"
 
@@ -14,6 +15,7 @@ export interface AskQuestionWizardProps {
     questions: WizardQuestion[]
     onSubmit: (answers: QuestionAnswer[]) => void
     onCancel: () => void
+    onMinimize?: () => void
 }
 
 interface QuestionState {
@@ -401,25 +403,38 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
         >
             <div class="askquestion-wizard-header">
                 <div class="askquestion-wizard-title">Answer the questions</div>
-                <button
-                    type="button"
-                    class="askquestion-wizard-close"
-                    onClick={() => {
-                        console.log('[AskQuestionWizard] Close button clicked, calling onCancel')
-                        console.log('[AskQuestionWizard] props.onCancel type:', typeof props.onCancel)
-                        console.log('[AskQuestionWizard] props.onCancel:', props.onCancel)
-                        try {
-                            props.onCancel()
-                            console.log('[AskQuestionWizard] onCancel called successfully')
-                        } catch (err) {
-                            console.error('[AskQuestionWizard] onCancel threw error:', err)
-                        }
-                    }}
-                    aria-label="Cancel"
-                    title="Cancel (Esc)"
-                >
-                    ✕
-                </button>
+                <div class="askquestion-wizard-header-buttons">
+                    <Show when={props.onMinimize}>
+                        <button
+                            type="button"
+                            class="askquestion-wizard-minimize"
+                            onClick={() => props.onMinimize?.()}
+                            aria-label="Minimize"
+                            title="Minimize (hide temporarily)"
+                        >
+                            <Minus size={16} />
+                        </button>
+                    </Show>
+                    <button
+                        type="button"
+                        class="askquestion-wizard-close"
+                        onClick={() => {
+                            console.log('[AskQuestionWizard] Close button clicked, calling onCancel')
+                            console.log('[AskQuestionWizard] props.onCancel type:', typeof props.onCancel)
+                            console.log('[AskQuestionWizard] props.onCancel:', props.onCancel)
+                            try {
+                                props.onCancel()
+                                console.log('[AskQuestionWizard] onCancel called successfully')
+                            } catch (err) {
+                                console.error('[AskQuestionWizard] onCancel threw error:', err)
+                            }
+                        }}
+                        aria-label="Cancel"
+                        title="Cancel (Esc)"
+                    >
+                        ✕
+                    </button>
+                </div>
             </div>
 
             {/* Tab bar */}
