@@ -105,7 +105,7 @@ export function Markdown(props: MarkdownProps) {
       nodes.push(currentNode as Text)
     }
 
-    let occurrenceIndex = 0
+    let globalIndexOffset = 0
 
     for (const textNode of nodes) {
       const original = textNode.textContent ?? ""
@@ -121,7 +121,10 @@ export function Markdown(props: MarkdownProps) {
         if (occurrences.length > 200) break
       }
 
-      if (occurrences.length === 0) continue
+      if (occurrences.length === 0) {
+        globalIndexOffset += original.length
+        continue
+      }
 
       const fragment = document.createDocumentFragment()
       let last = 0
@@ -133,10 +136,12 @@ export function Markdown(props: MarkdownProps) {
         mark.className = "search-match"
         mark.setAttribute("data-search-match", "true")
         if (scopeMessageId && scopePartIndex !== null) {
+          const globalStart = globalIndexOffset + occ.start
+          const globalEnd = globalIndexOffset + occ.end
           mark.setAttribute("data-search-message-id", scopeMessageId)
           mark.setAttribute("data-search-part-index", String(scopePartIndex))
-          mark.setAttribute("data-search-occurrence", String(occurrenceIndex))
-          occurrenceIndex += 1
+          mark.setAttribute("data-search-start", String(globalStart))
+          mark.setAttribute("data-search-end", String(globalEnd))
         }
         mark.textContent = original.slice(occ.start, occ.end)
         fragment.appendChild(mark)
@@ -147,6 +152,7 @@ export function Markdown(props: MarkdownProps) {
       }
 
       textNode.parentNode?.replaceChild(fragment, textNode)
+      globalIndexOffset += original.length
     }
 
     // Distinguish the current match.
@@ -154,30 +160,17 @@ export function Markdown(props: MarkdownProps) {
     if (idx >= 0) {
       const currentMatch = allMatches[idx]
       if (scopeMessageId && scopePartIndex !== null && currentMatch) {
-        const partMatches = allMatches
-          .filter((m) => m.messageId === scopeMessageId && m.partIndex === scopePartIndex)
-          .slice()
-          .sort((a, b) => a.startIndex - b.startIndex)
-
-        const localIndex = partMatches.findIndex(
-          (m) =>
-            m.startIndex === currentMatch.startIndex &&
-            m.endIndex === currentMatch.endIndex &&
-            m.messageId === currentMatch.messageId &&
-            m.partIndex === currentMatch.partIndex,
-        )
-
-        if (localIndex >= 0) {
-          const selector =
-            `mark.search-match[data-search-match="true"]` +
-            `[data-search-message-id="${CSS.escape(scopeMessageId)}"]` +
-            `[data-search-part-index="${scopePartIndex}"]` +
-            `[data-search-occurrence="${localIndex}"]`
-          const mark = containerRef.querySelector(selector)
-          if (mark) {
-            mark.classList.add("search-match--current")
-            return
-          }
+        // Direct comparison using start/end indices instead of occurrence index
+        const selector =
+          `mark.search-match[data-search-match="true"]` +
+          `[data-search-message-id="${CSS.escape(scopeMessageId)}"]` +
+          `[data-search-part-index="${scopePartIndex}"]` +
+          `[data-search-start="${currentMatch.startIndex}"]` +
+          `[data-search-end="${currentMatch.endIndex}"]`
+        const mark = containerRef.querySelector(selector)
+        if (mark) {
+          mark.classList.add("search-match--current")
+          return
         }
       }
 
