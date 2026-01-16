@@ -136,7 +136,16 @@
 
 /* Question */
 .askquestion-wizard-question {
+  /* Flexbox for smart space allocation */
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto; /* Grow up to max-height, but don't shrink unless necessary */
   margin-bottom: var(--space-md);
+
+  /* Scrollable behavior */
+  max-height: 60vh; /* Desktop max-height */
+  overflow-y: auto; /* Vertical scroll when content exceeds */
+  min-height: fit-content; /* Allow natural height for short text */
 }
 
 .askquestion-wizard-question-text {
