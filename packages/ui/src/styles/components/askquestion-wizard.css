@@ -156,6 +156,12 @@
   /* Multi-line support: preserves newlines, spaces, and handles long words */
   white-space: pre-wrap;
   word-wrap: break-word;
+
+  /* Readability improvements */
+  max-width: 600px; /* Optimal reading width */
+  margin-left: auto;
+  margin-right: auto;
+  line-height: 1.6; /* Better vertical rhythm for multi-line */
 }
 
 .askquestion-wizard-question-hint {
