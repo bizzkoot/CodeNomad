@@ -1,5 +1,6 @@
 import { createMemo, For, onMount, onCleanup, Show, type Component } from "solid-js"
 import { createStore, produce } from "solid-js/store"
+import { createEffect } from "solid-js"
 import type { WizardQuestion, QuestionAnswer, QuestionOption } from "../types/question"
 
 // Custom option marker
@@ -35,6 +36,8 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
 
     let containerRef: HTMLDivElement | undefined
     let inputRef: HTMLInputElement | undefined
+    let optionsContainerRef: HTMLDivElement | undefined
+    let optionRefs: HTMLButtonElement[] = []
 
     // Current question based on active tab
     const currentQuestion = createMemo(() => {
@@ -133,27 +136,42 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
     function navigateOption(direction: "up" | "down") {
         const current = currentState().selectedOption
         const max = optionsWithCustom().length - 1
+        const newOptionIdx = direction === "up"
+            ? (current > 0 ? current - 1 : max)
+            : (current < max ? current + 1 : 0)
+
         setStore(
             produce((s) => {
-                if (direction === "up") {
-                    s.questionStates[s.activeTab].selectedOption = current > 0 ? current - 1 : max
-                } else {
-                    s.questionStates[s.activeTab].selectedOption = current < max ? current + 1 : 0
-                }
+                s.questionStates[s.activeTab].selectedOption = newOptionIdx
             }),
         )
+
+        // Scroll the newly selected option into view
+        setTimeout(() => {
+            const selectedElement = optionsContainerRef?.querySelector('[data-option-selected="true"]')
+            if (selectedElement) {
+                selectedElement.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest'
+                })
+            }
+        }, 0)
     }
 
     function navigateQuestion(direction: "left" | "right") {
         if (direction === "right") {
             if (store.activeTab < props.questions.length - 1) {
                 setStore("activeTab", store.activeTab + 1)
+                // Reset option refs when switching questions
+                optionRefs = []
             } else if (allAnswered()) {
                 handleSubmit()
             }
         } else {
             if (store.activeTab > 0) {
                 setStore("activeTab", store.activeTab - 1)
+                // Reset option refs when switching questions
+                optionRefs = []
             }
         }
     }
@@ -328,6 +346,25 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
         // Focus container to capture keyboard events
         containerRef?.focus()
         document.addEventListener("keydown", handleKeyDown, true)
+        // Reset option refs when switching questions
+        optionRefs = []
+    })
+
+    // Scroll selected option into view when active tab changes
+    createEffect(() => {
+        const activeTab = store.activeTab
+        const selectedOption = store.questionStates[activeTab].selectedOption
+
+        // Scroll to selected option with a slight delay to ensure DOM is updated
+        setTimeout(() => {
+            const selectedElement = optionsContainerRef?.querySelector('[data-option-selected="true"]')
+            if (selectedElement) {
+                selectedElement.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest'
+                })
+            }
+        }, 0)
     })
 
     onCleanup(() => {
@@ -419,7 +456,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
             </div>
 
             {/* Options */}
-            <div class="askquestion-wizard-options">
+            <div ref={optionsContainerRef} class="askquestion-wizard-options">
                 <For each={optionsWithCustom()}>
                     {(option, index) => {
                         const optionLabel = option.label  // Use label as value
@@ -438,11 +475,13 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                         return (
                             <button
                                 type="button"
+                                ref={(el) => { optionRefs[index()] = el }}
                                 class="askquestion-wizard-option"
                                 classList={{
                                     "askquestion-wizard-option-selected": isSelected(),
                                     "askquestion-wizard-option-chosen": isChosen(),
                                 }}
+                                data-option-selected={isSelected()}
                                 onClick={() => {
                                     // Update selectedOption for visual feedback
                                     setStore(

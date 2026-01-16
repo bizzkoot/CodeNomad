@@ -11,6 +11,12 @@
   max-width: 600px;
   width: 100%;
   outline: none;
+  
+  /* CRITICAL: Constrain wizard height to enable child scrolling */
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Prevent outer scroll */
 }
 
 /* Header */
@@ -139,13 +145,12 @@
   /* Flexbox for smart space allocation */
   display: flex;
   flex-direction: column;
-  flex: 0 1 auto; /* Grow up to max-height, but don't shrink unless necessary */
+  flex: 0 1 40%; /* Take max 40% of available space, can shrink */
   margin-bottom: var(--space-md);
 
   /* Scrollable behavior */
-  max-height: 60vh; /* Desktop max-height */
   overflow-y: auto; /* Vertical scroll when content exceeds */
-  min-height: fit-content; /* Allow natural height for short text */
+  min-height: 60px; /* Minimum height for short questions */
 }
 
 .askquestion-wizard-question-text {
@@ -175,9 +180,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  max-height: 60vh;
+  flex: 1 1 auto; /* Take remaining space, grow and shrink */
   overflow-y: auto;
   margin-bottom: var(--space-md);
+  min-height: 200px; /* Ensure options always visible */
 }
 
 .askquestion-wizard-option {
@@ -337,18 +343,18 @@
 /* Mobile adjustments */
 @media (max-width: 640px) {
   .askquestion-wizard {
-    max-height: 80vh;
-    overflow: auto;
+    max-height: 85vh;
+    /* overflow: hidden is already set above */
   }
 
-  /* Dynamic question max-height on mobile */
+  /* Adjust flex proportions for mobile */
   .askquestion-wizard-question {
-    max-height: min(60vh, calc(100vh - 250px)); /* Leave room for header, tabs, options, actions */
+    flex: 0 1 35%; /* Slightly less space for question on mobile */
+    min-height: 50px;
   }
 
   .askquestion-wizard-options {
-    /* Ensure options remain scrollable with reduced space */
-    max-height: min(40vh, calc(100vh - 400px));
+    min-height: 150px; /* Reduced but still visible on mobile */
   }
 
   .askquestion-wizard-instructions {
