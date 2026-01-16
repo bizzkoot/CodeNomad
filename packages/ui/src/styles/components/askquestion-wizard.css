@@ -144,6 +144,9 @@
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   margin: 0 0 var(--space-xs) 0;
+  /* Multi-line support: preserves newlines, spaces, and handles long words */
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .askquestion-wizard-question-hint {
