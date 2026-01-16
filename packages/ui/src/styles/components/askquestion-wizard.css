@@ -340,7 +340,17 @@
     max-height: 80vh;
     overflow: auto;
   }
-  
+
+  /* Dynamic question max-height on mobile */
+  .askquestion-wizard-question {
+    max-height: min(60vh, calc(100vh - 250px)); /* Leave room for header, tabs, options, actions */
+  }
+
+  .askquestion-wizard-options {
+    /* Ensure options remain scrollable with reduced space */
+    max-height: min(40vh, calc(100vh - 400px));
+  }
+
   .askquestion-wizard-instructions {
     display: none;
   }
