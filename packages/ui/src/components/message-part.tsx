@@ -5,12 +5,15 @@ import { Markdown } from "./markdown"
 import { useTheme } from "../lib/theme"
 import { useConfig } from "../stores/preferences"
 import { partHasRenderableText, SDKPart, TextPart, ClientPart } from "../types/message"
+import SearchHighlightedText from "./search-highlighted-text"
 
 type ToolCallPart = Extract<ClientPart, { type: "tool" }>
 
 interface MessagePartProps {
   part: ClientPart
   messageType?: "user" | "assistant"
+  messageId: string
+  partIndex: number
   instanceId: string
   sessionId: string
   onRendered?: () => void
@@ -98,12 +101,22 @@ interface MessagePartProps {
           <div class={textContainerClass()}>
             <Show
                when={isAssistantMessage()}
-               fallback={<span>{plainTextContent()}</span>}
+               fallback={
+                 <span>
+                   <SearchHighlightedText 
+                     text={plainTextContent()} 
+                     messageId={props.messageId}
+                     partIndex={props.partIndex}
+                   />
+                 </span>
+               }
              >
               <Markdown
                 part={createTextPartForMarkdown()}
                 instanceId={props.instanceId}
                 sessionId={props.sessionId}
+                messageId={props.messageId}
+                partIndex={props.partIndex}
                 isDark={isDark()}
                 size={isAssistantMessage() ? "tight" : "base"}
                 onRendered={props.onRendered}

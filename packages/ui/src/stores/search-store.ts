@@ -1,0 +1,411 @@
+/**
+ * Search Store - manages search state and functionality for chat sessions
+ * 
+ * This store handles:
+ * - Search queries and options
+ * - Search execution across messages
+ * - Match tracking and navigation
+ * - Search panel visibility
+ * - Session/instance scoping
+ * 
+ * @module search-store
+ */
+
+import { batch, createSignal } from "solid-js"
+import { findMatches } from "../lib/search-algorithm"
+import type { SearchMatch, SearchOptions, SearchState } from "../types/search"
+import type { InstanceMessageStore } from "./message-v2/instance-store"
+import type { ClientPart } from "../types/message"
+
+const MAX_MATCHES = 100
+
+function extractTextForSearch(part: ClientPart, currentOptions: SearchOptions): string {
+  if (part.type === "text") {
+    return typeof (part as any).text === "string" ? (part as any).text : ""
+  }
+
+  if (part.type === "tool") {
+    if (!currentOptions.includeToolOutputs) return ""
+    const toolState = (part as any).state
+    const output = toolState?.output
+    if (typeof output === "string") return output
+    try {
+      if (output !== undefined) return JSON.stringify(output)
+    } catch {
+      // ignore stringify failures
+    }
+    const metadataOutput = toolState?.metadata?.output
+    if (typeof metadataOutput === "string") return metadataOutput
+    return ""
+  }
+
+  if (part.type === "reasoning") {
+    if (!currentOptions.includeReasoning) return ""
+    const value = (part as any).text
+    if (typeof value === "string") return value
+    if (Array.isArray(value)) {
+      return value
+        .map((entry) => {
+          if (typeof entry === "string") return entry
+          if (entry && typeof entry === "object") {
+            const candidate = entry as { text?: unknown; value?: unknown }
+            if (typeof candidate.text === "string") return candidate.text
+            if (typeof candidate.value === "string") return candidate.value
+          }
+          return ""
+        })
+        .filter(Boolean)
+        .join("\n")
+    }
+    return ""
+  }
+
+  return ""
+}
+
+// Create search state signals
+const [query, setQuery] = createSignal<string>("")
+const [isOpen, setIsOpen] = createSignal<boolean>(false)
+const [matches, setMatches] = createSignal<SearchMatch[]>([])
+const [currentIndex, setCurrentIndex] = createSignal<number>(-1)
+const [options, setOptionsState] = createSignal<SearchOptions>({
+  caseSensitive: false,
+  wholeWord: false,
+  includeToolOutputs: false,
+  includeReasoning: false,
+})
+const [instanceId, setInstanceId] = createSignal<string | null>(null)
+const [sessionId, setSessionId] = createSignal<string | null>(null)
+
+/**
+ * Open search panel
+ * @param scopeInstanceId - Instance ID to search within (null for all)
+ * @param scopeSessionId - Session ID to search within (null for all)
+ */
+export function openSearch(scopeInstanceId?: string, scopeSessionId?: string) {
+  setInstanceId(scopeInstanceId ?? null)
+  setSessionId(scopeSessionId ?? null)
+  setIsOpen(true)
+}
+
+/**
+ * Close search panel and clear results
+ */
+export function closeSearch() {
+  batch(() => {
+    setIsOpen(false)
+    setQuery("")
+    setMatches([])
+    setCurrentIndex(-1)
+  })
+}
+
+/**
+ * Execute search with current query and options
+ * This searches through all messages in the given message store
+ * 
+ * @param store - The message instance store to search through
+ */
+export function executeSearch(store: InstanceMessageStore) {
+  const currentQuery = query()
+  const currentInstanceId = instanceId()
+  const currentSessionId = sessionId()
+  const currentOptions = options()
+
+  // Early return: empty query
+  if (!currentQuery || currentQuery.length < 1) {
+    setMatches([])
+    setCurrentIndex(-1)
+    return
+  }
+
+  // If message store not provided, we can't search
+  // (This is expected when component first mounts)
+  if (!store) {
+    return
+  }
+
+  try {
+    const allMatches: SearchMatch[] = []
+
+    // Access from store's state directly
+    const state = store.state
+
+    const sessionRecord = currentSessionId ? state.sessions[currentSessionId] : null
+
+    if (!sessionRecord) {
+      setMatches([])
+      setCurrentIndex(-1)
+      return
+    }
+
+    // Get all message IDs in session
+    const messageIds = sessionRecord.messageIds || []
+
+    // Search through each message
+    searchLoop: for (const messageId of messageIds) {
+      const record = state.messages[messageId]
+      if (!record) {
+        continue
+      }
+
+      const parts = record.parts || {}
+      const partIds = record.partIds || []
+
+      // Search through each part using partIds order
+      for (let partIndex = 0; partIndex < partIds.length; partIndex++) {
+        const partId = partIds[partIndex]
+        const normalizedPart = parts[partId]
+        
+        if (!normalizedPart || !normalizedPart.data) {
+          continue
+        }
+
+        const part = normalizedPart.data
+
+        const text = extractTextForSearch(part, currentOptions)
+        if (!text) {
+          continue
+        }
+
+        // Find matches in this part
+        try {
+          const partMatches = findMatches(
+            text,
+            messageId,
+            partIndex,
+            currentQuery,
+            currentOptions
+          )
+          for (const match of partMatches) {
+            allMatches.push(match)
+            if (allMatches.length >= MAX_MATCHES) {
+              break searchLoop
+            }
+          }
+        } catch (error) {
+          // If findMatches throws (e.g., invalid characters), we don't want to crash
+          // The search algorithm will show an appropriate error
+          console.error("Search error:", error)
+          setMatches([])
+          setCurrentIndex(-1)
+          return
+        }
+      }
+    }
+
+    // Update matches and set first as current
+    batch(() => {
+      setMatches(allMatches)
+      setCurrentIndex(allMatches.length > 0 ? 0 : -1)
+    })
+  } catch (error) {
+    console.error("Search execution error:", error)
+    setMatches([])
+    setCurrentIndex(-1)
+  }
+}
+
+/**
+ * Navigate to the next match
+ * Wraps around to the first match if at the end
+ */
+export function navigateNext() {
+  const totalMatches = matches().length
+  if (totalMatches === 0) return
+
+  const nextIndex = (currentIndex() + 1) % totalMatches
+  setCurrentIndex(nextIndex)
+  
+  // Scroll to match after a short delay for reactivity
+  requestAnimationFrame(() => {
+    scrollToCurrentMatch()
+  })
+}
+
+/**
+ * Navigate to the previous match
+ * Wraps around to the last match if at the beginning
+ */
+export function navigatePrevious() {
+  const totalMatches = matches().length
+  if (totalMatches === 0) return
+
+  const prevIndex = currentIndex() <= 0 ? totalMatches - 1 : currentIndex() - 1
+  setCurrentIndex(prevIndex)  
+  // Scroll to match after a short delay for reactivity
+  requestAnimationFrame(() => {
+    scrollToCurrentMatch()
+  })
+}
+
+/**
+ * Update search options and re-execute search
+ * @param newOptions - Partial options to update
+ * @param store - Message store for re-execution
+ */
+export function updateOptions(newOptions: Partial<SearchOptions>, store?: InstanceMessageStore) {
+  setOptionsState((prev) => ({ ...prev, ...newOptions }))
+  // Re-execute search with new options if store is provided
+  if (store) {
+    executeSearch(store)
+  }
+}
+
+/**
+ * Set the search query
+ * @param newQuery - New query string
+ */
+export function setQueryInput(newQuery: string) {
+  setQuery(newQuery)
+}
+
+/**
+ * Execute search on Enter key (with store ref)
+ * @param store - Message store to search through
+ */
+export function executeSearchOnEnter(store: InstanceMessageStore) {
+  const currentQuery = query()
+  
+  if (currentQuery && currentQuery.length > 0) {
+    executeSearch(store)
+  } else {
+    clearResults()
+  }
+}
+
+/**
+ * Clear search results
+ */
+export function clearResults() {
+  batch(() => {
+    setMatches([])
+    setCurrentIndex(-1)
+  })
+}
+
+/**
+ * Scroll to current match element in viewport
+ * This is called automatically after navigation
+ */
+function scrollToCurrentMatch() {
+  const currentMatch = getCurrentMatch()
+  if (!currentMatch) return
+
+  // Prefer scrolling to the specific mark corresponding to the current match.
+  // This is reliable for plain-text highlighting where we render marks with identity attributes.
+  const markSelector =
+    'mark[data-search-match="true"]' +
+    `[data-search-message-id="${CSS.escape(currentMatch.messageId)}"]` +
+    `[data-search-part-index="${currentMatch.partIndex}"]` +
+    `[data-search-start="${currentMatch.startIndex}"]` +
+    `[data-search-end="${currentMatch.endIndex}"]`
+
+  const targetMark = document.querySelector(markSelector)
+  if (targetMark) {
+    targetMark.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" })
+    return
+  }
+
+  // Secondary: markdown highlights can't be mapped to start/end indices reliably,
+  // so we tag them with an occurrence index per (messageId, partIndex).
+  const partMatches = matches()
+    .filter((m) => m.messageId === currentMatch.messageId && m.partIndex === currentMatch.partIndex)
+    .slice()
+    .sort((a, b) => a.startIndex - b.startIndex)
+
+  const occurrenceIndex = partMatches.findIndex(
+    (m) =>
+      m.startIndex === currentMatch.startIndex &&
+      m.endIndex === currentMatch.endIndex &&
+      m.messageId === currentMatch.messageId &&
+      m.partIndex === currentMatch.partIndex,
+  )
+
+  if (occurrenceIndex >= 0) {
+    const occSelector =
+      'mark[data-search-match="true"]' +
+      `[data-search-message-id="${CSS.escape(currentMatch.messageId)}"]` +
+      `[data-search-part-index="${currentMatch.partIndex}"]` +
+      `[data-search-occurrence="${occurrenceIndex}"]`
+
+    const occMark = document.querySelector(occSelector)
+    if (occMark) {
+      occMark.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" })
+      return
+    }
+  }
+
+  // Fallback: scroll to message anchor if mark not found
+  const messageId = currentMatch.messageId
+  const elementId = `message-anchor-${messageId}`
+  
+  const element = document.getElementById(elementId)
+  if (element) {
+    element.scrollIntoView({ block: "start", inline: "nearest", behavior: "smooth" })
+  }
+}
+
+/**
+ * Get the current search state
+ * @returns Complete search state
+ */
+export function getSearchState(): SearchState {
+  return {
+    query: query(),
+    isOpen: isOpen(),
+    matches: matches(),
+    currentIndex: currentIndex(),
+    options: options(),
+    instanceId: instanceId(),
+    sessionId: sessionId(),
+  }
+}
+
+/**
+ * Get the currently selected match
+ * @returns Current match or null
+ */
+export function getCurrentMatch(): SearchMatch | null {
+  const currentMatches = matches()
+  const idx = currentIndex()
+  return idx >= 0 && idx < currentMatches.length ? { ...currentMatches[idx] } : null
+}
+
+/**
+ * Get matches for a specific message
+ * @param messageId - Message ID to filter matches
+ * @returns Array of matches for the message
+ */
+export function getMatchesByMessageId(messageId: string): SearchMatch[] {
+  return matches().filter((m) => m.messageId === messageId)
+}
+
+/**
+ * Get the total number of matches
+ * @returns Number of matches
+ */
+export function getMatchCount(): number {
+  return matches().length
+}
+
+/**
+ * Check if there are any matches
+ * @returns True if matches exist
+ */
+export function hasMatches(): boolean {
+  return matches().length > 0
+}
+
+// Export signals for reactive access
+export {
+  query,
+  isOpen,
+  matches,
+  currentIndex,
+  options,
+  instanceId,
+  sessionId,
+  setInstanceId,
+  setSessionId,
+}

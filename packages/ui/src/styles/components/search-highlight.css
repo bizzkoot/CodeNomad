@@ -1,0 +1,63 @@
+/* Search Highlight Styles */
+
+/* Default search match highlight */
+.search-match {
+  display: inline;
+  background-color: rgba(255, 215, 0, 0.4);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* Current/active match highlight */
+.search-match--current {
+  background-color: rgba(255, 165, 0, 0.6);
+  outline: 1px solid rgba(255, 140, 0, 0.8);
+  outline-offset: 1px;
+  box-shadow: 0 0 4px rgba(255, 165, 0, 0.3);
+}
+
+/* Search match within markdown content */
+.markdown-content .search-match {
+  /* Ensure highlights don't interfere with markdown styling */
+  display: inline;
+}
+
+.markdown-content .search-match--current {
+  /* Add extra visibility for current match in markdown */
+  animation: search-highlight-pulse 2s ease-in-out infinite;
+}
+
+/* Animation for current match */
+@keyframes search-highlight-pulse {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(255, 165, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 8px rgba(255, 165, 0, 0.6);
+  }
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .search-match {
+    background-color: rgba(255, 215, 0, 0.3);
+  }
+
+  .search-match--current {
+    background-color: rgba(255, 165, 0, 0.5);
+    outline-color: rgba(255, 140, 0, 0.9);
+  }
+}
+
+/* Light mode adjustments */
+@media (prefers-color-scheme: light) {
+  .search-match {
+    background-color: rgba(255, 215, 0, 0.5);
+  }
+
+  .search-match--current {
+    background-color: rgba(255, 165, 0, 0.6);
+    outline-color: rgba(255, 140, 0, 0.7);
+  }
+}

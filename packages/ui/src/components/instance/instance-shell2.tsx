@@ -46,6 +46,7 @@ import { messageStoreBus } from "../../stores/message-v2/bus"
 import { clearSessionRenderCache } from "../message-block"
 
 import { isOpen as isCommandPaletteOpen, hideCommandPalette, showCommandPalette } from "../../stores/command-palette"
+import { openSearch } from "../../stores/search-store"
 import SessionList from "../session-list"
 import KeyboardHint from "../keyboard-hint"
 import InstanceWelcomeView from "../instance-welcome-view"
@@ -63,6 +64,7 @@ import Kbd from "../kbd"
 import { TodoListView } from "../tool-call/renderers/todo"
 import ContextUsagePanel from "../session/context-usage-panel"
 import SessionView from "../session/session-view"
+import SearchPanel from "../search-panel"
 import { formatTokenTotal } from "../../lib/formatters"
 import { sseManager } from "../../lib/sse-manager"
 import { getLogger } from "../../lib/logger"
@@ -439,6 +441,11 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
   const handleCommandPaletteClick = () => {
     showCommandPalette(props.instance.id)
+  }
+
+  const openCurrentSessionSearch = () => {
+    const currentSessionId = activeSessionIdForInstance()
+    openSearch(props.instance.id, currentSessionId || undefined)
   }
 
   const openBackgroundOutput = (process: BackgroundProcess) => {

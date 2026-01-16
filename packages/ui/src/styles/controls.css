@@ -9,3 +9,5 @@
 @import "./components/folder-tree-browser.css";
 @import "./components/permission-notification.css";
 @import "./components/askquestion-wizard.css";
+@import "./components/search-panel.css";
+@import "./components/search-highlight.css";

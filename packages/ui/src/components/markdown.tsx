@@ -4,6 +4,12 @@ import { useGlobalCache } from "../lib/hooks/use-global-cache"
 import type { TextPart, RenderCache } from "../types/message"
 import { getLogger } from "../lib/logger"
 import { copyToClipboard } from "../lib/clipboard"
+import {
+  matches as searchMatches,
+  currentIndex as searchCurrentIndex,
+  isOpen as searchIsOpen,
+  query as searchQuery,
+} from "../stores/search-store"
 
 const log = getLogger("session")
 
@@ -27,6 +33,8 @@ interface MarkdownProps {
   part: TextPart
   instanceId?: string
   sessionId?: string
+  messageId?: string
+  partIndex?: number
   isDark?: boolean
   size?: "base" | "sm" | "tight"
   disableHighlight?: boolean
@@ -37,6 +45,146 @@ export function Markdown(props: MarkdownProps) {
   const [html, setHtml] = createSignal("")
   let containerRef: HTMLDivElement | undefined
   let latestRequestedText = ""
+
+  function clearSearchMarks() {
+    if (!containerRef) return
+    const marks = containerRef.querySelectorAll("mark.search-match")
+    for (const mark of Array.from(marks)) {
+      const parent = mark.parentNode
+      if (!parent) continue
+      parent.replaceChild(document.createTextNode(mark.textContent ?? ""), mark)
+      parent.normalize()
+    }
+  }
+
+  function applySearchHighlights() {
+    if (!containerRef) return
+
+    if (!searchIsOpen()) {
+      clearSearchMarks()
+      return
+    }
+
+    const q = searchQuery()
+    if (!q) {
+      clearSearchMarks()
+      return
+    }
+
+    // If store has no matches, do nothing.
+    // (We still clear to remove stale highlights.)
+    const allMatches = searchMatches()
+    if (allMatches.length === 0) {
+      clearSearchMarks()
+      return
+    }
+
+    // Best-effort DOM highlight for markdown blocks: wrap occurrences in text nodes.
+    // We intentionally avoid code/pre/link nodes to prevent breaking markup.
+    clearSearchMarks()
+
+    const queryLower = q.toLowerCase()
+    const scopeMessageId = props.messageId
+    const scopePartIndex = typeof props.partIndex === "number" ? props.partIndex : null
+
+    const walker = document.createTreeWalker(containerRef, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const text = node.textContent
+        if (!text || !text.trim()) return NodeFilter.FILTER_REJECT
+        const parent = (node as Text).parentElement
+        if (!parent) return NodeFilter.FILTER_REJECT
+        if (parent.closest("code, pre, a")) return NodeFilter.FILTER_REJECT
+        if (parent.closest("mark.search-match")) return NodeFilter.FILTER_REJECT
+        return NodeFilter.FILTER_ACCEPT
+      },
+    })
+
+    const nodes: Text[] = []
+    let currentNode: Node | null
+    while ((currentNode = walker.nextNode())) {
+      nodes.push(currentNode as Text)
+    }
+
+    let occurrenceIndex = 0
+
+    for (const textNode of nodes) {
+      const original = textNode.textContent ?? ""
+      const haystack = original.toLowerCase()
+      let fromIndex = 0
+      const occurrences: Array<{ start: number; end: number }> = []
+
+      while (true) {
+        const at = haystack.indexOf(queryLower, fromIndex)
+        if (at === -1) break
+        occurrences.push({ start: at, end: at + q.length })
+        fromIndex = at + 1
+        if (occurrences.length > 200) break
+      }
+
+      if (occurrences.length === 0) continue
+
+      const fragment = document.createDocumentFragment()
+      let last = 0
+      for (const occ of occurrences) {
+        if (occ.start > last) {
+          fragment.appendChild(document.createTextNode(original.slice(last, occ.start)))
+        }
+        const mark = document.createElement("mark")
+        mark.className = "search-match"
+        mark.setAttribute("data-search-match", "true")
+        if (scopeMessageId && scopePartIndex !== null) {
+          mark.setAttribute("data-search-message-id", scopeMessageId)
+          mark.setAttribute("data-search-part-index", String(scopePartIndex))
+          mark.setAttribute("data-search-occurrence", String(occurrenceIndex))
+          occurrenceIndex += 1
+        }
+        mark.textContent = original.slice(occ.start, occ.end)
+        fragment.appendChild(mark)
+        last = occ.end
+      }
+      if (last < original.length) {
+        fragment.appendChild(document.createTextNode(original.slice(last)))
+      }
+
+      textNode.parentNode?.replaceChild(fragment, textNode)
+    }
+
+    // Distinguish the current match.
+    const idx = searchCurrentIndex()
+    if (idx >= 0) {
+      const currentMatch = allMatches[idx]
+      if (scopeMessageId && scopePartIndex !== null && currentMatch) {
+        const partMatches = allMatches
+          .filter((m) => m.messageId === scopeMessageId && m.partIndex === scopePartIndex)
+          .slice()
+          .sort((a, b) => a.startIndex - b.startIndex)
+
+        const localIndex = partMatches.findIndex(
+          (m) =>
+            m.startIndex === currentMatch.startIndex &&
+            m.endIndex === currentMatch.endIndex &&
+            m.messageId === currentMatch.messageId &&
+            m.partIndex === currentMatch.partIndex,
+        )
+
+        if (localIndex >= 0) {
+          const selector =
+            `mark.search-match[data-search-match="true"]` +
+            `[data-search-message-id="${CSS.escape(scopeMessageId)}"]` +
+            `[data-search-part-index="${scopePartIndex}"]` +
+            `[data-search-occurrence="${localIndex}"]`
+          const mark = containerRef.querySelector(selector)
+          if (mark) {
+            mark.classList.add("search-match--current")
+            return
+          }
+        }
+      }
+
+      const first = containerRef.querySelector("mark.search-match")
+      if (first) first.classList.add("search-match--current")
+    }
+  }
 
   const notifyRendered = () => {
     Promise.resolve().then(() => props.onRendered?.())
@@ -194,6 +342,16 @@ export function Markdown(props: MarkdownProps) {
   })
 
   const proseClass = () => "markdown-body"
+
+  createEffect(() => {
+    // Re-apply DOM highlights when search state changes.
+    // This runs after render; use rAF to wait for DOM.
+    searchIsOpen()
+    searchQuery()
+    searchMatches()
+    searchCurrentIndex()
+    requestAnimationFrame(() => applySearchHighlights())
+  })
 
   return <div ref={containerRef} class={proseClass()} innerHTML={html()} />
 }
