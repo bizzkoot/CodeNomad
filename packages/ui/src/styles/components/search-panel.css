@@ -1,0 +1,211 @@
+/* Search Panel Styles */
+
+/* Panel container - floating overlay */
+.search-panel-container {
+  @apply fixed z-50;
+  border-radius: var(--border-radius-base);
+  background-color: var(--surface-base);
+  border: 1px solid var(--border-base);
+  box-shadow: var(--scroll-elevation-shadow);
+  max-width: 90vw;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
+}
+
+/* Main panel */
+.search-panel {
+  @apply flex items-center gap-2 px-3 py-2;
+}
+
+/* Input group: icon, input, clear button */
+.search-panel-input-group {
+  @apply flex items-center gap-2 flex-1;
+}
+
+/* Search icon */
+.search-panel-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Search input field */
+.search-panel-input {
+  @apply flex-1 bg-transparent outline-none min-w-0;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.search-panel-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Clear button (X icon when query has text) */
+.search-panel-clear-button {
+  @apply p-1 rounded;
+  color: var(--text-muted);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.search-panel-clear-button:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.search-panel-clear-button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Navigation group: prev button, counter, next button */
+.search-panel-nav-group {
+  @apply flex items-center gap-1;
+}
+
+/* Navigation buttons */
+.search-panel-nav-button {
+  @apply p-1.5 rounded;
+  color: var(--text-muted);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.search-panel-nav-button:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.search-panel-nav-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.search-panel-nav-button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Match counter display */
+.search-panel-counter {
+  @apply px-2 text-xs font-medium select-none;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Actions group: options button, close button */
+.search-panel-actions-group {
+  @apply flex items-center gap-1;
+}
+
+/* Options button (gear icon) */
+.search-panel-options-button {
+  @apply p-1.5 rounded;
+  color: var(--text-muted);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.search-panel-options-button:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.search-panel-options-button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Close button */
+.search-panel-close-button {
+  @apply p-1.5 rounded;
+  color: var(--text-muted);
+  background-color: transparent;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.search-panel-close-button:hover {
+  background-color: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.search-panel-close-button:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Options dropdown panel */
+.search-options-panel {
+  @apply px-3 py-2 border-t;
+  border-color: var(--border-base);
+  background-color: var(--surface-base);
+}
+
+/* Option item label */
+.search-option-item {
+  @apply flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer;
+  transition: background-color 150ms ease;
+}
+
+.search-option-item:hover {
+  background-color: var(--surface-hover);
+}
+
+/* Option checkbox */
+.search-option-checkbox {
+  @apply w-4 h-4 rounded;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.search-option-checkbox:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Option label text */
+.search-option-label {
+  @apply text-sm cursor-pointer select-none;
+  color: var(--text-primary);
+}
+
+/* Error message */
+.search-panel-error {
+  @apply px-3 py-2 border-t mt-0 text-xs;
+  border-color: var(--border-base);
+  background-color: var(--surface-error-bg);
+  color: var(--surface-error-fg);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .search-panel {
+    @apply px-2 py-1.5 gap-1.5;
+  }
+
+  .search-panel-input {
+    @apply text-sm;
+  }
+
+  .search-panel-counter {
+    @apply text-[10px] px-1;
+  }
+
+  .search-panel-nav-button,
+  .search-panel-options-button,
+  .search-panel-close-button {
+    @apply p-1;
+  }
+}

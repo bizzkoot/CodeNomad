@@ -31,6 +31,7 @@ import type { Instance } from "../../types/instance"
 import type { Command } from "../../lib/commands"
 import type { BackgroundProcess } from "../../../../server/src/api-types"
 import type { Session } from "../../types/session"
+import { SECTION_EXPANSION_EVENT, type SectionExpansionRequest } from "../../lib/section-expansion"
 import {
   activeParentSessionId,
   activeSessionId as activeSessionMap,
@@ -46,6 +47,7 @@ import { messageStoreBus } from "../../stores/message-v2/bus"
 import { clearSessionRenderCache } from "../message-block"
 
 import { isOpen as isCommandPaletteOpen, hideCommandPalette, showCommandPalette } from "../../stores/command-palette"
+import { openSearch } from "../../stores/search-store"
 import SessionList from "../session-list"
 import KeyboardHint from "../keyboard-hint"
 import InstanceWelcomeView from "../instance-welcome-view"
@@ -63,6 +65,7 @@ import Kbd from "../kbd"
 import { TodoListView } from "../tool-call/renderers/todo"
 import ContextUsagePanel from "../session/context-usage-panel"
 import SessionView from "../session/session-view"
+import SearchPanel from "../search-panel"
 import { formatTokenTotal } from "../../lib/formatters"
 import { sseManager } from "../../lib/sse-manager"
 import { getLogger } from "../../lib/logger"
@@ -439,6 +442,11 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
   const handleCommandPaletteClick = () => {
     showCommandPalette(props.instance.id)
+  }
+
+  const openCurrentSessionSearch = () => {
+    const currentSessionId = activeSessionIdForInstance()
+    openSearch(props.instance.id, currentSessionId || undefined)
   }
 
   const openBackgroundOutput = (process: BackgroundProcess) => {
@@ -1136,6 +1144,27 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     const handleAccordionChange = (values: string[]) => {
       setRightPanelExpandedItems(values)
     }
+
+    // Listen for sidebar accordion expansion requests from search system
+    createEffect(() => {
+      if (typeof window === "undefined") return
+
+      const handler = (event: Event) => {
+        const detail = (event as CustomEvent<SectionExpansionRequest>).detail
+        if (
+          detail.action === "expand-sidebar-accordion" &&
+          detail.instanceId === props.instance.id
+        ) {
+          const sectionId = detail.sectionId
+          if (sectionId && !rightPanelExpandedItems().includes(sectionId)) {
+            setRightPanelExpandedItems((prev) => [...prev, sectionId])
+          }
+        }
+      }
+
+      window.addEventListener(SECTION_EXPANSION_EVENT, handler)
+      onCleanup(() => window.removeEventListener(SECTION_EXPANSION_EVENT, handler))
+    })
 
     const isSectionExpanded = (id: string) => rightPanelExpandedItems().includes(id)
 
