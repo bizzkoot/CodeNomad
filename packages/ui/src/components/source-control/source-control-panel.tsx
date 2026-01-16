@@ -1,4 +1,4 @@
-import { Component, Show, For, createSignal, createEffect, onMount } from "solid-js"
+import { Component, Show, For, createSignal, createEffect, onMount, onCleanup } from "solid-js"
 import { ChevronDown, RefreshCw, GitBranch, Plus, Minus, Undo2, Check, UploadCloud } from "lucide-solid"
 import type { GitFileChange } from "../../../../server/src/api-types"
 import {
@@ -13,6 +13,7 @@ import {
     pushChanges,
 } from "../../stores/git"
 import { serverApi } from "../../lib/api-client"
+import { serverEvents } from "../../lib/server-events"
 
 interface SourceControlPanelProps {
     workspaceId: string
@@ -29,6 +30,28 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
 
     onMount(() => {
         refreshGit(props.workspaceId)
+
+        // 1. Listen for internal tool events (Safe: uses observer pattern, supports multiple listeners)
+        const cleanupServerEvents = serverEvents.on("instance.event", (payload) => {
+            // TS Error Fix: Narrow the type to the specific union member that has 'event'
+            // We know it's "instance.event" because we filtered for it in .on()
+            const instanceEvent = payload as Extract<typeof payload, { type: "instance.event" }>
+            const innerEvent = instanceEvent.event as any
+            const partType = innerEvent?.properties?.part?.type
+
+            if (partType === "tool" || partType === "patch") {
+                refreshGit(props.workspaceId)
+            }
+        })
+
+        // 2. Listen for external window focus (e.g. returning from VS Code/Terminal)
+        const handleFocus = () => refreshGit(props.workspaceId)
+        window.addEventListener("focus", handleFocus)
+
+        onCleanup(() => {
+            cleanupServerEvents()
+            window.removeEventListener("focus", handleFocus)
+        })
     })
 
     createEffect(() => {
