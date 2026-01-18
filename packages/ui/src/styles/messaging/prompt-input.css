@@ -96,7 +96,7 @@
 
 .prompt-expand-button,
 .prompt-history-button {
-  @apply w-7 h-7 flex items-center justify-center rounded-md;
+  @apply w-9 h-9 flex items-center justify-center rounded-md;
   color: var(--text-muted);
   background-color: rgba(15, 23, 42, 0.04);
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -125,7 +125,7 @@
 .prompt-history-top {
   position: absolute;
   top: 0.3rem;
-  right: 0.5rem;
+  right: 0.35rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -134,8 +134,8 @@
 
 .prompt-history-bottom {
   position: absolute;
-  bottom: 0.3rem;
-  right: 0.5rem;
+  bottom: 0.6rem;
+  right: 0.35rem;
   display: flex;
   align-items: center;
   justify-content: center;
