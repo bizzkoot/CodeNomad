@@ -106,7 +106,7 @@ export class CliProcessManager extends EventEmitter {
     if (options.mcpPort) {
       const mcpConfig = {
         mcp: {
-          "codenomad-ask-user": {
+          "codenomad": {
             type: "remote",
             url: `http://127.0.0.1:${options.mcpPort}`,
             enabled: true

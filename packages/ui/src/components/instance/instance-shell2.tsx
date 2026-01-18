@@ -280,23 +280,42 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
   const handleQuestionCancel = async () => {
     const question = getPendingQuestion(props.instance.id)
-    if (!question || !props.instance.client) {
+    if (!question) {
       setQuestionWizardOpen(false)
       return
     }
 
-    try {
-      await requestData(
-        props.instance.client.question.reject({
-          requestID: question.id
-        }),
-        "question.reject"
-      )
+    // Route by source: MCP or OpenCode
+    if (question.source === 'mcp') {
+      // MCP questions: send via IPC bridge
+      try {
+        sendMcpCancel(question.id)
+        removeQuestionFromQueue(props.instance.id, question.id)
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to cancel MCP question", error)
+      }
 
-      setQuestionWizardOpen(false)
-    } catch (error) {
-      console.error("Failed to reject question", error)
-      setQuestionWizardOpen(false)
+    } else {
+      // OpenCode questions: use existing API
+      if (!props.instance.client) {
+        setQuestionWizardOpen(false)
+        return
+      }
+
+      try {
+        await requestData(
+          props.instance.client.question.reject({
+            requestID: question.id
+          }),
+          "question.reject"
+        )
+
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to reject question", error)
+        setQuestionWizardOpen(false)
+      }
     }
   }
 

@@ -90,9 +90,8 @@ export function initMcpBridge(instanceId: string): void {
                         description: opt
                     })) : [],
                     multiple: q.type === 'multi-select'
-                })),
-                source: source || 'mcp'
-            });
+                }))
+            }, source || 'mcp');
         });
 
         console.log('[MCP Bridge UI] Initialized successfully');

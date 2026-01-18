@@ -38,20 +38,20 @@
   display: flex;
   flex-direction: column;
   position: relative;
- }
+}
 
 
- .message-stream-shell .message-stream {
+.message-stream-shell .message-stream {
   flex: 1 1 auto;
   min-height: 0;
- }
- 
- .message-timeline-sidebar {
+}
+
+.message-timeline-sidebar {
   width: 64px;
   min-height: 0;
   display: flex;
   flex-direction: column;
- }
+}
 
 
 @media (max-width: 720px) {
@@ -144,6 +144,24 @@
 .message-timeline-tool {
   border-color: var(--message-tool-border);
   background-color: var(--surface-secondary);
+}
+
+.message-timeline-question {
+  border-color: var(--message-question-border);
+  background-color: rgba(255, 193, 7, 0.2);
+  font-size: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .message-timeline-question {
+    background-color: #FFE082;
+    color: #3e2723;
+  }
+}
+
+[data-theme="dark"] .message-timeline-question {
+  background-color: #FFE082;
+  color: #3e2723;
 }
 
 .message-timeline-segment.message-timeline-segment-permission {
