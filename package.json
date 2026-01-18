@@ -5,6 +5,7 @@
   "description": "CodeNomad monorepo workspace",
   "workspaces": {
     "packages": [
+      "packages/mcp-server",
       "packages/server",
       "packages/ui",
       "packages/electron-app",

@@ -78,8 +78,9 @@ import {
   type SessionSidebarRequestAction,
   type SessionSidebarRequestDetail,
 } from "../../lib/session-sidebar-events"
-import { getPendingQuestion } from "../../stores/questions"
+import { getPendingQuestion, removeQuestionFromQueue } from "../../stores/questions"
 import type { QuestionAnswer } from "../../types/question"
+import { sendMcpAnswer, sendMcpCancel } from "../../lib/mcp-bridge"
 import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
@@ -240,27 +241,42 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       return
     }
 
-    try {
-      // Map answers to SDK format: array of string arrays
-      const sdkAnswers = answers.map(answer => {
-        const custom = answer.customText?.trim()
-        if (custom) return [custom]
-        return answer.values
-      })
+    // Route by source: MCP or OpenCode
+    if (question.source === 'mcp') {
+      // MCP questions: send via IPC bridge
+      try {
+        sendMcpAnswer(question.id, answers)
+        removeQuestionFromQueue(props.instance.id, question.id)
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to submit MCP question answer", error)
+      }
 
-      await requestData(
-        props.instance.client.question.reply({
-          requestID: question.id,
-          answers: sdkAnswers
-        }),
-        "question.reply"
-      )
+    } else {
+      // OpenCode questions: use existing API
+      try {
+        // Map answers to SDK format: array of string arrays
+        const sdkAnswers = answers.map(answer => {
+          const custom = answer.customText?.trim()
+          if (custom) return [custom]
+          return answer.values
+        })
 
-      setQuestionWizardOpen(false)
-    } catch (error) {
-      console.error("Failed to submit question answers", error)
+        await requestData(
+          props.instance.client.question.reply({
+            requestID: question.id,
+            answers: sdkAnswers
+          }),
+          "question.reply"
+        )
+
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to submit question answers", error)
+      }
     }
   }
+
 
   const handleQuestionCancel = async () => {
     const question = getPendingQuestion(props.instance.id)

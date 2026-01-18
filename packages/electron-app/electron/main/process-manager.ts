@@ -28,6 +28,7 @@ export interface CliLogEntry {
 
 interface StartOptions {
   dev: boolean
+  mcpPort?: number
 }
 
 interface CliEntryResolution {
@@ -100,6 +101,21 @@ export class CliProcessManager extends EventEmitter {
 
     const env = supportsUserShell() ? getUserShellEnv() : { ...process.env }
     env.ELECTRON_RUN_AS_NODE = "1"
+
+    // Inject MCP configuration if port is provided
+    if (options.mcpPort) {
+      const mcpConfig = {
+        mcp: {
+          "codenomad-ask-user": {
+            type: "remote",
+            url: `http://127.0.0.1:${options.mcpPort}`,
+            enabled: true
+          }
+        }
+      }
+      env.OPENCODE_CONFIG_CONTENT = JSON.stringify(mcpConfig)
+      console.info(`[cli] injected MCP config for port ${options.mcpPort}`)
+    }
 
     const spawnDetails = supportsUserShell()
       ? buildUserShellCommand(`ELECTRON_RUN_AS_NODE=1 exec ${this.buildCommand(cliEntry, args)}`)
@@ -307,11 +323,11 @@ export class CliProcessManager extends EventEmitter {
       const devEntry = this.resolveDevEntry()
       return { entry: devEntry, runner: "tsx", runnerPath: tsxPath }
     }
- 
+
     const distEntry = this.resolveProdEntry()
     return { entry: distEntry, runner: "node" }
   }
- 
+
   private resolveTsx(): string | null {
     const candidates: Array<string | (() => string)> = [
       () => nodeRequire.resolve("tsx/cli"),
@@ -326,7 +342,7 @@ export class CliProcessManager extends EventEmitter {
       path.resolve(app.getAppPath(), "..", "node_modules", "tsx", "dist", "cli.mjs"),
       path.resolve(app.getAppPath(), "..", "node_modules", "tsx", "dist", "cli.cjs"),
     ]
- 
+
     for (const candidate of candidates) {
       try {
         const resolved = typeof candidate === "function" ? candidate() : candidate
@@ -337,10 +353,10 @@ export class CliProcessManager extends EventEmitter {
         continue
       }
     }
- 
+
     return null
   }
- 
+
   private resolveDevEntry(): string {
     const entry = path.resolve(process.cwd(), "..", "server", "src", "index.ts")
     if (!existsSync(entry)) {
@@ -348,7 +364,7 @@ export class CliProcessManager extends EventEmitter {
     }
     return entry
   }
- 
+
   private resolveProdEntry(): string {
     try {
       const entry = nodeRequire.resolve("@neuralnomads/codenomad/dist/bin.js")
