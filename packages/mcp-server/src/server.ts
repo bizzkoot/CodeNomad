@@ -177,10 +177,12 @@ export class CodeNomadMcpServer {
             },
             async (args: any) => {
                 try {
-                    console.log(`[MCP] Tool invoked: ask_user`);
-                    // Validate input with Zod
-                    const validatedInput = CnAskUserInputSchema.parse(args);
-                    const result = await askUser(validatedInput, this.bridge, this.pendingManager);
+                    console.log(`[MCP] Tool invoked: ask_user`, JSON.stringify(args, null, 2));
+
+                    // SDK already validated against inputSchema, use args directly
+                    const input = args as CnAskUserInput;
+
+                    const result = await askUser(input, this.bridge, this.pendingManager);
                     return {
                         content: [{
                             type: "text" as const,

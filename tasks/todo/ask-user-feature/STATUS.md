@@ -33,37 +33,55 @@ OpenCode successfully discovers and attempts to call the tool:
 
 ## ❌ Current Issue
 
-### Zod Schema Validation Error
+### Zod Schema Validation Error in MCP SDK
 **Error**: `v3Schema.safeParseAsync is not a function`
 
-**What we tried:**
-1. Downgraded Zod from v4.1.13 to v3.23.0 in `packages/mcp-server`
-2. Rebuilt the MCP server package
-3. Restarted CodeNomad
+**Root Cause Analysis:**
+The error occurs **inside the MCP SDK's internal validation**, not in our server code. The SDK attempts to call `safeParseAsync()` on Zod schemas, but this method doesn't exist in Zod 3.25.76.
 
-**Still persists**, suggesting:
-- Possible dependency conflict in the monorepo
-- MCP SDK might be using a bundled/different Zod version
-- Multiple Zod versions in the dependency tree
+**Evidence:**
+1. All Zod versions are consistent (3.25.76) - no version conflict
+2. Removed manual Zod validation from our tool handler - error persists
+3. MCP server successfully receives and routes requests
+4. Error occurs before our tool handler executes
+5. Logs show: `[MCP] Request: POST /` but never `[MCP] Tool invoked: ask_user`
 
-### Next Steps to Investigate
-1. Check for multiple Zod installations:
-   ```bash
-   npm ls zod
-   ```
+**Technical Details:**
+- MCP SDK version: `@modelcontextprotocol/sdk@1.25.2`
+- SDK peer dependencies: `{ zod: '^3.25 || ^4.0' }`
+- Our Zod version: `3.25.76` (within range)
+- Method `safeParseAsync` was added in Zod v3.22 but may have been renamed/removed
 
-2. Verify MCP SDK's Zod dependency:
-   ```bash
-   npm view @modelcontextprotocol/sdk dependencies
-   ```
+**What We Tried:**
+1. ✅ Downgraded from Zod v4 to v3.23.0
+2. ✅ Removed manual Zod `.parse()` calls from tool handler
+3. ✅ Verified no dependency conflicts (`npm ls zod`)
+4. ✅ Rebuilt the MCP server package multiple times
+5. ❌ Error persists in SDK's validation layer
 
-3. Consider removing `node_modules` and reinstalling:
-   ```bash
-   rm -rf node_modules package-lock.json
-   npm install
-   ```
+### Possible Solutions
 
-4. Alternative: Use plain JSON validation instead of Zod schemas in MCP tool registration
+**Option 1: Contact MCP SDK Maintainers**
+- Report the `safeParseAsync` compatibility issue
+- Ask if there's a different Zod version that works
+- Request documentation on which Zod methods the SDK expects
+
+**Option 2: Use OpenCode's Native `question` Tool**
+- CodeNomad already has the `question` tool working
+- UI integration is complete (question wizard exists)
+- Only downside: incurs extra premium LLM requests for the answer flow
+
+**Option 3: Wait for SDK Updates**
+- The MCP SDK is actively developed
+- Future versions may fix Zod compatibility
+- Monitor `@modelcontextprotocol/sdk` releases
+
+**Option 4: Bypass MCP Entirely** (Complex)
+- Modify OpenCode source code directly to add the tool
+- Requires maintaining a fork of OpenCode
+- Not recommended due to maintenance burden
+
+**Recommendation:** Use Option 2 (native `question` tool) while monitoring Option 3 (SDK updates).
 
 ## Architecture Summary
 
