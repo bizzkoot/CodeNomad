@@ -12,6 +12,12 @@ const electronAPI = {
   getCliStatus: () => ipcRenderer.invoke("cli:getStatus"),
   restartCli: () => ipcRenderer.invoke("cli:restart"),
   openDialog: (options) => ipcRenderer.invoke("dialog:open", options),
+  // MCP bridge methods
+  mcpSend: (channel, data) => ipcRenderer.send(channel, data),
+  mcpOn: (channel, callback) => {
+    ipcRenderer.on(channel, (_, data) => callback(data))
+    return () => ipcRenderer.removeAllListeners(channel)
+  },
 }
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI)

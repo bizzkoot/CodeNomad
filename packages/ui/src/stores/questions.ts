@@ -41,16 +41,23 @@ export function addQuestionToQueue(instanceId: string, question: QuestionRequest
     setQuestionQueues((prev) => {
         const next = new Map(prev)
         const queue = next.get(instanceId) ?? []
-
+        
         // Don't add if already in queue
         if (queue.some((q) => q.id === question.id)) {
             return next
         }
-
+        
         const updatedQueue = [...queue, question]
         next.set(instanceId, updatedQueue)
         return next
     })
+}
+
+/**
+ * Add a question request to the queue with explicit source
+ */
+export function addQuestionToQueueWithSource(instanceId: string, question: QuestionRequest, source: 'opencode' | 'mcp'): void {
+    addQuestionToQueue(instanceId, { ...question, source })
 }
 
 /**

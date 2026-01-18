@@ -5,6 +5,9 @@ import { fileURLToPath } from "url"
 import { createApplicationMenu } from "./menu"
 import { setupCliIPC } from "./ipc"
 import { CliProcessManager } from "./process-manager"
+import { CodeNomadMcpServer } from "@codenomad/mcp-server"
+import { setupMcpBridge, connectMcpBridge } from "@codenomad/mcp-server/src/bridge/ipc"
+import { writeMcpConfig, unregisterFromMcpConfig } from "@codenomad/mcp-server/src/config/registration"
 
 const mainFilename = fileURLToPath(import.meta.url)
 const mainDirname = dirname(mainFilename)
@@ -17,6 +20,7 @@ let currentCliUrl: string | null = null
 let pendingCliUrl: string | null = null
 let showingLoadingScreen = false
 let preloadingView: BrowserView | null = null
+let mcpServer: CodeNomadMcpServer | null = null
 
 if (isMac) {
   app.commandLine.appendSwitch("disable-spell-checking")
@@ -309,11 +313,11 @@ function finalizeCliSwap(url: string) {
 }
 
 
-async function startCli() {
+async function startCli(mcpPort?: number) {
   try {
     const devMode = process.env.NODE_ENV === "development"
-    console.info("[cli] start requested (dev mode:", devMode, ")")
-    await cliManager.start({ dev: devMode })
+    console.info("[cli] start requested (dev mode:", devMode, ", mcpPort:", mcpPort, ")")
+    await cliManager.start({ dev: devMode, mcpPort })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error("[cli] start failed:", message)
@@ -342,9 +346,7 @@ if (isMac) {
   })
 }
 
-app.whenReady().then(() => {
-  startCli()
-
+app.whenReady().then(async () => {
   if (isMac) {
     session.defaultSession.setSpellCheckerEnabled(false)
     app.on("browser-window-created", (_, window) => {
@@ -361,21 +363,61 @@ app.whenReady().then(() => {
 
   createWindow()
 
+  // Start MCP server FIRST if we have a main window
+  let mcpPort: number | undefined
+  if (mainWindow) {
+    setupMcpBridge(mainWindow)
+    const server = new CodeNomadMcpServer()
+    mcpServer = server
+
+    try {
+      await mcpServer.start()
+      const port = mcpServer.getPort()
+      const token = mcpServer.getAuthToken()
+
+      if (port && token) {
+        mcpPort = port
+        writeMcpConfig(port, token)
+        console.log(`[MCP] Registered with Antigravity on port ${port}`)
+
+        // Connect MCP server bridge
+        if (mcpServer && mainWindow) {
+          connectMcpBridge(mcpServer, mainWindow)
+        }
+      }
+    } catch (error) {
+      console.error('[MCP] Failed to start server:', error)
+    }
+  }
+
+  // Then start CLI with MCP port
+  await startCli(mcpPort)
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
     }
   })
-})
 
-app.on("before-quit", async (event) => {
-  event.preventDefault()
-  await cliManager.stop().catch(() => {})
-  app.exit(0)
-})
+  app.on("before-quit", async (event) => {
+    event.preventDefault()
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit()
-  }
+    // Unregister MCP server from Antigravity config
+    if (mcpServer) {
+      const port = mcpServer.getPort()
+      if (port) {
+        unregisterFromMcpConfig()
+      }
+      await mcpServer.stop()
+    }
+
+    await cliManager.stop().catch(() => { })
+    app.exit(0)
+  })
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit()
+    }
+  })
 })

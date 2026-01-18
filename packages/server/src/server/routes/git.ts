@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify"
 import { exec } from "child_process"
 import { promisify } from "util"
 import path from "path"
+import { promises as fs } from "fs"
 import type { WorkspaceManager } from "../../workspaces/manager"
 import type {
     GitStatus,
@@ -448,6 +449,39 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
                 return { success: true }
             } catch (error) {
                 const message = error instanceof Error ? error.message : "Failed to discard changes"
+                return reply.status(500).send({ error: message })
+            }
+        },
+    )
+
+    // POST /api/workspaces/:id/git/delete
+    app.post<{ Params: { id: string }; Body: GitStageRequest }>(
+        "/api/workspaces/:id/git/delete",
+        async (request, reply) => {
+            const workspacePath = getWorkspacePath(request.params.id)
+            if (!workspacePath) {
+                return reply.status(404).send({ error: "Workspace not found" })
+            }
+
+            const { paths } = request.body
+            if (!paths || paths.length === 0) {
+                return reply.status(400).send({ error: "Paths are required" })
+            }
+
+            try {
+                for (const fileOrDir of paths) {
+                    const fullPath = path.join(workspacePath, fileOrDir)
+                    const stats = await fs.stat(fullPath)
+                    
+                    if (stats.isDirectory()) {
+                        await fs.rm(fullPath, { recursive: true, force: true })
+                    } else {
+                        await fs.unlink(fullPath)
+                    }
+                }
+                return { success: true }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to delete files"
                 return reply.status(500).send({ error: message })
             }
         },

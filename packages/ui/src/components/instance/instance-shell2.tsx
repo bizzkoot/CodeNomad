@@ -78,8 +78,9 @@ import {
   type SessionSidebarRequestAction,
   type SessionSidebarRequestDetail,
 } from "../../lib/session-sidebar-events"
-import { getPendingQuestion } from "../../stores/questions"
+import { getPendingQuestion, removeQuestionFromQueue } from "../../stores/questions"
 import type { QuestionAnswer } from "../../types/question"
+import { sendMcpAnswer, sendMcpCancel, initMcpBridge } from "../../lib/mcp-bridge"
 import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
@@ -240,47 +241,81 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       return
     }
 
-    try {
-      // Map answers to SDK format: array of string arrays
-      const sdkAnswers = answers.map(answer => {
-        const custom = answer.customText?.trim()
-        if (custom) return [custom]
-        return answer.values
-      })
+    // Route by source: MCP or OpenCode
+    if (question.source === 'mcp') {
+      // MCP questions: send via IPC bridge
+      try {
+        sendMcpAnswer(question.id, answers)
+        removeQuestionFromQueue(props.instance.id, question.id)
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to submit MCP question answer", error)
+      }
 
-      await requestData(
-        props.instance.client.question.reply({
-          requestID: question.id,
-          answers: sdkAnswers
-        }),
-        "question.reply"
-      )
+    } else {
+      // OpenCode questions: use existing API
+      try {
+        // Map answers to SDK format: array of string arrays
+        const sdkAnswers = answers.map(answer => {
+          const custom = answer.customText?.trim()
+          if (custom) return [custom]
+          return answer.values
+        })
 
-      setQuestionWizardOpen(false)
-    } catch (error) {
-      console.error("Failed to submit question answers", error)
+        await requestData(
+          props.instance.client.question.reply({
+            requestID: question.id,
+            answers: sdkAnswers
+          }),
+          "question.reply"
+        )
+
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to submit question answers", error)
+      }
     }
   }
 
+
   const handleQuestionCancel = async () => {
     const question = getPendingQuestion(props.instance.id)
-    if (!question || !props.instance.client) {
+    if (!question) {
       setQuestionWizardOpen(false)
       return
     }
 
-    try {
-      await requestData(
-        props.instance.client.question.reject({
-          requestID: question.id
-        }),
-        "question.reject"
-      )
+    // Route by source: MCP or OpenCode
+    if (question.source === 'mcp') {
+      // MCP questions: send via IPC bridge
+      try {
+        sendMcpCancel(question.id)
+        removeQuestionFromQueue(props.instance.id, question.id)
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to cancel MCP question", error)
+      }
 
-      setQuestionWizardOpen(false)
-    } catch (error) {
-      console.error("Failed to reject question", error)
-      setQuestionWizardOpen(false)
+    } else {
+      // OpenCode questions: use existing API
+      if (!props.instance.client) {
+        setQuestionWizardOpen(false)
+        return
+      }
+
+      try {
+        await requestData(
+          props.instance.client.question.reject({
+            requestID: question.id
+          }),
+          "question.reject"
+        )
+
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to reject question", error)
+        setQuestionWizardOpen(false)
+      }
     }
   }
 
@@ -574,6 +609,23 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     }
     window.addEventListener("keydown", handleEscape, true)
     onCleanup(() => window.removeEventListener("keydown", handleEscape, true))
+  })
+
+  // Initialize MCP bridge for this instance
+  onMount(() => {
+    console.log('[Instance Shell] onMount fired - checking window...')
+    console.log('[Instance Shell] window type:', typeof window)
+    console.log('[Instance Shell] window exists:', typeof window !== 'undefined')
+    if (typeof window === "undefined") {
+      console.log('[Instance Shell] window is undefined, skipping MCP bridge init')
+      return
+    }
+    console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
+    try {
+      initMcpBridge(props.instance.id)
+    } catch (error) {
+      console.error("[Instance Shell] Failed to initialize MCP bridge:", error)
+    }
   })
 
   const handleSessionSelect = (sessionId: string) => {

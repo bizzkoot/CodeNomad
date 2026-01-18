@@ -17,6 +17,7 @@ const TOOL_ICON = "🔧"
 const USER_BORDER_COLOR = "var(--message-user-border)"
 const ASSISTANT_BORDER_COLOR = "var(--message-assistant-border)"
 const TOOL_BORDER_COLOR = "var(--message-tool-border)"
+const QUESTION_BORDER_COLOR = "var(--message-question-border)"
 
 type ToolCallPart = Extract<ClientPart, { type: "tool" }>
 
@@ -336,7 +337,11 @@ export default function MessageBlock(props: MessageBlockProps) {
         }
         items.push(toolItem)
         blockToolKeys.push(key)
-        lastAccentColor = TOOL_BORDER_COLOR
+
+        // Use purple border for question tools, regular tool border for others
+        const toolName = (part as ToolCallPart).tool
+        const isQuestionTool = toolName === 'ask_user' || toolName === 'question' || toolName === 'codenomad_ask_user'
+        lastAccentColor = isQuestionTool ? QUESTION_BORDER_COLOR : TOOL_BORDER_COLOR
         return
       }
 

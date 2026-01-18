@@ -1,15 +1,15 @@
 # AGENT NOTES
 
 ## Communication Requirement
-**CRITICAL: ALWAYS USE QUESTION TOOL**
+**CRITICAL: ALWAYS USE ASK_USER TOOL**
 
-**MUST use `question` or `ask_user` tool (whichever is available in the current session) for:**
+**MUST use `ask_user` tool for:**
 
 - ANY reply to the user
 - ANY response to the user
 - ANY summary for the user
 
-**Session ending: ONLY end the session when the user EXPLICITLY requests it through the "question" or "ask_user" tool.**
+**Session ending: ONLY end the session when the user EXPLICITLY requests it through the "ask_user" tool.**
 
 **NO EXCEPTIONS. This rule is MANDATORY and NON-NEGOTIABLE.**
 
