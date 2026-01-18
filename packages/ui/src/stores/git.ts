@@ -188,14 +188,14 @@ export async function refreshGit(workspaceId: string): Promise<void> {
     await Promise.all([fetchGitStatus(workspaceId), fetchGitBranches(workspaceId)])
 }
 
-export async function pushChanges(workspaceId: string): Promise<boolean> {
+export async function pushChanges(workspaceId: string, publish?: boolean): Promise<boolean> {
     const store = getOrCreateStore(workspaceId)
     store.loading = true
     store.error = null
     notifyUpdate()
 
     try {
-        await serverApi.pushChanges(workspaceId)
+        await serverApi.pushChanges(workspaceId, publish)
         await fetchGitBranches(workspaceId)
         return true
     } catch (error) {

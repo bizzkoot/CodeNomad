@@ -174,6 +174,13 @@ async function getGitStatus(cwd: string): Promise<GitStatus> {
         }
     } catch {
         // No upstream tracking
+        // Fallback: count commits not pushed to any remote
+        try {
+            const count = await runGitCommand(cwd, "rev-list --count HEAD --not --remotes")
+            ahead = parseInt(count, 10) || 0
+        } catch {
+            // Ignore error
+        }
     }
 
     // Get file status
@@ -485,7 +492,7 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
     )
 
     // POST /api/workspaces/:id/git/push
-    app.post<{ Params: { id: string } }>("/api/workspaces/:id/git/push", async (request, reply) => {
+    app.post<{ Params: { id: string }; Body: { publish?: boolean } }>("/api/workspaces/:id/git/push", async (request, reply) => {
         const workspacePath = getWorkspacePath(request.params.id)
         if (!workspacePath) {
             return reply.status(404).send({ error: "Workspace not found" })
@@ -495,8 +502,19 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
             return reply.status(400).send({ error: "Not a git repository" })
         }
 
+        const { publish } = request.body || {}
+
         try {
-            await runGitCommand(workspacePath, "push")
+            if (publish) {
+                // Get current branch
+                const currentBranch = await runGitCommand(workspacePath, "branch --show-current")
+                if (!currentBranch) {
+                    throw new Error("Could not determine current branch")
+                }
+                await runGitCommand(workspacePath, `push -u origin ${currentBranch}`)
+            } else {
+                await runGitCommand(workspacePath, "push")
+            }
             const response: GitPushResponse = {
                 success: true,
                 pushed: true,

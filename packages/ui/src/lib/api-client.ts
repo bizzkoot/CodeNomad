@@ -323,9 +323,10 @@ export const serverApi = {
       body: JSON.stringify({ message }),
     })
   },
-  pushChanges(workspaceId: string): Promise<GitPushResponse> {
+  pushChanges(workspaceId: string, publish?: boolean): Promise<GitPushResponse> {
     return request<GitPushResponse>(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/push`, {
       method: "POST",
+      body: JSON.stringify({ publish }),
     })
   },
   connectEvents(onEvent: (event: WorkspaceEventPayload) => void, onError?: () => void) {

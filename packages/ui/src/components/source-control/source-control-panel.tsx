@@ -104,7 +104,10 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
     }
 
     const handlePush = async () => {
-        await pushChanges(props.workspaceId)
+        const currentBranch = git.branches().find((b) => b.current)
+        const hasUpstream = !!currentBranch?.upstream
+        // If no upstream, we are publishing
+        await pushChanges(props.workspaceId, !hasUpstream)
     }
 
     const handleViewDiff = async (file: GitFileChange) => {
@@ -346,7 +349,11 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                             class="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50"
                             disabled={git.loading() || (git.status()?.ahead ?? 0) <= 0}
                             onClick={handlePush}
-                            title="Push to remote"
+                            title={(() => {
+                                const currentBranch = git.branches().find((b) => b.current)
+                                const hasUpstream = !!currentBranch?.upstream
+                                return hasUpstream ? "Push to remote" : "Publish Branch"
+                            })()}
                         >
                             <UploadCloud class="h-4 w-4" />
                         </button>
