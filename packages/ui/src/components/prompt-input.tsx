@@ -643,6 +643,9 @@ export default function PromptInput(props: PromptInputProps) {
     const currentAttachments = attachments()
     if (props.disabled || (!text && currentAttachments.length === 0)) return
 
+    // Auto-collapse on send
+    setExpandState("normal")
+
     const isShellMode = mode() === "shell"
 
     // Slash command routing (match OpenCode TUI): only run if the command exists.
