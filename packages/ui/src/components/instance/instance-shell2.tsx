@@ -1016,7 +1016,6 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       <div class="session-sidebar flex flex-col flex-1 min-h-0">
         <SessionList
           instanceId={props.instance.id}
-          sessions={allInstanceSessions()}
           threads={sessionThreads()}
           activeSessionId={activeSessionIdForInstance()}
           onSelect={handleSessionSelect}
