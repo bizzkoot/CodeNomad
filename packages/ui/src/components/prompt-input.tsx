@@ -1195,7 +1195,7 @@ export default function PromptInput(props: PromptInputProps) {
                     disabled={!canHistoryGoPrevious()}
                     aria-label="Previous prompt"
                   >
-                    <ArrowBigUp class="h-6 w-6" aria-hidden="true" />
+                    <ArrowBigUp class="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>
                 <div class="prompt-history-bottom">
@@ -1206,7 +1206,7 @@ export default function PromptInput(props: PromptInputProps) {
                     disabled={!canHistoryGoNext()}
                     aria-label="Next prompt"
                   >
-                    <ArrowBigDown class="h-6 w-6" aria-hidden="true" />
+                    <ArrowBigDown class="h-5 w-5" aria-hidden="true" />
                   </button>
                 </div>
               </Show>
