@@ -27,7 +27,7 @@ export function initMcpBridge(instanceId: string): void {
         console.log('[MCP Bridge Renderer] Setting up IPC listeners');
 
         // Listen for questions from MCP server (via main process)
-        ipcRenderer.on('cn_ask_user.asked', (_event, payload: any) => {
+        ipcRenderer.on('ask_user.asked', (_event, payload: any) => {
             console.log('[MCP Bridge Renderer] Received question:', payload);
 
             // Map MCP question format to CodeNomad question format

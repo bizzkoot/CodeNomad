@@ -80,7 +80,7 @@ import {
 } from "../../lib/session-sidebar-events"
 import { getPendingQuestion, removeQuestionFromQueue } from "../../stores/questions"
 import type { QuestionAnswer } from "../../types/question"
-import { sendMcpAnswer, sendMcpCancel } from "../../lib/mcp-bridge"
+import { sendMcpAnswer, sendMcpCancel, initMcpBridge } from "../../lib/mcp-bridge"
 import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
@@ -590,6 +590,23 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     }
     window.addEventListener("keydown", handleEscape, true)
     onCleanup(() => window.removeEventListener("keydown", handleEscape, true))
+  })
+
+  // Initialize MCP bridge for this instance
+  onMount(() => {
+    console.log('[Instance Shell] onMount fired - checking window...')
+    console.log('[Instance Shell] window type:', typeof window)
+    console.log('[Instance Shell] window exists:', typeof window !== 'undefined')
+    if (typeof window === "undefined") {
+      console.log('[Instance Shell] window is undefined, skipping MCP bridge init')
+      return
+    }
+    console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
+    try {
+      initMcpBridge(props.instance.id)
+    } catch (error) {
+      console.error("[Instance Shell] Failed to initialize MCP bridge:", error)
+    }
   })
 
   const handleSessionSelect = (sessionId: string) => {

@@ -1,7 +1,7 @@
 {
   "name": "@codenomad/mcp-server",
   "version": "0.1.0",
-  "description": "CodeNomad MCP Server - native ask_user tool for saving premium requests",
+  "description": "CodeNomad MCP Server - native ask_user tool for saving premium requests (Raw JSON-RPC implementation)",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
     "zod": "^3.25.76"
   },
   "devDependencies": {

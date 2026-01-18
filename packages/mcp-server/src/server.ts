@@ -1,8 +1,6 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createServer as createHttpServer, type Server as HttpServer, type IncomingMessage, type ServerResponse } from 'http';
 import * as crypto from 'crypto';
-import { CnAskUserInputSchema, type CnAskUserInput, type CnAskUserOutput } from './tools/schemas.js';
+import type { CnAskUserInput, CnAskUserOutput } from './tools/schemas.js';
 import { askUser, type QuestionBridge } from './tools/askUser.js';
 import { PendingRequestManager } from './pending.js';
 
@@ -12,9 +10,7 @@ export interface ServerConfig {
 }
 
 export class CodeNomadMcpServer {
-    private mcpServer: McpServer | null = null;
     private httpServer: HttpServer | null = null;
-    private transport: StreamableHTTPServerTransport | null = null;
     private port: number | undefined;
     private authToken: string | undefined = undefined;
     private pendingManager: PendingRequestManager;
@@ -42,7 +38,7 @@ export class CodeNomadMcpServer {
      * Start the MCP server
      */
     async start(): Promise<void> {
-        console.log('[MCP] Starting CodeNomad MCP Server...');
+        console.log('[MCP] Starting CodeNomad MCP Server (Raw JSON-RPC mode)...');
 
         // Find available port
         this.port = await this.findAvailablePort();
@@ -51,24 +47,6 @@ export class CodeNomadMcpServer {
         // Generate auth token
         this.authToken = crypto.randomBytes(32).toString('hex');
         console.log(`[MCP] Generated auth token: ${this.authToken.substring(0, 8)}...`);
-
-        // Create MCP server
-        this.mcpServer = new McpServer({
-            name: "CodeNomad Ask User",
-            version: "1.0.0"
-        });
-
-        // Register tools
-        this.registerTools();
-
-        // Create transport
-        this.transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => `sess_${crypto.randomUUID()}`
-        });
-
-        // Connect server to transport
-        await this.mcpServer.connect(this.transport);
-        console.log('[MCP] MCP Server connected to transport');
 
         // Create HTTP server
         this.httpServer = createHttpServer(async (req, res) => {
@@ -101,13 +79,6 @@ export class CodeNomadMcpServer {
             this.httpServer = null;
         }
 
-        // Close transport
-        if (this.transport) {
-            await this.transport.close();
-            this.transport = null;
-        }
-
-        this.mcpServer = null;
         console.log('[MCP] Server stopped');
     }
 
@@ -129,96 +100,82 @@ export class CodeNomadMcpServer {
      * Check if server is running
      */
     isRunning(): boolean {
-        return this.mcpServer !== null;
+        return this.httpServer !== null;
     }
 
     /**
-     * Register all MCP tools
+     * Connect an external IPC bridge to handle questions
+     * This allows the main process to provide IPC communication
      */
-    private registerTools(): void {
-        this.mcpServer!.registerTool(
-            "ask_user",
-            {
-                description: "Ask the user questions through CodeNomad's interface. Use this tool when you need user input, clarification, or confirmation before proceeding. The tool blocks until the user responds.",
-                inputSchema: {
-                    type: "object",
-                    properties: {
-                        questions: {
-                            type: "array",
-                            description: "Array of questions to ask user",
-                            items: {
-                                type: "object",
-                                properties: {
-                                    question: { type: "string" },
-                                    type: { type: "string", enum: ["text", "select", "multi-select", "confirm"] },
-                                    options: { type: "array", items: { type: "string" } },
-                                    required: { type: "boolean" },
-                                    placeholder: { type: "string" }
-                                },
-                                required: ["question"]
-                            },
-                            minItems: 1,
-                            maxItems: 10
-                        },
-                        title: {
-                            type: "string",
-                            description: "Optional title for question dialog",
-                            maxLength: 100
-                        },
-                        timeout: {
-                            type: "number",
-                            description: "Timeout in milliseconds (default: 300000 = 5 minutes)",
-                            minimum: 10000,
-                            maximum: 1800000
-                        }
-                    },
-                    required: ["questions"]
-                } as any
-            },
-            async (args: any) => {
-                try {
-                    console.log(`[MCP] Tool invoked: ask_user`, JSON.stringify(args, null, 2));
-
-                    // SDK already validated against inputSchema, use args directly
-                    const input = args as CnAskUserInput;
-
-                    const result = await askUser(input, this.bridge, this.pendingManager);
-                    return {
-                        content: [{
-                            type: "text" as const,
-                            text: JSON.stringify(result)
-                        }]
-                    } as any;
-                } catch (error) {
-                    console.error(`[MCP] Tool error:`, error);
-                    return {
-                        content: [{
-                            type: "text" as const,
-                            text: JSON.stringify({
-                                answered: false,
-                                cancelled: false,
-                                timedOut: false,
-                                answers: [],
-                                error: error instanceof Error ? error.message : String(error)
-                            })
-                        }],
-                        isError: true
-                    } as any;
-                }
-            }
-        );
-
-        console.log('[MCP] Registered tool: ask_user');
+    connectBridge(bridge: QuestionBridge): void {
+        console.log('[MCP] Connecting external IPC bridge');
+        this.bridge = bridge;
     }
 
     /**
-     * Handle HTTP requests
+     * Get the pending request manager for external use
+     */
+    getPendingManager(): PendingRequestManager {
+        return this.pendingManager;
+    }
+
+    /**
+     * Get tool schema for ask_user
+     */
+    private getAskUserToolSchema() {
+        return {
+            name: "ask_user",
+            description: "Ask the user questions through CodeNomad's interface. Use this tool when you need user input, clarification, or confirmation before proceeding. The tool blocks until the user responds.",
+            inputSchema: {
+                type: "object",
+                properties: {
+                    questions: {
+                        type: "array",
+                        description: "Array of questions to ask user",
+                        items: {
+                            type: "object",
+                            properties: {
+                                question: { type: "string" },
+                                type: { type: "string", enum: ["text", "select", "multi-select", "confirm"] },
+                                options: { type: "array", items: { type: "string" } },
+                                required: { type: "boolean" },
+                                placeholder: { type: "string" }
+                            },
+                            required: ["question"]
+                        },
+                        minItems: 1,
+                        maxItems: 10
+                    },
+                    title: {
+                        type: "string",
+                        description: "Optional title for question dialog",
+                        maxLength: 100
+                    },
+                    timeout: {
+                        type: "number",
+                        description: "Timeout in milliseconds (default: 300000 = 5 minutes)",
+                        minimum: 10000,
+                        maximum: 1800000
+                    }
+                },
+                required: ["questions"]
+            }
+        };
+    }
+
+    /**
+     * Handle HTTP requests with raw JSON-RPC
      */
     private async handleHttpRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
         const url = req.url || '/';
         const method = req.method || 'GET';
 
         console.log(`[MCP] Request: ${method} ${url}`);
+        console.log(`[MCP] Headers:`, {
+            'content-type': req.headers['content-type'],
+            'content-length': req.headers['content-length'],
+            'transfer-encoding': req.headers['transfer-encoding']
+        });
 
         // Health check endpoint
         if (url === '/health') {
@@ -248,17 +205,231 @@ export class CodeNomadMcpServer {
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept');
 
-        // Route ALL other requests to MCP transport (including root path)
-        // OpenCode's StreamableHTTPClientTransport expects to connect at the root
-        try {
-            console.log(`[MCP] Forwarding to transport: ${method} ${url}`);
-            await this.transport?.handleRequest(req, res);
-        } catch (error) {
-            console.error(`[MCP] Transport error:`, error);
-            if (!res.headersSent) {
-                res.writeHead(500, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ error: 'Internal server error' }));
+        // Handle POST requests for JSON-RPC
+        if (method === 'POST') {
+            try {
+                const body = await this.readJsonBody(req);
+                console.log(`[MCP] Parsed body:`, body ? JSON.stringify(body).substring(0, 200) : 'null');
+
+                // Handle JSON-RPC requests
+                if (body && typeof body === 'object') {
+                    const jsonrpc = await this.handleJsonRpc(body);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify(jsonrpc));
+                    return;
+                } else {
+                    console.log(`[MCP] Body is not an object:`, typeof body);
+                }
+            } catch (error) {
+                console.error(`[MCP] Error handling request:`, error);
+                if (!res.headersSent) {
+                    res.writeHead(500, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: null,
+                        error: {
+                            code: -32603,
+                            message: 'Internal error',
+                            data: error instanceof Error ? error.message : String(error)
+                        }
+                    }));
+                }
+                return;
             }
+        }
+
+        // 404 for other requests
+        if (!res.headersSent) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Not found' }));
+        }
+    }
+
+    /**
+     * Read JSON body from request
+     */
+    private async readJsonBody(req: IncomingMessage): Promise<any> {
+        return new Promise((resolve, reject) => {
+            let data = '';
+            let dataReceived = false;
+
+            const timeout = setTimeout(() => {
+                console.error(`[MCP] readJsonBody timeout: received=${dataReceived}, data length=${data.length}`);
+                reject(new Error('Request body read timeout'));
+            }, 5000);
+
+            req.on('data', chunk => {
+                dataReceived = true;
+                data += chunk;
+            });
+
+            req.on('end', () => {
+                clearTimeout(timeout);
+                console.log(`[MCP] Request body read complete: ${data.length} bytes`);
+                try {
+                    const parsed = data ? JSON.parse(data) : null;
+                    console.log(`[MCP] JSON parsed successfully:`, parsed ? 'object present' : 'null');
+                    resolve(parsed);
+                } catch (error) {
+                    console.error(`[MCP] JSON parse error:`, error);
+                    reject(error);
+                }
+            });
+
+            req.on('error', error => {
+                clearTimeout(timeout);
+                console.error(`[MCP] Request stream error:`, error);
+                reject(error);
+            });
+        });
+    }
+
+    /**
+     * Handle JSON-RPC requests
+     */
+    private async handleJsonRpc(request: any): Promise<any> {
+        const { jsonrpc, id, method, params } = request;
+
+        // Validate JSON-RPC 2.0 basic structure
+        if (jsonrpc !== '2.0') {
+            return {
+                jsonrpc: '2.0',
+                id,
+                error: {
+                    code: -32600,
+                    message: 'Invalid Request'
+                }
+            };
+        }
+
+        try {
+            switch (method) {
+                case 'tools/list':
+                    return this.handleToolsList(id);
+
+                case 'tools/call':
+                    return this.handleToolsCall(id, params);
+
+                case 'initialize':
+                    return this.handleInitialize(id);
+
+                default:
+                    return {
+                        jsonrpc: '2.0',
+                        id,
+                        error: {
+                            code: -32601,
+                            message: 'Method not found',
+                            data: method
+                        }
+                    };
+            }
+        } catch (error) {
+            console.error(`[MCP] Error handling ${method}:`, error);
+            return {
+                jsonrpc: '2.0',
+                id,
+                error: {
+                    code: -32603,
+                    message: 'Internal error',
+                    data: error instanceof Error ? error.message : String(error)
+                }
+            };
+        }
+    }
+
+    /**
+     * Handle initialize method
+     */
+    private handleInitialize(id: string | number | undefined): any {
+        console.log('[MCP] Handling initialize');
+        return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+                protocolVersion: '2024-11-05',
+                capabilities: {
+                    tools: {}
+                },
+                serverInfo: {
+                    name: 'CodeNomad Ask User',
+                    version: '1.0.0'
+                }
+            }
+        };
+    }
+
+    /**
+     * Handle tools/list method
+     */
+    private handleToolsList(id: string | number | undefined): any {
+        console.log('[MCP] Handling tools/list');
+        return {
+            jsonrpc: '2.0',
+            id,
+            result: {
+                tools: [this.getAskUserToolSchema()]
+            }
+        };
+    }
+
+    /**
+     * Handle tools/call method
+     */
+    private async handleToolsCall(id: string | number | undefined, params: any): Promise<any> {
+        const { name, arguments: args } = params;
+
+        console.log(`[MCP] Handling tools/call: ${name}`);
+
+        if (name !== 'ask_user') {
+            return {
+                jsonrpc: '2.0',
+                id,
+                error: {
+                    code: -32602,
+                    message: 'Invalid params',
+                    data: `Unknown tool: ${name}`
+                }
+            };
+        }
+
+        try {
+            console.log(`[MCP] Tool invoked: ask_user`, JSON.stringify(args, null, 2));
+
+            // Validate input manually
+            const input = args as CnAskUserInput;
+
+            const result = await askUser(input, this.bridge, this.pendingManager);
+
+            return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                    content: [{
+                        type: 'text',
+                        text: JSON.stringify(result)
+                    }]
+                }
+            };
+        } catch (error) {
+            console.error(`[MCP] Tool error:`, error);
+            return {
+                jsonrpc: '2.0',
+                id,
+                result: {
+                    content: [{
+                        type: 'text',
+                        text: JSON.stringify({
+                            answered: false,
+                            cancelled: false,
+                            timedOut: false,
+                            answers: [],
+                            error: error instanceof Error ? error.message : String(error)
+                        })
+                    }],
+                    isError: true
+                }
+            };
         }
     }
 

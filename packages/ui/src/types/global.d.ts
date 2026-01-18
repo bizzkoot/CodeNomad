@@ -26,6 +26,9 @@ declare global {
     onCliError?: (callback: (data: unknown) => void) => () => void
     getCliStatus?: () => Promise<unknown>
     openDialog?: (options: ElectronDialogOptions) => Promise<ElectronDialogResult>
+    // MCP bridge methods
+    mcpSend?: (channel: string, data: unknown) => void
+    mcpOn?: (channel: string, callback: (data: unknown) => void) => () => void
   }
 
   interface TauriDialogModule {

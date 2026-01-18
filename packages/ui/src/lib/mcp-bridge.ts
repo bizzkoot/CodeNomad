@@ -1,11 +1,12 @@
 import type { QuestionAnswer } from '../types/question.js';
+import { addQuestionToQueueWithSource } from '../stores/questions.js';
 
 /**
  * Check if we're in Electron environment
  */
 function isElectronEnvironment(): boolean {
     try {
-        return typeof window !== 'undefined' && !!(window as any).require;
+        return typeof window !== 'undefined' && !!(window as any).electronAPI;
     } catch {
         return false;
     }
@@ -19,8 +20,7 @@ export function sendMcpAnswer(requestId: string, answers: QuestionAnswer[]): voi
 
     try {
         if (isElectronEnvironment()) {
-            const { ipcRenderer } = (window as any).require('electron');
-            ipcRenderer.send('mcp:answer', { requestId, answers });
+            (window as any).electronAPI.mcpSend('mcp:answer', { requestId, answers });
         } else {
             console.warn('[MCP Bridge UI] Not in Electron environment, cannot send answer');
         }
@@ -37,8 +37,7 @@ export function sendMcpCancel(requestId: string): void {
 
     try {
         if (isElectronEnvironment()) {
-            const { ipcRenderer } = (window as any).require('electron');
-            ipcRenderer.send('mcp:cancel', { requestId });
+            (window as any).electronAPI.mcpSend('mcp:cancel', { requestId });
         } else {
             console.warn('[MCP Bridge UI] Not in Electron environment, cannot send cancel');
         }
@@ -51,6 +50,15 @@ export function sendMcpCancel(requestId: string): void {
  * Initialize MCP bridge in renderer
  */
 export function initMcpBridge(instanceId: string): void {
+    // Send IPC message to main process for debugging (will show in terminal)
+    try {
+        if (isElectronEnvironment()) {
+            (window as any).electronAPI.mcpSend('mcp:debug', { message: '[MCP Bridge UI] initMcpBridge called', instanceId });
+        }
+    } catch (e) {
+        // Ignore if electron not available yet
+    }
+
     console.log(`[MCP Bridge UI] Initializing for instance: ${instanceId}`);
 
     if (!isElectronEnvironment()) {
@@ -59,20 +67,18 @@ export function initMcpBridge(instanceId: string): void {
     }
 
     try {
-        const { ipcRenderer } = (window as any).require('electron');
+        const electronAPI = (window as any).electronAPI;
 
         console.log('[MCP Bridge UI] Setting up IPC listeners');
 
         // Listen for questions from MCP server (via main process)
-        ipcRenderer.on('cn_ask_user.asked', (_event: any, payload: any) => {
+        electronAPI.mcpOn('ask_user.asked', (payload: any) => {
             console.log('[MCP Bridge UI] Received question:', payload);
 
             // Map MCP question format to CodeNomad question format
             const { requestId, questions, title, source } = payload;
 
             // Add to question queue with MCP source
-            // Import addQuestionToQueue from stores/questions
-            const { addQuestionToQueueWithSource } = require('../stores/questions.js');
             addQuestionToQueueWithSource(instanceId, {
                 id: requestId,
                 questions: questions.map((q: any) => ({

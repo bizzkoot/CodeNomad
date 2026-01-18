@@ -405,26 +405,28 @@ Initialize bridge when app starts.
 
 ## Phase 4: UI Integration
 
-### TASK-4.1: Extend Question Store for MCP Source
+### TASK-4.1: Extend Question Store for Source ✅ (COMPLETED)
 
-**Priority:** P0  
-**Estimated:** 45 min  
-**Depends on:** TASK-3.3  
+**Priority:** P0
+**Estimated:** 45 min
+**Completed:** 2025-01-18
 
 **Description:**
 Add source tracking to differentiate MCP vs OpenCode questions.
 
-**File:** `packages/ui/src/stores/questions.ts`
+**Files Modified:**
+- `packages/ui/src/stores/questions.ts` - Added `addQuestionToQueueWithSource()` function
+- `packages/ui/src/types/question.ts` - Added `source: 'opencode' | 'mcp'` to `QuestionRequest`
 
 **Subtasks:**
-- [ ] Add `source: 'opencode' | 'mcp'` to QueuedQuestion
-- [ ] Update `addQuestionToQueue()` to accept source
-- [ ] Add helper to check question source
-- [ ] Update type definitions
+- [x] Add `source: 'opencode' | 'mcp'` to QueuedQuestion
+- [x] Update `addQuestionToQueue()` to accept source
+- [x] Add helper to check question source
+- [x] Update type definitions
 
 ---
 
-### TASK-4.2: Update Question Wizard Submit Handler
+### TASK-4.2: Update Question Wizard Submit Handler ⚠️ (IN PROGRESS - BLOCKING ISSUE)
 
 **Priority:** P0  
 **Estimated:** 1 hour  
@@ -441,6 +443,21 @@ Route answers to correct destination based on source.
 - [ ] If OpenCode: use existing SDK path
 - [ ] Update cancel handler similarly
 - [ ] Add logging for debugging
+
+**Current Status:**
+The question is successfully received by the renderer and the question wizard appears. However, when the user answers, the answer is sent to the web API endpoint `/question/{requestId}/reply` instead of being routed via IPC using `sendMcpAnswer()`. This causes the MCP server to timeout waiting for an IPC event that never comes.
+
+**Evidence from logs:**
+```
+mcp-bridge.ts:76 [MCP Bridge UI] Received question: {requestId: 'req_1768734436394_jf0mv7e6i', questions: Array(1), source: 'mcp'}
+[DEBUG] [proxy] Proxying request to instance workspaceId=mkjmsqrv method=POST targetUrl=http://127.0.0.1:57393/question/req_1768734436394_jf0mv7e6i/reply
+```
+
+**Root Cause:**
+The question wizard's answer handler doesn't check the question source. It always routes answers to the web API, regardless of whether the source is 'mcp' or 'opencode'.
+
+**Next Step:**
+Need to find the question wizard component and update the answer handler to check `question.source` and route accordingly.
 
 **Code Change:**
 ```typescript
