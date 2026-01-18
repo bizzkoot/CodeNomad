@@ -2,6 +2,7 @@
 
 ## Communication Requirement
 **CRITICAL: ALWAYS USE ASK_USER TOOL**
+**CRITICAL: REPLACE ALL TOOL `question` WITH `ask_user` TOOL**
 
 **MUST use `ask_user` tool for:**
 
