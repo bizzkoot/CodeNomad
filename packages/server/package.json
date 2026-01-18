@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "@fastify/cors": "^8.5.0",
-    "@fastify/reply-from": "^9.8.0",
+    "@fastify/reply-from": "^12.5.0",
     "@fastify/static": "^7.0.4",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "commander": "^12.1.0",
@@ -37,7 +37,7 @@
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
-    "ts-node": "^10.9.2",
+    "ts-node": "^1.7.1",
     "tsx": "^4.20.6",
     "typescript": "^5.6.3"
   }
