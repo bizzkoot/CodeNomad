@@ -122,6 +122,26 @@
   cursor: not-allowed;
 }
 
+.prompt-history-top {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.prompt-history-bottom {
+  position: absolute;
+  bottom: 0.3rem;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
 .prompt-expand-top {
   position: absolute;
   top: 0.3rem;
