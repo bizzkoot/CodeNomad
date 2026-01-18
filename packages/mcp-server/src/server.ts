@@ -150,12 +150,6 @@ export class CodeNomadMcpServer {
                         type: "string",
                         description: "Optional title for question dialog",
                         maxLength: 100
-                    },
-                    timeout: {
-                        type: "number",
-                        description: "Timeout in milliseconds (default: 300000 = 5 minutes)",
-                        minimum: 10000,
-                        maximum: 1800000
                     }
                 },
                 required: ["questions"]

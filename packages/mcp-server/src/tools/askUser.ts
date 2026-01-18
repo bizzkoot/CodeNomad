@@ -16,9 +16,8 @@ export async function askUser(
 ): Promise<CnAskUserOutput> {
 
     const requestId = generateRequestId();
-    const timeout = input.timeout || 300000;
 
-    console.log(`[MCP] ask_user called: ${requestId}, timeout: ${timeout}ms`);
+    console.log(`[MCP] ask_user called: ${requestId}`);
 
     // Generate IDs for questions if not provided
     const questionsWithIds: Array<QuestionInfo & { id: string }> = input.questions.map((q, index) => ({
@@ -48,14 +47,6 @@ export async function askUser(
 
         // Send question to bridge
         bridge.sendQuestion(requestId, questionsWithIds, input.title);
-
-        // Set timeout
-        setTimeout(() => {
-            if (pendingManager.get(requestId)) {
-                console.log(`[MCP] Request timeout: ${requestId}`);
-                pendingManager.reject(requestId, new Error('Question timeout'));
-            }
-        }, timeout);
     });
 }
 

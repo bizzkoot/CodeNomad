@@ -32,7 +32,6 @@ export const QuestionInfoSchema = z.object({
 export const CnAskUserInputSchema = z.object({
     questions: z.array(QuestionInfoSchema).min(1).max(10),
     title: z.string().max(100).optional(),
-    timeout: z.number().int().min(10000).max(1800000).optional().default(300000),
 });
 
 /**

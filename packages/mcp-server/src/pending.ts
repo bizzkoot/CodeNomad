@@ -30,20 +30,12 @@ export interface PendingRequestResult {
  */
 export class PendingRequestManager {
     private pending = new Map<string, PendingRequest>();
-    private readonly DEFAULT_TIMEOUT = 300000; // 5 minutes
 
     /**
      * Add a pending request
      */
     add(request: PendingRequest): void {
         this.pending.set(request.id, request);
-
-        // Set timeout if not explicitly provided
-        if (!request.timeout) {
-            request.timeout = setTimeout(() => {
-                this.reject(request.id, new Error('Question timeout'));
-            }, this.DEFAULT_TIMEOUT);
-        }
     }
 
     /**
