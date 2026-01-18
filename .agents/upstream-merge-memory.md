@@ -114,7 +114,14 @@ applyTo: '**'
 
 - Tests: ✅ PASSED
   - Typecheck: PASSED (UI + electron-app)
-  - Build: Not run yet (recommended before merging to dev)
+  - Build: PASSED (7.71s)
+  - Runtime: PASSED (dev server running successfully)
+
+## Post-Merge Fixes
+- **2025-01-19**: Fixed fastify compatibility issue
+  - Problem: @fastify/reply-from 12.5.0 required fastify 5.x
+  - Solution: Downgraded to @fastify/reply-from 9.8.0 (compatible with fastify 4.28.1)
+  - Commit: Fix committed to dev branch
 
 ## Merged Features
 ✅ **Authentication System** (commit 4063413)
