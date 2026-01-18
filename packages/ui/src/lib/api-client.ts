@@ -317,6 +317,12 @@ export const serverApi = {
       body: JSON.stringify({ paths }),
     })
   },
+  deleteFiles(workspaceId: string, paths: string[]): Promise<{ success: boolean }> {
+    return request<{ success: boolean }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/delete`, {
+      method: "POST",
+      body: JSON.stringify({ paths }),
+    })
+  },
   commitChanges(workspaceId: string, message: string): Promise<GitCommitResponse> {
     return request<GitCommitResponse>(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/commit`, {
       method: "POST",

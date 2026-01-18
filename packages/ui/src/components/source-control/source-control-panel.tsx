@@ -1,5 +1,5 @@
 import { Component, Show, For, createSignal, createEffect, onMount, onCleanup } from "solid-js"
-import { ChevronDown, RefreshCw, GitBranch, Plus, Minus, Undo2, Check, UploadCloud } from "lucide-solid"
+import { ChevronDown, RefreshCw, GitBranch, Plus, Minus, Undo2, Check, UploadCloud, X } from "lucide-solid"
 import type { GitFileChange } from "../../../../server/src/api-types"
 import {
     useGitStore,
@@ -7,6 +7,7 @@ import {
     stageFiles,
     unstageFiles,
     discardChanges,
+    deleteFiles,
     commitChanges,
     checkoutBranch,
     refreshGit,
@@ -77,6 +78,12 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
     const handleDiscard = async (path: string) => {
         if (confirm(`Discard changes to ${path}?`)) {
             await discardChanges(props.workspaceId, [path])
+        }
+    }
+
+    const handleDelete = async (path: string) => {
+        if (confirm(`Delete ${path}? This action cannot be undone.`)) {
+            await deleteFiles(props.workspaceId, [path])
         }
     }
 
@@ -205,11 +212,24 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         }
     }
 
+    const hasFolderContents = (folderPath: string): boolean => {
+        const untracked = git.untrackedChanges()
+        const folderPrefix = folderPath.endsWith("/") ? folderPath : `${folderPath}/`
+        
+        return untracked.some((file) => {
+            const filePath = file.path
+            // Check if file path starts with folder prefix (is inside the folder)
+            // But is not the folder entry itself
+            return filePath.startsWith(folderPrefix) && filePath !== folderPath
+        })
+    }
+
     const FileChangeItem: Component<{
         file: GitFileChange
         showStage?: boolean
         showUnstage?: boolean
         showDiscard?: boolean
+        showDelete?: boolean
     }> = (itemProps) => (
         <div class="group flex items-center gap-2 px-2 py-1 hover:bg-surface-tertiary rounded text-xs">
             <span
@@ -229,7 +249,9 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                     // Handle directories (trailing slash) - show dir name with indicator
                     if (path.endsWith("/")) {
                         const parts = path.slice(0, -1).split("/")
-                        return parts[parts.length - 1] + "/"
+                        const folderName = parts[parts.length - 1] + "/"
+                        const hasContents = hasFolderContents(path)
+                        return hasContents ? `${folderName}*` : folderName
                     }
                     // Normal file - show filename
                     return path.split("/").pop() || path
@@ -264,6 +286,16 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                         title="Discard changes (danger)"
                     >
                         <Undo2 class="h-3 w-3" />
+                    </button>
+                </Show>
+                <Show when={itemProps.showDelete}>
+                    <button
+                        type="button"
+                        class="p-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 rounded text-red-500"
+                        onClick={() => handleDelete(itemProps.file.path)}
+                        title="Delete (danger)"
+                    >
+                        <X class="h-3 w-3" />
                     </button>
                 </Show>
             </div>
@@ -477,7 +509,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                                 <Show when={git.untrackedChanges().length === 0}>
                                     <p class="text-xs text-secondary px-2 py-1">No untracked files</p>
                                 </Show>
-                                <For each={git.untrackedChanges()}>{(file) => <FileChangeItem file={file} showStage />}</For>
+                                <For each={git.untrackedChanges()}>{(file) => <FileChangeItem file={file} showStage showDelete />}</For>
                             </div>
                         </Show>
                     </div>

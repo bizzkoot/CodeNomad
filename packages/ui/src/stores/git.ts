@@ -165,6 +165,20 @@ export async function discardChanges(workspaceId: string, paths: string[]): Prom
     }
 }
 
+export async function deleteFiles(workspaceId: string, paths: string[]): Promise<boolean> {
+    const store = getOrCreateStore(workspaceId)
+
+    try {
+        await serverApi.deleteFiles(workspaceId, paths)
+        await fetchGitStatus(workspaceId)
+        return true
+    } catch (error) {
+        store.error = error instanceof Error ? error.message : "Failed to delete files"
+        notifyUpdate()
+        return false
+    }
+}
+
 export async function commitChanges(workspaceId: string, message: string): Promise<boolean> {
     const store = getOrCreateStore(workspaceId)
     store.loading = true
