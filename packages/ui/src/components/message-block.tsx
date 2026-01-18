@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { FoldVertical } from "lucide-solid"
 import MessageItem from "./message-item"
 import ToolCall from "./tool-call"
@@ -84,8 +84,20 @@ interface TaskSessionLocation {
   parentId: string | null
 }
 
-function findTaskSessionLocation(sessionId: string): TaskSessionLocation | null {
+function findTaskSessionLocation(sessionId: string, preferredInstanceId?: string): TaskSessionLocation | null {
   if (!sessionId) return null
+
+  if (preferredInstanceId) {
+    const session = sessions().get(preferredInstanceId)?.get(sessionId)
+    if (session) {
+      return {
+        sessionId: session.id,
+        instanceId: preferredInstanceId,
+        parentId: session.parentId ?? null,
+      }
+    }
+  }
+
   const allSessions = sessions()
   for (const [instanceId, sessionMap] of allSessions) {
     const session = sessionMap?.get(sessionId)
@@ -237,16 +249,11 @@ export default function MessageBlock(props: MessageBlockProps) {
     const index = props.messageIndex
     const lastAssistantIdx = props.lastAssistantIndex()
     const isQueued = current.role === "user" && (lastAssistantIdx === -1 || index > lastAssistantIdx)
-    const info = messageInfo()
-    const infoTime = (info?.time ?? {}) as { created?: number; updated?: number; completed?: number }
-    const infoTimestamp =
-      typeof infoTime.completed === "number"
-        ? infoTime.completed
-        : typeof infoTime.updated === "number"
-          ? infoTime.updated
-          : infoTime.created ?? 0
-    const infoError = (info as { error?: { name?: string } } | undefined)?.error
-    const infoErrorName = typeof infoError?.name === "string" ? infoError.name : ""
+
+    // Intentionally untracked: messageInfoVersion updates should not trigger
+    // a full message block rebuild; record revision is the invalidation key.
+    const info = untrack(messageInfo)
+
     const cacheSignature = [
       current.id,
       current.revision,
@@ -254,8 +261,6 @@ export default function MessageBlock(props: MessageBlockProps) {
       props.showThinking() ? 1 : 0,
       props.thinkingDefaultExpanded() ? 1 : 0,
       props.showUsageMetrics() ? 1 : 0,
-      infoTimestamp,
-      infoErrorName,
     ].join("|")
 
     const cachedBlock = sessionCache.messageBlocks.get(current.id)
@@ -453,7 +458,7 @@ export default function MessageBlock(props: MessageBlockProps) {
                     const hasToolState =
                       Boolean(toolState) && (isToolStateRunning(toolState) || isToolStateCompleted(toolState) || isToolStateError(toolState))
                     const taskSessionId = hasToolState ? extractTaskSessionId(toolState) : ""
-                    const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId) : null
+                    const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId, props.instanceId) : null
                     const handleGoToTaskSession = (event: MouseEvent) => {
                       event.preventDefault()
                       event.stopPropagation()

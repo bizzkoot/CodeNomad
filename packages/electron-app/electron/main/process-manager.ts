@@ -9,6 +9,7 @@ import { buildUserShellCommand, getUserShellEnv, supportsUserShell } from "./use
 
 const nodeRequire = createRequire(import.meta.url)
 
+const BOOTSTRAP_TOKEN_PREFIX = "CODENOMAD_BOOTSTRAP_TOKEN:"
 
 type CliState = "starting" | "ready" | "error" | "stopped"
 type ListeningMode = "local" | "all"
@@ -70,6 +71,7 @@ function readListeningModeFromConfig(): ListeningMode {
 export declare interface CliProcessManager {
   on(event: "status", listener: (status: CliStatus) => void): this
   on(event: "ready", listener: (status: CliStatus) => void): this
+  on(event: "bootstrapToken", listener: (token: string) => void): this
   on(event: "log", listener: (entry: CliLogEntry) => void): this
   on(event: "exit", listener: (status: CliStatus) => void): this
   on(event: "error", listener: (error: Error) => void): this
@@ -80,6 +82,7 @@ export class CliProcessManager extends EventEmitter {
   private status: CliStatus = { state: "stopped" }
   private stdoutBuffer = ""
   private stderrBuffer = ""
+  private bootstrapToken: string | null = null
 
   async start(options: StartOptions): Promise<CliStatus> {
     if (this.child) {
@@ -88,6 +91,7 @@ export class CliProcessManager extends EventEmitter {
 
     this.stdoutBuffer = ""
     this.stderrBuffer = ""
+    this.bootstrapToken = null
     this.updateStatus({ state: "starting", port: undefined, pid: undefined, url: undefined, error: undefined })
 
     const cliEntry = this.resolveCliEntry(options)
@@ -243,11 +247,22 @@ export class CliProcessManager extends EventEmitter {
     }
 
     for (const line of lines) {
-      if (!line.trim()) continue
-      console.info(`[cli][${stream}] ${line}`)
-      this.emit("log", { stream, message: line })
+      const trimmed = line.trim()
+      if (!trimmed) continue
 
-      const port = this.extractPort(line)
+      if (trimmed.startsWith(BOOTSTRAP_TOKEN_PREFIX)) {
+        const token = trimmed.slice(BOOTSTRAP_TOKEN_PREFIX.length).trim()
+        if (token && !this.bootstrapToken) {
+          this.bootstrapToken = token
+          this.emit("bootstrapToken", token)
+        }
+        continue
+      }
+
+      console.info(`[cli][${stream}] ${trimmed}`)
+      this.emit("log", { stream, message: trimmed })
+
+      const port = this.extractPort(trimmed)
       if (port && this.status.state === "starting") {
         const url = `http://127.0.0.1:${port}`
         console.info(`[cli] ready on ${url}`)
@@ -287,7 +302,7 @@ export class CliProcessManager extends EventEmitter {
   }
 
   private buildCliArgs(options: StartOptions, host: string): string[] {
-    const args = ["serve", "--host", host, "--port", "0"]
+    const args = ["serve", "--host", host, "--port", "0", "--generate-token"]
 
     if (options.dev) {
       args.push("--ui-dev-server", "http://localhost:3000", "--log-level", "debug")
