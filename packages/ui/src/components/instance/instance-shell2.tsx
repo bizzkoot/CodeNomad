@@ -80,7 +80,7 @@ import {
 } from "../../lib/session-sidebar-events"
 import { getPendingQuestion, removeQuestionFromQueue } from "../../stores/questions"
 import type { QuestionAnswer } from "../../types/question"
-import { sendMcpAnswer, sendMcpCancel, initMcpBridge } from "../../lib/mcp-bridge"
+import { sendMcpAnswer, sendMcpCancel, initMcpBridge, cleanupMcpBridge, clearProcessedQuestion } from "../../lib/mcp-bridge"
 import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
@@ -247,6 +247,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       try {
         sendMcpAnswer(question.id, answers)
         removeQuestionFromQueue(props.instance.id, question.id)
+        clearProcessedQuestion(question.id) // Clear from deduplication set
         setQuestionWizardOpen(false)
       } catch (error) {
         console.error("Failed to submit MCP question answer", error)
@@ -291,6 +292,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       try {
         sendMcpCancel(question.id)
         removeQuestionFromQueue(props.instance.id, question.id)
+        clearProcessedQuestion(question.id) // Clear from deduplication set
         setQuestionWizardOpen(false)
       } catch (error) {
         console.error("Failed to cancel MCP question", error)
@@ -626,6 +628,16 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     } catch (error) {
       console.error("[Instance Shell] Failed to initialize MCP bridge:", error)
     }
+    
+    // Cleanup MCP bridge when instance unmounts
+    onCleanup(() => {
+      console.log(`[Instance Shell] Cleaning up MCP bridge for instance: ${props.instance.id}`)
+      try {
+        cleanupMcpBridge(props.instance.id)
+      } catch (error) {
+        console.error("[Instance Shell] Failed to cleanup MCP bridge:", error)
+      }
+    })
   })
 
   const handleSessionSelect = (sessionId: string) => {

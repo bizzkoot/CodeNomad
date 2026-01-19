@@ -13,6 +13,16 @@ function isElectronEnvironment(): boolean {
 }
 
 /**
+ * Store cleanup functions per instance to prevent listener accumulation
+ */
+const cleanupFunctions = new Map<string, () => void>();
+
+/**
+ * Track processed questions to prevent duplicates from multiple handlers
+ */
+const processedQuestions = new Set<string>();
+
+/**
  * Send answer to main process (for MCP questions)
  */
 export function sendMcpAnswer(requestId: string, answers: QuestionAnswer[]): void {
@@ -50,6 +60,12 @@ export function sendMcpCancel(requestId: string): void {
  * Initialize MCP bridge in renderer
  */
 export function initMcpBridge(instanceId: string): void {
+    // Prevent multiple initializations for same instance
+    if (cleanupFunctions.has(instanceId)) {
+        console.log(`[MCP Bridge UI] Already initialized for instance: ${instanceId}, skipping`);
+        return;
+    }
+
     // Send IPC message to main process for debugging (will show in terminal)
     try {
         if (isElectronEnvironment()) {
@@ -72,12 +88,19 @@ export function initMcpBridge(instanceId: string): void {
         console.log('[MCP Bridge UI] Setting up IPC listeners');
 
         // Listen for questions from MCP server (via main process)
-        electronAPI.mcpOn('ask_user.asked', (payload: any) => {
+        const cleanup = electronAPI.mcpOn('ask_user.asked', (payload: any) => {
+            const { requestId, questions, title, source } = payload;
+            
+            // Deduplicate at bridge layer to prevent race conditions
+            if (processedQuestions.has(requestId)) {
+                console.log('[MCP Bridge UI] Ignoring duplicate question:', requestId);
+                return;
+            }
+            processedQuestions.add(requestId);
+            
             console.log('[MCP Bridge UI] Received question:', payload);
 
             // Map MCP question format to CodeNomad question format
-            const { requestId, questions, title, source } = payload;
-
             // Add to question queue with MCP source
             addQuestionToQueueWithSource(instanceId, {
                 id: requestId,
@@ -93,9 +116,31 @@ export function initMcpBridge(instanceId: string): void {
                 }))
             }, source || 'mcp');
         });
+        
+        // Store cleanup function for this instance
+        cleanupFunctions.set(instanceId, cleanup);
 
         console.log('[MCP Bridge UI] Initialized successfully');
     } catch (error) {
         console.error('[MCP Bridge UI] Failed to initialize:', error);
     }
+}
+
+/**
+ * Cleanup MCP bridge for an instance (removes listeners)
+ */
+export function cleanupMcpBridge(instanceId: string): void {
+    const cleanup = cleanupFunctions.get(instanceId);
+    if (cleanup) {
+        console.log(`[MCP Bridge UI] Cleaning up MCP bridge for instance: ${instanceId}`);
+        cleanup(); // Call the cleanup function returned by mcpOn
+        cleanupFunctions.delete(instanceId);
+    }
+}
+
+/**
+ * Clear processed question from deduplication set (call after answer/cancel)
+ */
+export function clearProcessedQuestion(requestId: string): void {
+    processedQuestions.delete(requestId);
 }
