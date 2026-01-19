@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "CodeNomad MCP Server - native ask_user tool for saving premium requests (Raw JSON-RPC implementation)",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/server.js",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",

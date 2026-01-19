@@ -381,15 +381,32 @@ export class CliProcessManager extends EventEmitter {
   }
 
   private resolveProdEntry(): string {
+    // 1. Try node_modules resolution (development or linked)
     try {
       const entry = nodeRequire.resolve("@neuralnomads/codenomad/dist/bin.js")
       if (existsSync(entry)) {
         return entry
       }
     } catch {
-      // fall through to error below
+      // fall through
     }
-    throw new Error("Unable to locate CodeNomad CLI build (dist/bin.js). Run npm run build --workspace @neuralnomads/codenomad.")
+
+    // 2. Try packaged resources (production)
+    const resourcesPath = process.resourcesPath ?? app.getAppPath()
+
+    // Check for boot.js (wrapper for _node_modules fix)
+    const bootEntry = path.join(resourcesPath, "cli", "boot.js")
+    if (existsSync(bootEntry)) {
+      return bootEntry
+    }
+
+    // Check for bin.js (direct)
+    const cliEntry = path.join(resourcesPath, "cli", "dist", "bin.js")
+    if (existsSync(cliEntry)) {
+      return cliEntry
+    }
+
+    throw new Error(`Unable to locate CodeNomad CLI build. Checked: \n- node_modules\n- ${bootEntry}\n- ${cliEntry}`)
   }
 }
 

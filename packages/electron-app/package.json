@@ -68,6 +68,10 @@
     ],
     "extraResources": [
       {
+        "from": "resources/cli",
+        "to": "cli"
+      },
+      {
         "from": "electron/resources",
         "to": "",
         "filter": [
