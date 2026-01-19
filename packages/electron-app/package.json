@@ -35,6 +35,7 @@
   },
   "dependencies": {
     "@codenomad/ui": "file:../ui",
+    "@codenomad/mcp-server": "file:../mcp-server",
     "@develar/schema-utils": "^2.6.5",
     "@fastify/reply-from": "12.5.0",
     "@neuralnomads/codenomad": "file:../server",

@@ -10,7 +10,13 @@ const uiRendererLoadingEntry = resolve(uiRendererRoot, "loading.html")
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ["@codenomad/mcp-server"] })],
+    resolve: {
+      alias: {
+        "@codenomad/mcp-server/src": resolve(__dirname, "../mcp-server/src"),
+        "@codenomad/mcp-server": resolve(__dirname, "../mcp-server/src/server.ts"),
+      },
+    },
     build: {
       outDir: "dist/main",
       lib: {
