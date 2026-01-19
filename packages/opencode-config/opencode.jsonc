@@ -4,6 +4,6 @@
   "mcp": {},
   "provider": {},
   "experimental": {
-    "mcp_timeout": 0
+    "mcp_timeout": 300000
   }
 }
