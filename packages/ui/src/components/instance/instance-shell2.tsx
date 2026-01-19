@@ -31,6 +31,7 @@ import type { Instance } from "../../types/instance"
 import type { Command } from "../../lib/commands"
 import type { BackgroundProcess } from "../../../../server/src/api-types"
 import type { Session } from "../../types/session"
+import { SECTION_EXPANSION_EVENT, type SectionExpansionRequest } from "../../lib/section-expansion"
 import {
   activeParentSessionId,
   activeSessionId as activeSessionMap,
@@ -46,6 +47,7 @@ import { messageStoreBus } from "../../stores/message-v2/bus"
 import { clearSessionRenderCache } from "../message-block"
 
 import { isOpen as isCommandPaletteOpen, hideCommandPalette, showCommandPalette } from "../../stores/command-palette"
+import { openSearch } from "../../stores/search-store"
 import SessionList from "../session-list"
 import KeyboardHint from "../keyboard-hint"
 import InstanceWelcomeView from "../instance-welcome-view"
@@ -57,11 +59,13 @@ import CommandPalette from "../command-palette"
 import FolderTreeBrowser from "../folder-tree-browser"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
+import QuestionNotificationBanner from "../question-notification-banner"
 import { AskQuestionWizard } from "../askquestion-wizard"
 import Kbd from "../kbd"
 import { TodoListView } from "../tool-call/renderers/todo"
 import ContextUsagePanel from "../session/context-usage-panel"
 import SessionView from "../session/session-view"
+import SearchPanel from "../search-panel"
 import { formatTokenTotal } from "../../lib/formatters"
 import { sseManager } from "../../lib/sse-manager"
 import { getLogger } from "../../lib/logger"
@@ -74,8 +78,9 @@ import {
   type SessionSidebarRequestAction,
   type SessionSidebarRequestDetail,
 } from "../../lib/session-sidebar-events"
-import { getPendingQuestion } from "../../stores/questions"
+import { getPendingQuestion, removeQuestionFromQueue } from "../../stores/questions"
 import type { QuestionAnswer } from "../../types/question"
+import { sendMcpAnswer, sendMcpCancel, initMcpBridge, cleanupMcpBridge, clearProcessedQuestion } from "../../lib/mcp-bridge"
 import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
@@ -157,6 +162,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   const [folderTreeBrowserOpen, setFolderTreeBrowserOpen] = createSignal(false)
   const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
   const [questionWizardOpen, setQuestionWizardOpen] = createSignal(false)
+  const [questionWizardMinimized, setQuestionWizardMinimized] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
 
@@ -215,13 +221,16 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     }
   })
 
-  // Auto-open question wizard when a pending question appears
+  // Auto-open question wizard when a pending question appears (unless minimized)
   createEffect(() => {
     const pending = getPendingQuestion(props.instance.id)
-    if (pending && !questionWizardOpen()) {
+    if (pending && !questionWizardMinimized()) {
+      // Auto-open only if user hasn't minimized
       setQuestionWizardOpen(true)
-    } else if (!pending && questionWizardOpen()) {
+    } else if (!pending) {
+      // Reset states when no pending questions
       setQuestionWizardOpen(false)
+      setQuestionWizardMinimized(false)
     }
   })
 
@@ -232,48 +241,90 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       return
     }
 
-    try {
-      // Map answers to SDK format: array of string arrays
-      const sdkAnswers = answers.map(answer => {
-        const custom = answer.customText?.trim()
-        if (custom) return [custom]
-        return answer.values
-      })
+    // Route by source: MCP or OpenCode
+    if (question.source === 'mcp') {
+      // MCP questions: send via IPC bridge
+      try {
+        sendMcpAnswer(question.id, answers)
+        removeQuestionFromQueue(props.instance.id, question.id)
+        clearProcessedQuestion(question.id) // Clear from deduplication set
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to submit MCP question answer", error)
+      }
 
-      await requestData(
-        props.instance.client.question.reply({
-          requestID: question.id,
-          answers: sdkAnswers
-        }),
-        "question.reply"
-      )
+    } else {
+      // OpenCode questions: use existing API
+      try {
+        // Map answers to SDK format: array of string arrays
+        const sdkAnswers = answers.map(answer => {
+          const custom = answer.customText?.trim()
+          if (custom) return [custom]
+          return answer.values
+        })
 
-      setQuestionWizardOpen(false)
-    } catch (error) {
-      console.error("Failed to submit question answers", error)
+        await requestData(
+          props.instance.client.question.reply({
+            requestID: question.id,
+            answers: sdkAnswers
+          }),
+          "question.reply"
+        )
+
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to submit question answers", error)
+      }
     }
   }
 
+
   const handleQuestionCancel = async () => {
     const question = getPendingQuestion(props.instance.id)
-    if (!question || !props.instance.client) {
+    if (!question) {
       setQuestionWizardOpen(false)
       return
     }
 
-    try {
-      await requestData(
-        props.instance.client.question.reject({
-          requestID: question.id
-        }),
-        "question.reject"
-      )
+    // Route by source: MCP or OpenCode
+    if (question.source === 'mcp') {
+      // MCP questions: send via IPC bridge
+      try {
+        sendMcpCancel(question.id)
+        removeQuestionFromQueue(props.instance.id, question.id)
+        clearProcessedQuestion(question.id) // Clear from deduplication set
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to cancel MCP question", error)
+      }
 
-      setQuestionWizardOpen(false)
-    } catch (error) {
-      console.error("Failed to reject question", error)
-      setQuestionWizardOpen(false)
+    } else {
+      // OpenCode questions: use existing API
+      if (!props.instance.client) {
+        setQuestionWizardOpen(false)
+        return
+      }
+
+      try {
+        await requestData(
+          props.instance.client.question.reject({
+            requestID: question.id
+          }),
+          "question.reject"
+        )
+
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to reject question", error)
+        setQuestionWizardOpen(false)
+      }
     }
+  }
+
+  const handleQuestionMinimize = () => {
+    setQuestionWizardMinimized(true)
+    setQuestionWizardOpen(false)
+    // Question remains in queue, notification banner will show
   }
 
   const measureDrawerHost = () => {
@@ -430,6 +481,11 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     showCommandPalette(props.instance.id)
   }
 
+  const openCurrentSessionSearch = () => {
+    const currentSessionId = activeSessionIdForInstance()
+    openSearch(props.instance.id, currentSessionId || undefined)
+  }
+
   const openBackgroundOutput = (process: BackgroundProcess) => {
     setSelectedBackgroundProcess(process)
     setShowBackgroundOutput(true)
@@ -555,6 +611,33 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     }
     window.addEventListener("keydown", handleEscape, true)
     onCleanup(() => window.removeEventListener("keydown", handleEscape, true))
+  })
+
+  // Initialize MCP bridge for this instance
+  onMount(() => {
+    console.log('[Instance Shell] onMount fired - checking window...')
+    console.log('[Instance Shell] window type:', typeof window)
+    console.log('[Instance Shell] window exists:', typeof window !== 'undefined')
+    if (typeof window === "undefined") {
+      console.log('[Instance Shell] window is undefined, skipping MCP bridge init')
+      return
+    }
+    console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
+    try {
+      initMcpBridge(props.instance.id)
+    } catch (error) {
+      console.error("[Instance Shell] Failed to initialize MCP bridge:", error)
+    }
+    
+    // Cleanup MCP bridge when instance unmounts
+    onCleanup(() => {
+      console.log(`[Instance Shell] Cleaning up MCP bridge for instance: ${props.instance.id}`)
+      try {
+        cleanupMcpBridge(props.instance.id)
+      } catch (error) {
+        console.error("[Instance Shell] Failed to cleanup MCP bridge:", error)
+      }
+    })
   })
 
   const handleSessionSelect = (sessionId: string) => {
@@ -945,7 +1028,6 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       <div class="session-sidebar flex flex-col flex-1 min-h-0">
         <SessionList
           instanceId={props.instance.id}
-          sessions={allInstanceSessions()}
           threads={sessionThreads()}
           activeSessionId={activeSessionIdForInstance()}
           onSelect={handleSessionSelect}
@@ -1125,6 +1207,27 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     const handleAccordionChange = (values: string[]) => {
       setRightPanelExpandedItems(values)
     }
+
+    // Listen for sidebar accordion expansion requests from search system
+    createEffect(() => {
+      if (typeof window === "undefined") return
+
+      const handler = (event: Event) => {
+        const detail = (event as CustomEvent<SectionExpansionRequest>).detail
+        if (
+          detail.action === "expand-sidebar-accordion" &&
+          detail.instanceId === props.instance.id
+        ) {
+          const sectionId = detail.sectionId
+          if (sectionId && !rightPanelExpandedItems().includes(sectionId)) {
+            setRightPanelExpandedItems((prev) => [...prev, sectionId])
+          }
+        }
+      }
+
+      window.addEventListener(SECTION_EXPANSION_EVENT, handler)
+      onCleanup(() => window.removeEventListener(SECTION_EXPANSION_EVENT, handler))
+    })
 
     const isSectionExpanded = (id: string) => rightPanelExpandedItems().includes(id)
 
@@ -1357,6 +1460,16 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                   onClick={() => setPermissionModalOpen(true)}
                 />
 
+                <Show when={questionWizardMinimized() && getPendingQuestion(props.instance.id)}>
+                  <QuestionNotificationBanner
+                    instanceId={props.instance.id}
+                    onClick={() => {
+                      setQuestionWizardMinimized(false)
+                      setQuestionWizardOpen(true)
+                    }}
+                  />
+                </Show>
+
                 <button
                   type="button"
                   class="connection-status-button px-2 py-0.5 text-xs whitespace-nowrap flex-shrink-1 min-w-0"
@@ -1431,11 +1544,20 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 </button>
               </Show>
 
-              <div style={{ flex: "0 0 auto", display: "flex", "align-items": "center" }}>
+              <div style={{ flex: "0 0 auto", display: "flex", "align-items": "center", gap: "8px" }}>
                 <PermissionNotificationBanner
                   instanceId={props.instance.id}
                   onClick={() => setPermissionModalOpen(true)}
                 />
+                <Show when={questionWizardMinimized() && getPendingQuestion(props.instance.id)}>
+                  <QuestionNotificationBanner
+                    instanceId={props.instance.id}
+                    onClick={() => {
+                      setQuestionWizardMinimized(false)
+                      setQuestionWizardOpen(true)
+                    }}
+                  />
+                </Show>
               </div>
               <button
                 type="button"
@@ -1608,6 +1730,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 questions={mappedQuestions()}
                 onSubmit={handleQuestionSubmit}
                 onCancel={handleQuestionCancel}
+                onMinimize={handleQuestionMinimize}
               />
             </div>
           )

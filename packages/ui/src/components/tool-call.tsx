@@ -24,6 +24,7 @@ import { resolveTitleForTool } from "./tool-call/tool-title"
 import { getLogger } from "../lib/logger"
 import { ansiToHtml, createAnsiStreamRenderer, hasAnsi } from "../lib/ansi"
 import { escapeHtml } from "../lib/markdown"
+import { SECTION_EXPANSION_EVENT, type SectionExpansionRequest } from "../lib/section-expansion"
 
 const log = getLogger("session")
 
@@ -291,6 +292,34 @@ export default function ToolCall(props: ToolCallProps) {
   })
 
   const [userExpanded, setUserExpanded] = createSignal<boolean | null>(null)
+
+  // Listen for expansion requests from search system
+  createEffect(() => {
+    if (typeof window === "undefined") return
+
+    const partId = toolCallMemo()?.id
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SectionExpansionRequest>).detail
+      const shouldExpand =
+        (detail.action === "expand-tool-call" ||
+         detail.action === "expand-diagnostics") &&
+        detail.messageId === props.messageId &&
+        detail.partId === partId &&
+        detail.instanceId === props.instanceId
+
+      if (shouldExpand) {
+        if (detail.action === "expand-diagnostics") {
+          setDiagnosticsOverride(true)
+        } else {
+          setUserExpanded(true)
+        }
+      }
+    }
+
+    window.addEventListener(SECTION_EXPANSION_EVENT, handler)
+    onCleanup(() => window.removeEventListener(SECTION_EXPANSION_EVENT, handler))
+  })
 
   const expanded = () => {
     const permission = pendingPermission()

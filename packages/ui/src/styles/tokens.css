@@ -34,6 +34,7 @@
 
   --message-tool-bg: #f8f9fa;
   --message-tool-border: #6c757d;
+  --message-question-border: #8b5cf6;
 
   /* Session list selection tints */
   --session-user-active-bg: color-mix(in oklab, var(--surface-secondary) 85%, var(--message-user-border));
@@ -187,6 +188,7 @@
 
     --message-tool-bg: #212529;
     --message-tool-border: #adb5bd;
+    --message-question-border: #a78bfa;
 
     /* Semantic component colors */
     --session-status-working-fg: #facc15;
@@ -341,6 +343,7 @@
 
   --message-tool-bg: #212529;
   --message-tool-border: #adb5bd;
+  --message-question-border: #a78bfa;
 
   /* Semantic component colors */
   --session-status-working-fg: #facc15;

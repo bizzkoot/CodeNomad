@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify"
 import { exec } from "child_process"
 import { promisify } from "util"
 import path from "path"
+import { promises as fs } from "fs"
 import type { WorkspaceManager } from "../../workspaces/manager"
 import type {
     GitStatus,
@@ -14,6 +15,7 @@ import type {
     GitCommitResponse,
     GitCheckoutRequest,
     GitStageRequest,
+    GitPushResponse,
 } from "../../api-types"
 
 const execAsync = promisify(exec)
@@ -173,6 +175,13 @@ async function getGitStatus(cwd: string): Promise<GitStatus> {
         }
     } catch {
         // No upstream tracking
+        // Fallback: count commits not pushed to any remote
+        try {
+            const count = await runGitCommand(cwd, "rev-list --count HEAD --not --remotes")
+            ahead = parseInt(count, 10) || 0
+        } catch {
+            // Ignore error
+        }
     }
 
     // Get file status
@@ -445,6 +454,39 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
         },
     )
 
+    // POST /api/workspaces/:id/git/delete
+    app.post<{ Params: { id: string }; Body: GitStageRequest }>(
+        "/api/workspaces/:id/git/delete",
+        async (request, reply) => {
+            const workspacePath = getWorkspacePath(request.params.id)
+            if (!workspacePath) {
+                return reply.status(404).send({ error: "Workspace not found" })
+            }
+
+            const { paths } = request.body
+            if (!paths || paths.length === 0) {
+                return reply.status(400).send({ error: "Paths are required" })
+            }
+
+            try {
+                for (const fileOrDir of paths) {
+                    const fullPath = path.join(workspacePath, fileOrDir)
+                    const stats = await fs.stat(fullPath)
+                    
+                    if (stats.isDirectory()) {
+                        await fs.rm(fullPath, { recursive: true, force: true })
+                    } else {
+                        await fs.unlink(fullPath)
+                    }
+                }
+                return { success: true }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to delete files"
+                return reply.status(500).send({ error: message })
+            }
+        },
+    )
+
     // POST /api/workspaces/:id/git/commit
     app.post<{ Params: { id: string }; Body: GitCommitRequest }>(
         "/api/workspaces/:id/git/commit",
@@ -482,4 +524,45 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
             }
         },
     )
+
+    // POST /api/workspaces/:id/git/push
+    app.post<{ Params: { id: string }; Body: { publish?: boolean } }>("/api/workspaces/:id/git/push", async (request, reply) => {
+        const workspacePath = getWorkspacePath(request.params.id)
+        if (!workspacePath) {
+            return reply.status(404).send({ error: "Workspace not found" })
+        }
+
+        if (!(await isGitRepository(workspacePath))) {
+            return reply.status(400).send({ error: "Not a git repository" })
+        }
+
+        const { publish } = request.body || {}
+
+        try {
+            if (publish) {
+                // Get current branch
+                const currentBranch = await runGitCommand(workspacePath, "branch --show-current")
+                if (!currentBranch) {
+                    throw new Error("Could not determine current branch")
+                }
+                await runGitCommand(workspacePath, `push -u origin ${currentBranch}`)
+            } else {
+                await runGitCommand(workspacePath, "push")
+            }
+            const response: GitPushResponse = {
+                success: true,
+                pushed: true,
+                message: "Pushed successfully",
+            }
+            return response
+        } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to push"
+            const response: GitPushResponse = {
+                success: false,
+                pushed: false,
+                message,
+            }
+            return reply.status(500).send(response)
+        }
+    })
 }

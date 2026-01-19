@@ -11,6 +11,12 @@
   max-width: 600px;
   width: 100%;
   outline: none;
+  
+  /* CRITICAL: Constrain wizard height to enable child scrolling */
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* Prevent outer scroll */
 }
 
 /* Header */
@@ -27,6 +33,13 @@
   color: var(--text-secondary);
 }
 
+.askquestion-wizard-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.askquestion-wizard-minimize,
 .askquestion-wizard-close {
   background: transparent;
   border: none;
@@ -37,8 +50,12 @@
   border-radius: var(--radius-sm);
   transition: all 0.15s;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
+.askquestion-wizard-minimize:hover,
 .askquestion-wizard-close:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
@@ -136,7 +153,15 @@
 
 /* Question */
 .askquestion-wizard-question {
+  /* Flexbox for smart space allocation */
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 40%; /* Take max 40% of available space, can shrink */
   margin-bottom: var(--space-md);
+
+  /* Scrollable behavior */
+  overflow-y: auto; /* Vertical scroll when content exceeds */
+  min-height: 60px; /* Minimum height for short questions */
 }
 
 .askquestion-wizard-question-text {
@@ -144,6 +169,41 @@
   font-weight: var(--font-weight-semibold);
   color: var(--text-primary);
   margin: 0 0 var(--space-xs) 0;
+  /* Multi-line support: handled by markdown HTML structure */
+  white-space: normal;
+  word-wrap: break-word;
+
+  /* Readability improvements */
+  max-width: 600px; /* Optimal reading width */
+  margin-left: auto;
+  margin-right: auto;
+  line-height: var(--line-height-normal); /* Standard vertical rhythm */
+}
+
+/* Compact markdown styles for wizard */
+.askquestion-wizard-question-text.markdown-body p {
+  margin-top: 0;
+  margin-bottom: var(--space-xs);
+}
+
+.askquestion-wizard-question-text.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+
+.askquestion-wizard-question-text.markdown-body h1,
+.askquestion-wizard-question-text.markdown-body h2,
+.askquestion-wizard-question-text.markdown-body h3,
+.askquestion-wizard-question-text.markdown-body h4,
+.askquestion-wizard-question-text.markdown-body h5,
+.askquestion-wizard-question-text.markdown-body h6 {
+  margin-top: var(--space-sm);
+  margin-bottom: var(--space-2xs);
+}
+
+.askquestion-wizard-question-text.markdown-body h1:first-child,
+.askquestion-wizard-question-text.markdown-body h2:first-child,
+.askquestion-wizard-question-text.markdown-body h3:first-child {
+  margin-top: 0;
 }
 
 .askquestion-wizard-question-hint {
@@ -157,9 +217,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  max-height: 60vh;
+  flex: 1 1 auto; /* Take remaining space, grow and shrink */
   overflow-y: auto;
   margin-bottom: var(--space-md);
+  min-height: 200px; /* Ensure options always visible */
 }
 
 .askquestion-wizard-option {
@@ -319,10 +380,20 @@
 /* Mobile adjustments */
 @media (max-width: 640px) {
   .askquestion-wizard {
-    max-height: 80vh;
-    overflow: auto;
+    max-height: 85vh;
+    /* overflow: hidden is already set above */
   }
-  
+
+  /* Adjust flex proportions for mobile */
+  .askquestion-wizard-question {
+    flex: 0 1 35%; /* Slightly less space for question on mobile */
+    min-height: 50px;
+  }
+
+  .askquestion-wizard-options {
+    min-height: 150px; /* Reduced but still visible on mobile */
+  }
+
   .askquestion-wizard-instructions {
     display: none;
   }
@@ -359,4 +430,33 @@
   justify-content: center;
   z-index: 1000;
   padding: var(--space-lg);
+}
+
+/* Custom Scrollbar Styling */
+.askquestion-wizard-question::-webkit-scrollbar,
+.askquestion-wizard-options::-webkit-scrollbar {
+  width: 8px;
+}
+
+.askquestion-wizard-question::-webkit-scrollbar-track,
+.askquestion-wizard-options::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.askquestion-wizard-question::-webkit-scrollbar-thumb,
+.askquestion-wizard-options::-webkit-scrollbar-thumb {
+  background: var(--border-base);
+  border-radius: var(--radius-sm);
+}
+
+.askquestion-wizard-question::-webkit-scrollbar-thumb:hover,
+.askquestion-wizard-options::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Firefox scrollbar styling */
+.askquestion-wizard-question,
+.askquestion-wizard-options {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-base) transparent;
 }

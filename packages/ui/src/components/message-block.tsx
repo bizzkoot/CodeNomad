@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { FoldVertical } from "lucide-solid"
 import MessageItem from "./message-item"
 import ToolCall from "./tool-call"
@@ -11,11 +11,13 @@ import { messageStoreBus } from "../stores/message-v2/bus"
 import { formatTokenTotal } from "../lib/formatters"
 import { sessions, setActiveParentSession, setActiveSession } from "../stores/sessions"
 import { setActiveInstanceId } from "../stores/instances"
+import { SECTION_EXPANSION_EVENT, type SectionExpansionRequest } from "../lib/section-expansion"
 
 const TOOL_ICON = "🔧"
 const USER_BORDER_COLOR = "var(--message-user-border)"
 const ASSISTANT_BORDER_COLOR = "var(--message-assistant-border)"
 const TOOL_BORDER_COLOR = "var(--message-tool-border)"
+const QUESTION_BORDER_COLOR = "var(--message-question-border)"
 
 type ToolCallPart = Extract<ClientPart, { type: "tool" }>
 
@@ -82,8 +84,20 @@ interface TaskSessionLocation {
   parentId: string | null
 }
 
-function findTaskSessionLocation(sessionId: string): TaskSessionLocation | null {
+function findTaskSessionLocation(sessionId: string, preferredInstanceId?: string): TaskSessionLocation | null {
   if (!sessionId) return null
+
+  if (preferredInstanceId) {
+    const session = sessions().get(preferredInstanceId)?.get(sessionId)
+    if (session) {
+      return {
+        sessionId: session.id,
+        instanceId: preferredInstanceId,
+        parentId: session.parentId ?? null,
+      }
+    }
+  }
+
   const allSessions = sessions()
   for (const [instanceId, sessionMap] of allSessions) {
     const session = sessionMap?.get(sessionId)
@@ -235,16 +249,11 @@ export default function MessageBlock(props: MessageBlockProps) {
     const index = props.messageIndex
     const lastAssistantIdx = props.lastAssistantIndex()
     const isQueued = current.role === "user" && (lastAssistantIdx === -1 || index > lastAssistantIdx)
-    const info = messageInfo()
-    const infoTime = (info?.time ?? {}) as { created?: number; updated?: number; completed?: number }
-    const infoTimestamp =
-      typeof infoTime.completed === "number"
-        ? infoTime.completed
-        : typeof infoTime.updated === "number"
-          ? infoTime.updated
-          : infoTime.created ?? 0
-    const infoError = (info as { error?: { name?: string } } | undefined)?.error
-    const infoErrorName = typeof infoError?.name === "string" ? infoError.name : ""
+
+    // Intentionally untracked: messageInfoVersion updates should not trigger
+    // a full message block rebuild; record revision is the invalidation key.
+    const info = untrack(messageInfo)
+
     const cacheSignature = [
       current.id,
       current.revision,
@@ -252,8 +261,6 @@ export default function MessageBlock(props: MessageBlockProps) {
       props.showThinking() ? 1 : 0,
       props.thinkingDefaultExpanded() ? 1 : 0,
       props.showUsageMetrics() ? 1 : 0,
-      infoTimestamp,
-      infoErrorName,
     ].join("|")
 
     const cachedBlock = sessionCache.messageBlocks.get(current.id)
@@ -335,7 +342,11 @@ export default function MessageBlock(props: MessageBlockProps) {
         }
         items.push(toolItem)
         blockToolKeys.push(key)
-        lastAccentColor = TOOL_BORDER_COLOR
+
+        // Use purple border for question tools, regular tool border for others
+        const toolName = (part as ToolCallPart).tool
+        const isQuestionTool = toolName === 'ask_user' || toolName === 'question' || toolName === 'codenomad_ask_user'
+        lastAccentColor = isQuestionTool ? QUESTION_BORDER_COLOR : TOOL_BORDER_COLOR
         return
       }
 
@@ -447,7 +458,7 @@ export default function MessageBlock(props: MessageBlockProps) {
                     const hasToolState =
                       Boolean(toolState) && (isToolStateRunning(toolState) || isToolStateCompleted(toolState) || isToolStateError(toolState))
                     const taskSessionId = hasToolState ? extractTaskSessionId(toolState) : ""
-                    const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId) : null
+                    const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId, props.instanceId) : null
                     const handleGoToTaskSession = (event: MouseEvent) => {
                       event.preventDefault()
                       event.stopPropagation()
@@ -671,6 +682,25 @@ interface ReasoningCardProps {
 
 function ReasoningCard(props: ReasoningCardProps) {
   const [expanded, setExpanded] = createSignal(Boolean(props.defaultExpanded))
+
+  // Listen for expansion requests from search system
+  createEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SectionExpansionRequest>).detail
+      if (
+        detail.action === "expand-reasoning" &&
+        detail.messageId === props.part.messageID &&
+        detail.instanceId === props.instanceId
+      ) {
+        setExpanded(true)
+      }
+    }
+
+    window.addEventListener(SECTION_EXPANSION_EVENT, handler)
+    onCleanup(() => window.removeEventListener(SECTION_EXPANSION_EVENT, handler))
+  })
 
   createEffect(() => {
     setExpanded(Boolean(props.defaultExpanded))

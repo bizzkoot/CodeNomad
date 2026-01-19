@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { Show, createEffect, createMemo, createSignal, onCleanup, untrack, onMount } from "solid-js"
 import Kbd from "./kbd"
 import MessageBlockList, { getMessageAnchorId } from "./message-block-list"
 import MessageTimeline, { buildTimelineSegments, type TimelineSegment } from "./message-timeline"
@@ -7,6 +7,8 @@ import { getSessionInfo } from "../stores/sessions"
 import { messageStoreBus } from "../stores/message-v2/bus"
 import { useScrollCache } from "../lib/hooks/use-scroll-cache"
 import type { InstanceMessageStore } from "../stores/message-v2/instance-store"
+import SearchPanel from "./search-panel"
+import { registerSearchShortcuts } from "../lib/shortcuts/search"
 
 const SCROLL_SCOPE = "session"
 const SCROLL_SENTINEL_MARGIN_PX = 48
@@ -743,8 +745,26 @@ export default function MessageSection(props: MessageSectionProps) {
     clearQuoteSelection()
   })
 
+  // Register keyboard shortcuts for search
+  onMount(() => {
+    registerSearchShortcuts()
+  })
+
+  // Set search scope
+  createEffect(() => {
+    // Update search scope is handled by search panel component
+    // No need to do anything here
+  })
+
   return (
     <div class="message-stream-container">
+      {/* Search Panel - Floating overlay */}
+      <SearchPanel 
+        store={store} 
+        instanceId={props.instanceId}
+        sessionId={() => props.sessionId}
+      />
+      
       <div class={`message-layout${hasTimelineSegments() ? " message-layout--with-timeline" : ""}`}>
         <div class="message-stream-shell" ref={setShellElement}>
           <div class="message-stream" ref={setContainerRef} onScroll={handleScroll} onMouseUp={handleStreamMouseUp}>
@@ -852,7 +872,6 @@ export default function MessageSection(props: MessageSectionProps) {
           </div>
         </Show>
       </div>
-
     </div>
   )
 }

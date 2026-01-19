@@ -1,10 +1,15 @@
 import { app, BrowserView, BrowserWindow, nativeImage, session, shell } from "electron"
+import http from "node:http"
+import https from "node:https"
 import { existsSync } from "fs"
 import { dirname, join } from "path"
 import { fileURLToPath } from "url"
 import { createApplicationMenu } from "./menu"
 import { setupCliIPC } from "./ipc"
 import { CliProcessManager } from "./process-manager"
+import { CodeNomadMcpServer } from "@codenomad/mcp-server"
+import { setupMcpBridge, connectMcpBridge } from "@codenomad/mcp-server/src/bridge/ipc"
+import { writeMcpConfig, unregisterFromMcpConfig } from "@codenomad/mcp-server/src/config/registration"
 
 const mainFilename = fileURLToPath(import.meta.url)
 const mainDirname = dirname(mainFilename)
@@ -15,8 +20,10 @@ const cliManager = new CliProcessManager()
 let mainWindow: BrowserWindow | null = null
 let currentCliUrl: string | null = null
 let pendingCliUrl: string | null = null
+let pendingBootstrapToken: string | null = null
 let showingLoadingScreen = false
 let preloadingView: BrowserView | null = null
+let mcpServer: CodeNomadMcpServer | null = null
 
 if (isMac) {
   app.commandLine.appendSwitch("disable-spell-checking")
@@ -251,6 +258,15 @@ function showLoadingScreen(force = false) {
   loadLoadingScreen(mainWindow)
 }
 
+function isBootstrapTokenUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.pathname === "/auth/token" && parsed.hash.length > 1
+  } catch {
+    return false
+  }
+}
+
 function startCliPreload(url: string) {
   if (!mainWindow || mainWindow.isDestroyed()) {
     pendingCliUrl = url
@@ -266,6 +282,13 @@ function startCliPreload(url: string) {
 
   if (!showingLoadingScreen) {
     showLoadingScreen(true)
+  }
+
+  // Important: /auth/token#... is one-time. Preloading + swapping would load it twice,
+  // consuming the token in the hidden view and then failing in the main window.
+  if (isBootstrapTokenUrl(url)) {
+    finalizeCliSwap(url)
+    return
   }
 
   const view = new BrowserView({
@@ -308,12 +331,81 @@ function finalizeCliSwap(url: string) {
   mainWindow.loadURL(url).catch((error) => console.error("[cli] failed to load CLI view:", error))
 }
 
+const SESSION_COOKIE_NAME = "codenomad_session"
+let bootstrapExchangeInFlight = false
 
-async function startCli() {
+function extractCookieValue(setCookieHeader: string | string[] | undefined, name: string): string | null {
+  const raw = Array.isArray(setCookieHeader) ? setCookieHeader[0] : setCookieHeader
+  if (!raw) return null
+
+  const first = raw.split(";")[0] ?? ""
+  const index = first.indexOf("=")
+  if (index < 0) return null
+
+  const key = first.slice(0, index).trim()
+  const value = first.slice(index + 1).trim()
+  if (key !== name || !value) return null
+
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+async function exchangeBootstrapToken(baseUrl: string, token: string): Promise<boolean> {
+  const target = new URL("/api/auth/token", baseUrl)
+  const body = JSON.stringify({ token })
+
+  const transport = target.protocol === "https:" ? https : http
+
+  const result = await new Promise<{ statusCode: number; setCookie: string | string[] | undefined }>((resolve, reject) => {
+    const req = transport.request(
+      target,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        res.resume()
+        resolve({ statusCode: res.statusCode ?? 0, setCookie: res.headers["set-cookie"] })
+      },
+    )
+
+    req.on("error", reject)
+    req.write(body)
+    req.end()
+  })
+
+  if (result.statusCode !== 200) {
+    return false
+  }
+
+  const sessionId = extractCookieValue(result.setCookie, SESSION_COOKIE_NAME)
+  if (!sessionId) {
+    return false
+  }
+
+  await session.defaultSession.cookies.set({
+    url: baseUrl,
+    name: SESSION_COOKIE_NAME,
+    value: sessionId,
+    httpOnly: true,
+    path: "/",
+    sameSite: "lax",
+  })
+
+  return true
+}
+
+async function startCli(mcpPort?: number) {
   try {
     const devMode = process.env.NODE_ENV === "development"
-    console.info("[cli] start requested (dev mode:", devMode, ")")
-    await cliManager.start({ dev: devMode })
+    console.info("[cli] start requested (dev mode:", devMode, ", mcpPort:", mcpPort, ")")
+    await cliManager.start({ dev: devMode, mcpPort })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error("[cli] start failed:", message)
@@ -323,11 +415,53 @@ async function startCli() {
   }
 }
 
+async function maybeExchangeAndNavigate(baseUrl: string) {
+  if (bootstrapExchangeInFlight) {
+    return
+  }
+
+  const token = pendingBootstrapToken
+  if (!token) {
+    startCliPreload(baseUrl)
+    return
+  }
+
+  bootstrapExchangeInFlight = true
+
+  try {
+    const ok = await exchangeBootstrapToken(baseUrl, token)
+    pendingBootstrapToken = null
+
+    if (!ok) {
+      startCliPreload(`${baseUrl}/login`)
+      return
+    }
+
+    startCliPreload(baseUrl)
+  } catch (error) {
+    console.error("[cli] bootstrap token exchange failed:", error)
+    pendingBootstrapToken = null
+    startCliPreload(`${baseUrl}/login`)
+  } finally {
+    bootstrapExchangeInFlight = false
+  }
+}
+
+cliManager.on("bootstrapToken", (token) => {
+  pendingBootstrapToken = token
+
+  const status = cliManager.getStatus()
+  if (status.url) {
+    void maybeExchangeAndNavigate(status.url)
+  }
+})
+
 cliManager.on("ready", (status) => {
   if (!status.url) {
     return
   }
-  startCliPreload(status.url)
+
+  void maybeExchangeAndNavigate(status.url)
 })
 
 cliManager.on("status", (status) => {
@@ -342,9 +476,7 @@ if (isMac) {
   })
 }
 
-app.whenReady().then(() => {
-  startCli()
-
+app.whenReady().then(async () => {
   if (isMac) {
     session.defaultSession.setSpellCheckerEnabled(false)
     app.on("browser-window-created", (_, window) => {
@@ -361,21 +493,61 @@ app.whenReady().then(() => {
 
   createWindow()
 
+  // Start MCP server FIRST if we have a main window
+  let mcpPort: number | undefined
+  if (mainWindow) {
+    setupMcpBridge(mainWindow)
+    const server = new CodeNomadMcpServer()
+    mcpServer = server
+
+    try {
+      await mcpServer.start()
+      const port = mcpServer.getPort()
+      const token = mcpServer.getAuthToken()
+
+      if (port && token) {
+        mcpPort = port
+        writeMcpConfig(port, token)
+        console.log(`[MCP] Registered with Antigravity on port ${port}`)
+
+        // Connect MCP server bridge
+        if (mcpServer && mainWindow) {
+          connectMcpBridge(mcpServer, mainWindow)
+        }
+      }
+    } catch (error) {
+      console.error('[MCP] Failed to start server:', error)
+    }
+  }
+
+  // Then start CLI with MCP port
+  await startCli(mcpPort)
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
     }
   })
-})
 
-app.on("before-quit", async (event) => {
-  event.preventDefault()
-  await cliManager.stop().catch(() => {})
-  app.exit(0)
-})
+  app.on("before-quit", async (event) => {
+    event.preventDefault()
 
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit()
-  }
+    // Unregister MCP server from Antigravity config
+    if (mcpServer) {
+      const port = mcpServer.getPort()
+      if (port) {
+        unregisterFromMcpConfig()
+      }
+      await mcpServer.stop()
+    }
+
+    await cliManager.stop().catch(() => { })
+    app.exit(0)
+  })
+
+  app.on("window-all-closed", () => {
+    if (process.platform !== "darwin") {
+      app.quit()
+    }
+  })
 })

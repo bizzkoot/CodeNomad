@@ -1,5 +1,5 @@
-import { Component, Show, For, createSignal, createEffect, onMount } from "solid-js"
-import { ChevronDown, RefreshCw, GitBranch, Plus, Minus, Undo2, Check } from "lucide-solid"
+import { Component, Show, For, createSignal, createEffect, onMount, onCleanup } from "solid-js"
+import { ChevronDown, RefreshCw, GitBranch, Plus, Minus, Undo2, Check, UploadCloud, X } from "lucide-solid"
 import type { GitFileChange } from "../../../../server/src/api-types"
 import {
     useGitStore,
@@ -7,11 +7,14 @@ import {
     stageFiles,
     unstageFiles,
     discardChanges,
+    deleteFiles,
     commitChanges,
     checkoutBranch,
     refreshGit,
+    pushChanges,
 } from "../../stores/git"
 import { serverApi } from "../../lib/api-client"
+import { serverEvents } from "../../lib/server-events"
 
 interface SourceControlPanelProps {
     workspaceId: string
@@ -28,6 +31,28 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
 
     onMount(() => {
         refreshGit(props.workspaceId)
+
+        // 1. Listen for internal tool events (Safe: uses observer pattern, supports multiple listeners)
+        const cleanupServerEvents = serverEvents.on("instance.event", (payload) => {
+            // TS Error Fix: Narrow the type to the specific union member that has 'event'
+            // We know it's "instance.event" because we filtered for it in .on()
+            const instanceEvent = payload as Extract<typeof payload, { type: "instance.event" }>
+            const innerEvent = instanceEvent.event as any
+            const partType = innerEvent?.properties?.part?.type
+
+            if (partType === "tool" || partType === "patch") {
+                refreshGit(props.workspaceId)
+            }
+        })
+
+        // 2. Listen for external window focus (e.g. returning from VS Code/Terminal)
+        const handleFocus = () => refreshGit(props.workspaceId)
+        window.addEventListener("focus", handleFocus)
+
+        onCleanup(() => {
+            cleanupServerEvents()
+            window.removeEventListener("focus", handleFocus)
+        })
     })
 
     createEffect(() => {
@@ -56,6 +81,12 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         }
     }
 
+    const handleDelete = async (path: string) => {
+        if (confirm(`Delete ${path}? This action cannot be undone.`)) {
+            await deleteFiles(props.workspaceId, [path])
+        }
+    }
+
     const handleStageAll = async () => {
         const paths = [...git.unstagedChanges(), ...git.untrackedChanges()].map((c) => c.path)
         if (paths.length > 0) {
@@ -77,6 +108,13 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         if (success) {
             setCommitMessage("")
         }
+    }
+
+    const handlePush = async () => {
+        const currentBranch = git.branches().find((b) => b.current)
+        const hasUpstream = !!currentBranch?.upstream
+        // If no upstream, we are publishing
+        await pushChanges(props.workspaceId, !hasUpstream)
     }
 
     const handleViewDiff = async (file: GitFileChange) => {
@@ -174,14 +212,27 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         }
     }
 
+    const hasFolderContents = (folderPath: string): boolean => {
+        const untracked = git.untrackedChanges()
+        const folderPrefix = folderPath.endsWith("/") ? folderPath : `${folderPath}/`
+        
+        return untracked.some((file) => {
+            const filePath = file.path
+            // Check if file path starts with folder prefix (is inside the folder)
+            // But is not the folder entry itself
+            return filePath.startsWith(folderPrefix) && filePath !== folderPath
+        })
+    }
+
     const FileChangeItem: Component<{
         file: GitFileChange
         showStage?: boolean
         showUnstage?: boolean
         showDiscard?: boolean
+        showDelete?: boolean
     }> = (itemProps) => (
         <div class="group flex items-center gap-2 px-2 py-1 hover:bg-surface-tertiary rounded text-xs">
-            <span 
+            <span
                 class={`font-mono w-4 text-center ${getStatusColor(itemProps.file.status)}`}
                 title={itemProps.file.status}
             >
@@ -198,13 +249,15 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                     // Handle directories (trailing slash) - show dir name with indicator
                     if (path.endsWith("/")) {
                         const parts = path.slice(0, -1).split("/")
-                        return parts[parts.length - 1] + "/"
+                        const folderName = parts[parts.length - 1] + "/"
+                        const hasContents = hasFolderContents(path)
+                        return hasContents ? `${folderName}*` : folderName
                     }
                     // Normal file - show filename
                     return path.split("/").pop() || path
                 })()}
             </button>
-            <div class="hidden group-hover:flex items-center gap-1">
+            <div class="flex items-center gap-1">
                 <Show when={itemProps.showStage}>
                     <button
                         type="button"
@@ -228,11 +281,21 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                 <Show when={itemProps.showDiscard}>
                     <button
                         type="button"
-                        class="p-1 hover:bg-surface-secondary rounded text-red-500"
+                        class="p-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 rounded text-red-500"
                         onClick={() => handleDiscard(itemProps.file.path)}
-                        title="Discard changes"
+                        title="Discard changes (danger)"
                     >
                         <Undo2 class="h-3 w-3" />
+                    </button>
+                </Show>
+                <Show when={itemProps.showDelete}>
+                    <button
+                        type="button"
+                        class="p-1 bg-red-500/10 hover:bg-red-500/20 border border-red-500/50 rounded text-red-500"
+                        onClick={() => handleDelete(itemProps.file.path)}
+                        title="Delete (danger)"
+                    >
+                        <X class="h-3 w-3" />
                     </button>
                 </Show>
             </div>
@@ -303,15 +366,30 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                         value={commitMessage()}
                         onInput={(e) => setCommitMessage(e.currentTarget.value)}
                     />
-                    <button
-                        type="button"
-                        class="w-full px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
-                        disabled={!commitMessage().trim() || git.stagedChanges().length === 0 || git.loading()}
-                        onClick={handleCommit}
-                        title="Commit"
-                    >
-                        Commit ({git.stagedChanges().length} staged)
-                    </button>
+                    <div class="flex items-center gap-1">
+                        <button
+                            type="button"
+                            class="flex-1 px-2 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded disabled:opacity-50"
+                            disabled={!commitMessage().trim() || git.stagedChanges().length === 0 || git.loading()}
+                            onClick={handleCommit}
+                            title="Commit"
+                        >
+                            Commit ({git.stagedChanges().length} staged)
+                        </button>
+                        <button
+                            type="button"
+                            class="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50"
+                            disabled={git.loading() || (git.status()?.ahead ?? 0) <= 0}
+                            onClick={handlePush}
+                            title={(() => {
+                                const currentBranch = git.branches().find((b) => b.current)
+                                const hasUpstream = !!currentBranch?.upstream
+                                return hasUpstream ? "Push to remote" : "Publish Branch"
+                            })()}
+                        >
+                            <UploadCloud class="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
 
                 <Show when={git.error()}>
@@ -431,7 +509,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                                 <Show when={git.untrackedChanges().length === 0}>
                                     <p class="text-xs text-secondary px-2 py-1">No untracked files</p>
                                 </Show>
-                                <For each={git.untrackedChanges()}>{(file) => <FileChangeItem file={file} showStage />}</For>
+                                <For each={git.untrackedChanges()}>{(file) => <FileChangeItem file={file} showStage showDelete />}</For>
                             </div>
                         </Show>
                     </div>

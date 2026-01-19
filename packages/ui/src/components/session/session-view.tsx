@@ -1,10 +1,13 @@
-import { Show, createMemo, createEffect, type Component } from "solid-js"
+import { Show, For, createMemo, createEffect, type Component } from "solid-js"
+import { Expand } from "lucide-solid"
 import type { Session } from "../../types/session"
 import type { Attachment } from "../../types/attachment"
 import type { ClientPart } from "../../types/message"
 import MessageSection from "../message-section"
 import { messageStoreBus } from "../../stores/message-v2/bus"
 import PromptInput from "../prompt-input"
+import type { Attachment as PromptAttachment } from "../../types/attachment"
+import { getAttachments, removeAttachment } from "../../stores/attachments"
 import { instances } from "../../stores/instances"
 import { loadMessages, sendMessage, forkSession, isSessionMessagesLoading, setActiveParentSession, setActiveSession, runShellCommand, abortSession } from "../../stores/sessions"
 import { isSessionBusy as getSessionBusyStatus } from "../../stores/session-status"
@@ -39,6 +42,62 @@ export const SessionView: Component<SessionViewProps> = (props) => {
     if (!currentSession) return false
     return getSessionBusyStatus(props.instanceId, currentSession.id)
   })
+
+  const sessionNeedsInput = createMemo(() => {
+    const currentSession = session()
+    if (!currentSession) return false
+    return Boolean(currentSession.pendingPermission || (currentSession as any).pendingQuestion)
+  })
+
+  const attachments = createMemo(() => getAttachments(props.instanceId, props.sessionId))
+
+  function handleExpandTextAttachment(attachment: PromptAttachment) {
+    if (attachment.source.type !== "text") return
+
+    const textarea = rootRef?.querySelector(".prompt-input") as HTMLTextAreaElement | null
+    const value = attachment.source.value
+    const match = attachment.display.match(/pasted #(\d+)/)
+    const placeholder = match ? `[pasted #${match[1]}]` : null
+
+    const currentText = textarea?.value ?? ""
+
+    let nextText = currentText
+    let selectionTarget: number | null = null
+
+    if (placeholder) {
+      const placeholderIndex = currentText.indexOf(placeholder)
+      if (placeholderIndex !== -1) {
+        nextText =
+          currentText.substring(0, placeholderIndex) +
+          value +
+          currentText.substring(placeholderIndex + placeholder.length)
+        selectionTarget = placeholderIndex + value.length
+      }
+    }
+
+    if (nextText === currentText) {
+      if (textarea) {
+        const start = textarea.selectionStart
+        const end = textarea.selectionEnd
+        nextText = currentText.substring(0, start) + value + currentText.substring(end)
+        selectionTarget = start + value.length
+      } else {
+        nextText = currentText + value
+      }
+    }
+
+    if (textarea) {
+      textarea.value = nextText
+      textarea.dispatchEvent(new Event("input", { bubbles: true }))
+      textarea.focus()
+      if (selectionTarget !== null) {
+        textarea.setSelectionRange(selectionTarget, selectionTarget)
+      }
+    }
+
+    removeAttachment(props.instanceId, props.sessionId, attachment.id)
+  }
+
   let scrollToBottomHandle: (() => void) | undefined
   let rootRef: HTMLDivElement | undefined
   function scheduleScrollToBottom() {
@@ -224,17 +283,52 @@ export const SessionView: Component<SessionViewProps> = (props) => {
              />
 
 
-            <PromptInput
-              instanceId={props.instanceId}
-              instanceFolder={props.instanceFolder}
-              sessionId={activeSession.id}
-              onSend={handleSendMessage}
-              onRunShell={handleRunShell}
-              escapeInDebounce={props.escapeInDebounce}
-              isSessionBusy={sessionBusy()}
-              onAbortSession={handleAbortSession}
-              registerQuoteHandler={registerQuoteHandler}
-            />
+              <Show when={attachments().length > 0}>
+                <div class="flex flex-wrap items-center gap-1.5 border-t px-3 py-2" style="border-color: var(--border-base);">
+                  <For each={attachments()}>
+                    {(attachment) => {
+                      const isText = attachment.source.type === "text"
+                      return (
+                        <div class="attachment-chip" title={attachment.source.type === "file" ? attachment.source.path : undefined}>
+                          <span class="font-mono">{attachment.display}</span>
+                          <Show when={isText}>
+                            <button
+                              type="button"
+                              class="attachment-expand"
+                              onClick={() => handleExpandTextAttachment(attachment)}
+                              aria-label="Expand pasted text"
+                              title="Insert pasted text"
+                            >
+                              <Expand class="h-3 w-3" aria-hidden="true" />
+                            </button>
+                          </Show>
+                          <button
+                            type="button"
+                            class="attachment-remove"
+                            onClick={() => removeAttachment(props.instanceId, props.sessionId, attachment.id)}
+                            aria-label="Remove attachment"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </div>
+              </Show>
+
+              <PromptInput
+               instanceId={props.instanceId}
+               instanceFolder={props.instanceFolder}
+               sessionId={activeSession.id}
+               onSend={handleSendMessage}
+               onRunShell={handleRunShell}
+               escapeInDebounce={props.escapeInDebounce}
+               isSessionBusy={sessionBusy()}
+               disabled={sessionNeedsInput()}
+               onAbortSession={handleAbortSession}
+               registerQuoteHandler={registerQuoteHandler}
+             />
           </div>
         )
       }}

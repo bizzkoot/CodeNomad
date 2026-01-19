@@ -26,6 +26,10 @@ export function isToolStateError(state: ToolState): state is ToolStateError {
 
 export function getToolIcon(tool: string): string {
   switch (tool) {
+    case "ask_user":
+    case "codenomad_ask_user":
+    case "question":
+      return "❓"
     case "bash":
       return "⚡"
     case "edit":
@@ -45,6 +49,8 @@ export function getToolIcon(tool: string): string {
     case "todowrite":
     case "todoread":
       return "📋"
+    case "question":
+      return "❓"
     case "list":
       return "📁"
     case "patch":

@@ -18,6 +18,7 @@ export interface TimelineSegment {
   shortLabel?: string
   variant?: "auto" | "manual"
   toolPartIds?: string[]
+  isQuestionTool?: boolean
 }
 
 interface MessageTimelineProps {
@@ -49,6 +50,7 @@ interface PendingSegment {
   toolTypeLabels: string[]
   toolIcons: string[]
   toolPartIds: string[]
+  toolNames: string[]
   hasPrimaryText: boolean
 }
 
@@ -170,10 +172,14 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
     const tooltip = isToolSegment
       ? formatToolTooltip(pending.toolTitles)
       : formatTextsTooltip(
-          [...pending.texts, ...pending.reasoningTexts],
-          pending.type === "user" ? "User message" : "Assistant response",
-        )
- 
+        [...pending.texts, ...pending.reasoningTexts],
+        pending.type === "user" ? "User message" : "Assistant response",
+      )
+
+    // Check if this is a question tool
+    const toolName = isToolSegment ? (pending.toolNames[0] || '') : ''
+    const isQuestionTool = toolName === 'ask_user' || toolName === 'question' || toolName === 'codenomad_ask_user'
+
     result.push({
       id: `${record.id}:${segmentIndex}`,
       messageId: record.id,
@@ -182,15 +188,16 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
       tooltip,
       shortLabel,
       toolPartIds: isToolSegment ? pending.toolPartIds : undefined,
+      isQuestionTool: isToolSegment ? isQuestionTool : undefined,
     })
     segmentIndex += 1
     pending = null
   }
- 
+
   const ensureSegment = (type: TimelineSegmentType): PendingSegment => {
     if (!pending || pending.type !== type) {
       flushPending()
-      pending = { type, texts: [], reasoningTexts: [], toolTitles: [], toolTypeLabels: [], toolIcons: [], toolPartIds: [], hasPrimaryText: type !== "assistant" }
+      pending = { type, texts: [], reasoningTexts: [], toolTitles: [], toolTypeLabels: [], toolIcons: [], toolPartIds: [], toolNames: [], hasPrimaryText: type !== "assistant" }
     }
     return pending!
   }
@@ -204,9 +211,11 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
     if (part.type === "tool") {
       const target = ensureSegment("tool")
       const toolPart = part as ToolCallPart
+      const toolName = typeof toolPart.tool === "string" ? toolPart.tool : "tool"
       target.toolTitles.push(getToolTitle(toolPart))
       target.toolTypeLabels.push(getToolTypeLabel(toolPart))
-      target.toolIcons.push(getToolIcon(typeof toolPart.tool === "string" ? toolPart.tool : "tool"))
+      target.toolIcons.push(getToolIcon(toolName))
+      target.toolNames.push(toolName)
       if (typeof toolPart.id === "string" && toolPart.id.length > 0) {
         target.toolPartIds.push(toolPart.id)
       }
@@ -222,7 +231,7 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
       }
       continue
     }
- 
+
     if (part.type === "compaction") {
       flushPending()
       const isAuto = Boolean((part as any)?.auto)
@@ -241,7 +250,7 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
     if (part.type === "step-start" || part.type === "step-finish") {
       continue
     }
- 
+
     const text = collectTextFromPart(part)
     if (text.trim().length === 0) continue
     const target = ensureSegment(defaultContentType)
@@ -253,7 +262,7 @@ export function buildTimelineSegments(instanceId: string, record: MessageRecord)
 
 
   flushPending()
- 
+
   return result
 }
 
@@ -267,7 +276,7 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
   const [tooltipElement, setTooltipElement] = createSignal<HTMLDivElement | null>(null)
   let hoverTimer: number | null = null
   const showTools = () => props.showToolSegments ?? true
- 
+
   const registerButtonRef = (segmentId: string, element: HTMLButtonElement | null) => {
     if (element) {
       buttonRefs.set(segmentId, element)
@@ -275,14 +284,14 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
       buttonRefs.delete(segmentId)
     }
   }
- 
+
   const clearHoverTimer = () => {
     if (hoverTimer !== null && typeof window !== "undefined") {
       window.clearTimeout(hoverTimer)
       hoverTimer = null
     }
   }
- 
+
   const handleMouseEnter = (segment: TimelineSegment, event: MouseEvent) => {
     if (typeof window === "undefined") return
     clearHoverTimer()
@@ -299,7 +308,7 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
     setHoveredSegment(null)
     setHoverAnchorRect(null)
   }
- 
+
   createEffect(() => {
     if (typeof window === "undefined") return
     const anchor = hoverAnchorRect()
@@ -358,7 +367,7 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
     if (!record) return null
     return { messageId: segment.messageId }
   })
- 
+
   return (
     <div class="message-timeline" role="navigation" aria-label="Message timeline">
       <For each={props.segments}>
@@ -379,28 +388,28 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
 
           const isHidden = () => segment.type === "tool" && !(showTools() || isActive() || hasActivePermission())
 
-           const shortLabelContent = () => {
-             if (segment.type === "tool") {
-               if (hasActivePermission()) {
-                 return <ShieldAlert class="message-timeline-icon" aria-hidden="true" />
-               }
-               return segment.shortLabel ?? getToolIcon("tool")
-             }
-             if (segment.type === "compaction") {
-               return <FoldVertical class="message-timeline-icon" aria-hidden="true" />
-             }
-             if (segment.type === "user") {
-               return <UserIcon class="message-timeline-icon" aria-hidden="true" />
-             }
-             return <BotIcon class="message-timeline-icon" aria-hidden="true" />
-           }
+          const shortLabelContent = () => {
+            if (segment.type === "tool") {
+              if (hasActivePermission()) {
+                return <ShieldAlert class="message-timeline-icon" aria-hidden="true" />
+              }
+              return segment.shortLabel ?? getToolIcon("tool")
+            }
+            if (segment.type === "compaction") {
+              return <FoldVertical class="message-timeline-icon" aria-hidden="true" />
+            }
+            if (segment.type === "user") {
+              return <UserIcon class="message-timeline-icon" aria-hidden="true" />
+            }
+            return <BotIcon class="message-timeline-icon" aria-hidden="true" />
+          }
 
           return (
-             <button
-               ref={(el) => registerButtonRef(segment.id, el)}
-               type="button"
-               data-variant={segment.variant}
-               class={`message-timeline-segment message-timeline-${segment.type} ${hasActivePermission() ? "message-timeline-segment-permission" : ""} ${segment.type === "compaction" ? `message-timeline-compaction-${segment.variant ?? "manual"}` : ""} ${isActive() ? "message-timeline-segment-active" : ""} ${isHidden() ? "message-timeline-segment-hidden" : ""}`}
+            <button
+              ref={(el) => registerButtonRef(segment.id, el)}
+              type="button"
+              data-variant={segment.variant}
+              class={`message-timeline-segment message-timeline-${segment.type} ${segment.isQuestionTool ? "message-timeline-question" : ""} ${hasActivePermission() ? "message-timeline-segment-permission" : ""} ${segment.type === "compaction" ? `message-timeline-compaction-${segment.variant ?? "manual"}` : ""} ${isActive() ? "message-timeline-segment-active" : ""} ${isHidden() ? "message-timeline-segment-hidden" : ""}`}
 
               aria-current={isActive() ? "true" : undefined}
               aria-hidden={isHidden() ? "true" : undefined}
@@ -436,6 +445,6 @@ const MessageTimeline: Component<MessageTimelineProps> = (props) => {
     </div>
   )
 }
- 
+
 export default MessageTimeline
 

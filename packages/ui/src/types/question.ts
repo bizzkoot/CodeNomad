@@ -33,6 +33,8 @@ export interface QuestionRequest {
         messageID: string
         callID: string
     }
+    /** Source of question: 'opencode' (existing) or 'mcp' (new native tool) */
+    source?: 'opencode' | 'mcp'
 }
 
 export interface QuestionAnswer {

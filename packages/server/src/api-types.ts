@@ -316,6 +316,12 @@ export interface GitStageRequest {
   paths: string[]
 }
 
+export interface GitPushResponse {
+  success: boolean
+  pushed?: boolean
+  message?: string
+}
+
 export type {
   Preferences,
   ModelPreference,

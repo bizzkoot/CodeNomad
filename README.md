@@ -65,6 +65,19 @@ This will start the server and you can access it at http://localhost:3000
 - **Command Palette**: A single global palette to jump tabs, launch tools, and control everything.
 - **Deep Task Awareness**: Monitor background tasks and child sessions without losing flow.
 
+### ⚡ Feature Spotlight: Zero-Cost `ask_user` (MCP)
+
+We've replaced the standard `question` tool with a native **Model Context Protocol (MCP)** implementation called `ask_user`.
+
+| Feature | Legacy `question` Tool | New `ask_user` MCP Tool |
+| :--- | :--- | :--- |
+| **Cost** | Consumes premium requests per answer | **Zero** premium request consumption |
+| **Architecture** | Remote API loop | Local IPC + MCP Server |
+| **Reliability** | Prone to timeouts on slow answers | No timeouts, robust state management |
+| **UX** | Standard | Rich Markdown, Minimizable Wizard |
+
+This change is critical for users on metered plans (like GitHub Copilot), effectively "unlocking" unlimited user interactions without draining quotas.
+
 ## Requirements
 
 - **[OpenCode CLI](https://opencode.ai)**: Must be installed and available in your `PATH`.
@@ -79,11 +92,12 @@ This fork includes the following Pull Requests that modify or enhance the origin
 | [#5](https://github.com/bizzkoot/CodeNomad/pull/5) | Add Lightweight Source Control Panel | @bizzkoot | Closed | Adds VS Code-like Git interface with status tracking, branch management, file staging, commit interface, and syntax-highlighted diff viewer integrated into the right sidebar (8 files changed, 1275 insertions) |
 | [#6](https://github.com/bizzkoot/CodeNomad/pull/6) | Add Folder Tree Browser and Markdown File Preview | @bizzkoot | Closed | Introduces VSCode-style file tree modal for workspace navigation and in-app markdown viewer with GitHub-style rendering and LRU caching (port from origin/dev branch) |
 | [#7](https://github.com/bizzkoot/CodeNomad/pull/7) | Add 'question' Tool Integration | @bizzkoot | Closed | Integrates the `question` tool enabling AI agents to request user input via an interactive multi-tab wizard. Features single/multi-select options, custom text inputs, keyboard navigation, and SSE event handling via a minimal SDK passthrough architecture (5 new files, 9 modified) |
+| [#13](https://github.com/bizzkoot/CodeNomad/pull/13) | Native MCP 'ask_user' & Search Overhaul | @bizzkoot | Open | **Major Functional Leap**:<br>• **Zero-Cost `ask_user`**: Native MCP server integration preventing premium request usage.<br>• **Deep Search**: Auto-expanding search results within collapsed code/chat blocks (superior to standard find).<br>• **Smart UI**: Minimizable Question Wizard, Markdown rendering, and Source Control enhancements (Publish Branch, Untracked file mgmt). |
 
 > [!NOTE]
 > These PRs are not included in upstream and represent divergent functionality from the original CodeNomad repository. Please ensure you understand these changes before switching between the original fork and this repository.
 
-_Last updated: 2026-01-10_
+_Last updated: 2026-01-19_
 
 ## Troubleshooting
 

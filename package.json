@@ -1,10 +1,11 @@
 {
   "name": "codenomad-workspace",
-  "version": "0.6.0",
+  "version": "0.7.2",
   "private": true,
   "description": "CodeNomad monorepo workspace",
   "workspaces": {
     "packages": [
+      "packages/mcp-server",
       "packages/server",
       "packages/ui",
       "packages/electron-app",

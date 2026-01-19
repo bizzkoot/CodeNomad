@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "child_process"
-import { existsSync } from "fs"
+import { existsSync, readFileSync } from "fs"
 import path, { join } from "path"
 import { fileURLToPath } from "url"
 
@@ -115,6 +115,82 @@ async function build(platform) {
     await run(npmCmd, ["run", "build"])
 
     console.log("\n📦 Step 3/3: Packaging binaries...\n")
+
+    // Step 2.5: Copy CLI dist and node_modules to resources
+    console.log("\n📦 Step 2.5/3: Preparing CLI resources...")
+    const { cpSync, renameSync, writeFileSync, existsSync, rmSync, readdirSync, statSync, readFileSync } = await import("fs")
+    const { join } = await import("path")
+
+    const serverDir = join(process.cwd(), "../server")
+    const resourcesDir = join(process.cwd(), "resources")
+    const cliDest = join(resourcesDir, "cli")
+    const workspaceRootNodeModules = join(process.cwd(), "../../node_modules")
+
+    // Ensure clean destination
+    if (existsSync(cliDest)) rmSync(cliDest, { recursive: true, force: true })
+
+    console.log(`Copying CLI from ${serverDir} to ${cliDest}`)
+    cpSync(serverDir, cliDest, {
+      recursive: true,
+      filter: (source, destination) => {
+        return !source.includes(".bin") && !source.includes("node_modules")
+      }
+    })
+
+    // Install production dependencies in the copied CLI to ensure all transitive deps are resolved
+    console.log(`\n📦 Installing production dependencies in copied CLI...`)
+    const installResult = await run(npmCmd, ["install", "--production", "--no-package-lock"], {
+      cwd: cliDest,
+      stdio: "pipe",
+    })
+    console.log(`✓ Dependencies installed`)
+
+    // Rename node_modules -> _node_modules to bypass electron-builder ignore
+    if (existsSync(join(cliDest, "node_modules"))) {
+      console.log("✓ Renaming node_modules -> _node_modules to bypass ignore rules")
+      renameSync(join(cliDest, "node_modules"), join(cliDest, "_node_modules"))
+    } else {
+      console.warn("⚠️ node_modules not found in CLI dir")
+    }
+
+    // Create boot.js wrapper that sets up module resolution
+    const bootContent = `
+import { existsSync, symlinkSync, copyFileSync, mkdirSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const hiddenPath = join(__dirname, '_node_modules');
+const realPath = join(__dirname, 'node_modules');
+
+// Create symlink from node_modules -> _node_modules (works in most cases)
+if (existsSync(hiddenPath) && !existsSync(realPath)) {
+  try {
+    // Try creating a symlink first (works if we have write permissions)
+    symlinkSync(hiddenPath, realPath, 'dir');
+    console.log('[CodeNomad] Created symlink: node_modules -> _node_modules');
+  } catch (e) {
+    // Symlink failed, likely due to permissions
+    // Set NODE_PATH as fallback for child processes
+    process.env.NODE_PATH = hiddenPath;
+    console.warn('[CodeNomad] Could not create symlink, using NODE_PATH fallback');
+  }
+}
+
+// Import the CLI entry point
+await import('./dist/bin.js');
+`;
+    writeFileSync(join(cliDest, "boot.js"), bootContent)
+    console.log("✓ Created boot.js wrapper")
+
+    // Cleanup source files
+    const filesToRemove = ["src", "tsconfig.json", ".gitignore", "nodemon.json"]
+    filesToRemove.forEach(f => {
+      const p = join(cliDest, f)
+      if (existsSync(p)) rmSync(p, { recursive: true, force: true })
+    })
     const distPath = join(appDir, "dist")
     if (!existsSync(distPath)) {
       throw new Error("dist/ directory not found. Build failed.")

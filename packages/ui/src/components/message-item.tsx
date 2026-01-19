@@ -283,10 +283,12 @@ export default function MessageItem(props: MessageItemProps) {
         </Show>
 
         <For each={messageParts()}>
-          {(part) => (
+          {(part, index) => (
             <MessagePart
               part={part}
               messageType={props.record.role}
+              messageId={props.record.id}
+              partIndex={index()}
               instanceId={props.instanceId}
               sessionId={props.sessionId}
               onRendered={props.onContentRendered}
