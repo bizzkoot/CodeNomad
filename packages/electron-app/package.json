@@ -35,15 +35,18 @@
   },
   "dependencies": {
     "@codenomad/ui": "file:../ui",
+    "@develar/schema-utils": "^2.6.5",
     "@fastify/reply-from": "12.5.0",
     "@neuralnomads/codenomad": "file:../server",
+    "dotenv": "^9.0.2",
+    "sax": "^1.4.4",
     "ts-node": "1.7.1"
   },
   "devDependencies": {
     "7zip-bin": "^5.2.0",
     "app-builder-bin": "^4.2.0",
     "electron": "39.0.0",
-    "electron-builder": "^23.0.6",
+    "electron-builder": "^26.4.0",
     "electron-vite": "4.0.1",
     "png2icons": "^2.0.1",
     "pngjs": "^7.0.0",
