@@ -60,6 +60,8 @@ import FolderTreeBrowser from "../folder-tree-browser"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
 import QuestionNotificationBanner from "../question-notification-banner"
+import FailedNotificationBanner from "../failed-notification-banner"
+import FailedNotificationPanel from "../failed-notification-panel"
 import { AskQuestionWizard } from "../askquestion-wizard"
 import Kbd from "../kbd"
 import { TodoListView } from "../tool-call/renderers/todo"
@@ -68,6 +70,7 @@ import SessionView from "../session/session-view"
 import SearchPanel from "../search-panel"
 import { formatTokenTotal } from "../../lib/formatters"
 import { sseManager } from "../../lib/sse-manager"
+import "../../styles/components/failed-notification.css"
 import { getLogger } from "../../lib/logger"
 import { serverApi } from "../../lib/api-client"
 import { getBackgroundProcesses, loadBackgroundProcesses } from "../../stores/background-processes"
@@ -163,6 +166,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
   const [questionWizardOpen, setQuestionWizardOpen] = createSignal(false)
   const [questionWizardMinimized, setQuestionWizardMinimized] = createSignal(false)
+  const [failedPanelOpen, setFailedPanelOpen] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
 
@@ -628,7 +632,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     } catch (error) {
       console.error("[Instance Shell] Failed to initialize MCP bridge:", error)
     }
-    
+
     // Cleanup MCP bridge when instance unmounts
     onCleanup(() => {
       console.log(`[Instance Shell] Cleaning up MCP bridge for instance: ${props.instance.id}`)
@@ -1470,6 +1474,11 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                   />
                 </Show>
 
+                <FailedNotificationBanner
+                  instanceId={props.instance.id}
+                  onClick={() => setFailedPanelOpen(true)}
+                />
+
                 <button
                   type="button"
                   class="connection-status-button px-2 py-0.5 text-xs whitespace-nowrap flex-shrink-1 min-w-0"
@@ -1558,6 +1567,10 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                     }}
                   />
                 </Show>
+                <FailedNotificationBanner
+                  instanceId={props.instance.id}
+                  onClick={() => setFailedPanelOpen(true)}
+                />
               </div>
               <button
                 type="button"
@@ -1709,6 +1722,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         onClose={() => setPermissionModalOpen(false)}
       />
 
+      <FailedNotificationPanel
+        instanceId={props.instance.id}
+        isOpen={failedPanelOpen()}
+        onClose={() => setFailedPanelOpen(false)}
+      />
+
       <Show when={questionWizardOpen() && getPendingQuestion(props.instance.id)}>
         {(pending) => {
           // Map questions to wizard format (like shuvcode does)
@@ -1725,7 +1744,15 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
           }))
 
           return (
-            <div class="askquestion-wizard-overlay">
+            <div
+              class="askquestion-wizard-overlay"
+              onClick={(e) => {
+                // Minimize if clicking the backdrop (not the content)
+                if (e.target === e.currentTarget) {
+                  handleQuestionMinimize()
+                }
+              }}
+            >
               <AskQuestionWizard
                 questions={mappedQuestions()}
                 onSubmit={handleQuestionSubmit}

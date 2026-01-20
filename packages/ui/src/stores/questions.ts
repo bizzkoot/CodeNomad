@@ -1,5 +1,8 @@
 import { createSignal } from "solid-js"
 import type { QuestionRequest } from "../types/question"
+import { getLogger } from "../lib/logger"
+
+const log = getLogger("questions")
 
 /**
  * Question queue management per instance
@@ -41,12 +44,12 @@ export function addQuestionToQueue(instanceId: string, question: QuestionRequest
     setQuestionQueues((prev) => {
         const next = new Map(prev)
         const queue = next.get(instanceId) ?? []
-        
+
         // Don't add if already in queue
         if (queue.some((q) => q.id === question.id)) {
             return next
         }
-        
+
         const updatedQueue = [...queue, question]
         next.set(instanceId, updatedQueue)
         return next
@@ -87,6 +90,44 @@ export function clearQuestionQueue(instanceId: string): void {
         next.delete(instanceId)
         return next
     })
+}
+
+/**
+ * Handle question failure - move from active queue to failed notifications
+ * This is the KEY FIX for ensuring failed questions are properly dismissed
+ */
+export function handleQuestionFailure(
+    instanceId: string,
+    questionId: string,
+    reason: "timeout" | "session-stop" | "cancelled"
+): void {
+    const queue = getQuestionQueue(instanceId)
+    const question = queue.find((q) => q.id === questionId)
+
+    if (question) {
+        // Import on demand to avoid circular dependency and module load issues
+        import("./failed-notifications").then(({ addFailedNotification }) => {
+            // Step 1: Add to failed notifications (persistent storage)
+            addFailedNotification({
+                id: `failed-q-${Date.now()}`,
+                type: "question",
+                title: question.questions[0]?.question || "Question",
+                reason,
+                timestamp: Date.now(),
+                instanceId,
+                questionData: {
+                    questions: question.questions,
+                    requestId: question.id
+                }
+            })
+        }).catch((error) => {
+            log.error("Failed to add question to failed notifications:", error)
+        })
+
+        // Step 2: CRITICAL - Remove from active queue
+        // This ensures the notification badge disappears and it's not shown as "active" anymore
+        removeQuestionFromQueue(instanceId, questionId)
+    }
 }
 
 export { questionQueues }

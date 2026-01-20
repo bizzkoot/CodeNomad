@@ -48,6 +48,13 @@ export function setupMcpBridge(mainWindow: BrowserWindow): void {
             const rejected = globalPendingManager.reject(requestId, new Error('cancelled'));
             if (rejected) {
                 console.log(`[MCP IPC] Request ${requestId} cancelled successfully`);
+                // Notify UI that the question was rejected
+                mainWindow.webContents.send('ask_user.rejected', {
+                    requestId,
+                    reason: 'cancelled',
+                    timedOut: false,
+                    cancelled: true
+                });
             } else {
                 console.warn(`[MCP IPC] No pending request for cancel: ${requestId}`);
             }
@@ -61,6 +68,13 @@ export function setupMcpBridge(mainWindow: BrowserWindow): void {
         console.log('[MCP IPC] Window closed, cleaning up pending requests');
         if (globalPendingManager) {
             for (const request of globalPendingManager.getAll()) {
+                // Notify UI before rejecting (UI may still receive if not fully destroyed)
+                mainWindow.webContents.send('ask_user.rejected', {
+                    requestId: request.id,
+                    reason: 'session-stop',
+                    timedOut: false,
+                    cancelled: false
+                });
                 globalPendingManager.reject(request.id, new Error('Window closed'));
             }
         }

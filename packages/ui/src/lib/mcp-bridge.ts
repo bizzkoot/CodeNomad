@@ -1,5 +1,5 @@
 import type { QuestionAnswer } from '../types/question.js';
-import { addQuestionToQueueWithSource } from '../stores/questions.js';
+import { addQuestionToQueueWithSource, handleQuestionFailure } from '../stores/questions.js';
 
 /**
  * Check if we're in Electron environment
@@ -90,14 +90,14 @@ export function initMcpBridge(instanceId: string): void {
         // Listen for questions from MCP server (via main process)
         const cleanup = electronAPI.mcpOn('ask_user.asked', (payload: any) => {
             const { requestId, questions, title, source } = payload;
-            
+
             // Deduplicate at bridge layer to prevent race conditions
             if (processedQuestions.has(requestId)) {
                 console.log('[MCP Bridge UI] Ignoring duplicate question:', requestId);
                 return;
             }
             processedQuestions.add(requestId);
-            
+
             console.log('[MCP Bridge UI] Received question:', payload);
 
             // Map MCP question format to CodeNomad question format
@@ -116,9 +116,35 @@ export function initMcpBridge(instanceId: string): void {
                 }))
             }, source || 'mcp');
         });
-        
-        // Store cleanup function for this instance
-        cleanupFunctions.set(instanceId, cleanup);
+
+        // Listen for question rejections from MCP server (timeout, cancel, session-stop)
+        const cleanupRejected = electronAPI.mcpOn('ask_user.rejected', (payload: any) => {
+            const { requestId, timedOut, cancelled, reason } = payload;
+            console.log('[MCP Bridge UI] Received question rejection:', payload);
+
+            // Clear from processed questions set
+            processedQuestions.delete(requestId);
+
+            // Determine failure reason
+            let failureReason: 'timeout' | 'cancelled' | 'session-stop' = 'session-stop';
+            if (timedOut) {
+                failureReason = 'timeout';
+            } else if (cancelled) {
+                failureReason = 'cancelled';
+            } else if (reason === 'session-stop') {
+                failureReason = 'session-stop';
+            }
+
+            // Move question to failed notifications
+            handleQuestionFailure(instanceId, requestId, failureReason);
+        });
+
+        // Store cleanup function for this instance (combines both listeners)
+        const originalCleanup = cleanup;
+        cleanupFunctions.set(instanceId, () => {
+            originalCleanup();
+            cleanupRejected();
+        });
 
         console.log('[MCP Bridge UI] Initialized successfully');
     } catch (error) {
