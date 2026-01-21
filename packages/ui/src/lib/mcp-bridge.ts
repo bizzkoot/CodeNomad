@@ -255,6 +255,9 @@ export function initMcpBridge(instanceId: string): void {
 
             // Move question to failed notifications
             handleQuestionFailure(targetInstanceId, requestId, failureReason, folderPath);
+            
+            // Clean up tracking maps to prevent memory leak
+            clearProcessedQuestion(requestId);
         });
 
         // Store cleanup function for this instance (combines both listeners)

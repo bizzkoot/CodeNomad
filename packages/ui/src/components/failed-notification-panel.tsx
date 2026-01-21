@@ -27,11 +27,12 @@ const FailedNotificationPanel: Component<FailedNotificationPanelProps> = (props)
 
     const handleDismiss = (notificationId: string) => {
         removeFailedNotification(props.folderPath, notificationId)
-        // Close panel if no more notifications
-        const currentCount = notifications().length
-        if (currentCount === 0) {
-            props.onClose()
-        }
+        // Close panel if no more notifications (check in next tick after state updates)
+        queueMicrotask(() => {
+            if (notifications().length === 0) {
+                props.onClose()
+            }
+        })
     }
 
     const handleDismissAll = () => {

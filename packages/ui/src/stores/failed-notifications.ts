@@ -2,6 +2,7 @@ import { createSignal, untrack } from "solid-js"
 import type { QuestionInfo } from "../types/question"
 import type { PermissionRequestLike } from "../types/permission"
 import { getLogger } from "../lib/logger"
+import { showToastNotification } from "../lib/notifications"
 
 const log = getLogger("failed-notifications")
 
@@ -34,7 +35,7 @@ export function getStorageKeyForFolder(folderPath: string): string {
     for (let i = 0; i < folderPath.length; i++) {
         const char = folderPath.charCodeAt(i)
         hash = ((hash << 5) - hash) + char
-        hash = hash & hash // Convert to 32bit integer
+        hash = hash | 0 // Convert to 32bit integer
     }
     return Math.abs(hash).toString(36)
 }
@@ -116,6 +117,19 @@ function saveToStorage(folderPath: string, notifications: FailedNotification[]):
     } catch (error) {
         console.error(`[FailedNotifications] saveToStorage ERROR:`, error)
         log.error(`Failed to save notifications for ${folderPath}:`, error)
+        
+        // Check if it's a quota exceeded error
+        if (error instanceof Error && (
+            error.name === 'QuotaExceededError' || 
+            error.message.includes('quota')
+        )) {
+            showToastNotification({
+                title: 'Storage Full',
+                message: 'Cannot save failed notifications. Please clear some browser data.',
+                variant: 'error',
+                duration: 10000
+            })
+        }
     }
 }
 
