@@ -28,6 +28,16 @@ const processedQuestions = new Set<string>();
  * Track which instance a request belongs to
  */
 const requestInstanceMap = new Map<string, string>();
+
+/**
+ * Track retry attempts for timed-out requests
+ */
+const retryAttempts = new Map<string, number>();
+
+/**
+ * Store original question payloads for retry capability
+ */
+const questionPayloads = new Map<string, any>();
 const notifiedQuestionRequests = new Set<string>();
 
 /**
@@ -107,7 +117,7 @@ export function initMcpBridge(instanceId: string): void {
 
         // Listen for questions from MCP server (via main process)
         const cleanup = electronAPI.mcpOn('ask_user.asked', (payload: any) => {
-            const { requestId, questions, title, source } = payload;
+            const { requestId, questions, source } = payload;
 
             // Deduplicate at bridge layer to prevent race conditions
             if (processedQuestions.has(requestId)) {
@@ -117,6 +127,9 @@ export function initMcpBridge(instanceId: string): void {
                 return;
             }
             processedQuestions.add(requestId);
+
+            // Store payload for potential retry
+            questionPayloads.set(requestId, payload);
 
             const activeId = activeInstanceId();
             const targetInstanceId = activeId ?? instanceId;
@@ -160,6 +173,64 @@ export function initMcpBridge(instanceId: string): void {
             const { requestId, timedOut, cancelled, reason } = payload;
             if (import.meta.env.DEV) {
                 console.log('[MCP Bridge UI] Received question rejection:', payload);
+            }
+
+            // Check if this is a timeout and we haven't retried yet
+            const currentRetries = retryAttempts.get(requestId) ?? 0;
+            if (timedOut && currentRetries < 1) {
+                // Retry once: route to active instance again
+                retryAttempts.set(requestId, currentRetries + 1);
+                
+                const storedPayload = questionPayloads.get(requestId);
+                if (storedPayload) {
+                    if (import.meta.env.DEV) {
+                        console.log(`[MCP Bridge UI] Retrying timed-out question ${requestId} (attempt ${currentRetries + 1}/1)`);
+                    }
+
+                    // Clear from processed set to allow re-processing
+                    processedQuestions.delete(requestId);
+                    
+                    // Re-route to active instance
+                    const activeId = activeInstanceId();
+                    if (activeId) {
+                        const { questions, source } = storedPayload;
+                        
+                        // Update target instance for this request
+                        requestInstanceMap.set(requestId, activeId);
+                        
+                        if (import.meta.env.DEV) {
+                            console.log(`[MCP Bridge UI] Routing retry to active instance: ${activeId}`);
+                        }
+
+                        // Re-add to question queue
+                        addQuestionToQueueWithSource(activeId, {
+                            id: requestId,
+                            questions: questions.map((q: any) => ({
+                                id: q.id,
+                                question: q.question,
+                                header: q.question.substring(0, 12) + '...',
+                                options: q.options ? q.options.map((opt: string) => ({
+                                    label: opt,
+                                    description: opt
+                                })) : [],
+                                multiple: q.type === 'multi-select'
+                            }))
+                        }, source || 'mcp');
+
+                        // Re-add to processed set
+                        processedQuestions.add(requestId);
+                        
+                        // Show toast to notify user
+                        showToastNotification({
+                            title: 'Question retried',
+                            message: 'The question timed out and has been routed to your active workspace.',
+                            variant: 'info',
+                            duration: 8000,
+                        });
+                        
+                        return; // Don't proceed with failure handling
+                    }
+                }
             }
 
             // Clear from processed questions set
@@ -222,4 +293,6 @@ export function clearProcessedQuestion(requestId: string): void {
     processedQuestions.delete(requestId);
     requestInstanceMap.delete(requestId);
     notifiedQuestionRequests.delete(requestId);
+    retryAttempts.delete(requestId);
+    questionPayloads.delete(requestId);
 }
