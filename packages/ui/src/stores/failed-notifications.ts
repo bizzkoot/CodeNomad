@@ -121,7 +121,11 @@ function saveToStorage(folderPath: string, notifications: FailedNotification[]):
 
 /**
  * Ensure folder is loaded in memory
- * Updates the signal reactively so components can track changes
+ * 
+ * Loads failed notifications from localStorage for the specified folder path
+ * if not already loaded. Updates the signal reactively so components can track changes.
+ * 
+ * @param folderPath - The workspace folder path to ensure is loaded
  */
 export function ensureLoaded(folderPath: string): void {
     if (loadedInstances.has(folderPath)) return
@@ -226,8 +230,15 @@ export function getFailedNotificationCount(folderPath: string): number {
 }
 
 /**
- * Clean up notifications older than 5 days
- * Call this on app boot and periodically
+ * Clean up notifications older than the configured threshold
+ * 
+ * Removes failed notifications that are older than CLEANUP_DAYS (default 5 days).
+ * Automatically called periodically (every hour) and can be called manually.
+ * Updates both localStorage and in-memory state.
+ * 
+ * @remarks
+ * The cleanup threshold can be configured via VITE_FAILED_NOTIFICATION_CLEANUP_DAYS
+ * environment variable.
  */
 export function cleanupOldNotifications(): void {
     // Safety check: only run in browser environment
@@ -295,7 +306,17 @@ export function cleanupOldNotifications(): void {
 
 /**
  * Preload all failed notifications from localStorage on app startup
- * This ensures notifications are available before components mount
+ * 
+ * Scans all localStorage keys for failed notifications and loads them into memory
+ * before the app renders. This ensures notifications are available immediately
+ * when components mount. Handles both new format (folder-based) and legacy format
+ * (instanceId-based) notifications.
+ * 
+ * Legacy notifications are loaded for display but cannot be persisted when updated.
+ * 
+ * @remarks
+ * Should be called once during app initialization before rendering components.
+ * Called from main.tsx before render().
  */
 export function preloadAllNotifications(): void {
     // Safety check: only run in browser environment
@@ -423,6 +444,24 @@ export function preloadAllNotifications(): void {
                 }
                 log.debug(`After preload, map contains ${map.size} entries:`, Array.from(map.keys()))
             }, 100)
+
+            // Clean up legacy keys from localStorage after loading them into memory
+            if (oldKeysToKeep.length > 0) {
+                setTimeout(() => {
+                    oldKeysToKeep.forEach(({ key }) => {
+                        try {
+                            localStorage.removeItem(key)
+                            log.debug(`Removed legacy notification key: ${key}`)
+                            if (import.meta.env.DEV) {
+                                console.log(`[FailedNotifications] Removed legacy key: ${key}`)
+                            }
+                        } catch (error) {
+                            log.warn(`Failed to remove legacy key ${key}:`, error)
+                        }
+                    })
+                    log.info(`Cleaned up ${oldKeysToKeep.length} legacy notification keys from localStorage`)
+                }, 1000) // Delay cleanup to ensure notifications are displayed first
+            }
         } else {
             if (import.meta.env.DEV) {
                 console.log("[FailedNotifications] No notifications to load")

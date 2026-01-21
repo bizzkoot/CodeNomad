@@ -28,14 +28,6 @@ if (typeof document !== "undefined") {
   }
 }
 
-if (typeof document !== "undefined") {
-  document.documentElement.dataset.runtimeHost = runtimeEnv.host
-  document.documentElement.dataset.runtimePlatform = runtimeEnv.platform
-  
-  // Preload failed notifications from localStorage on app startup
-  preloadAllNotifications()
-}
-
 render(
   () => (
     <ConfigProvider>
