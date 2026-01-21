@@ -88,20 +88,30 @@ function loadFromStorage(folderPath: string): FailedNotification[] {
  */
 function saveToStorage(folderPath: string, notifications: FailedNotification[]): void {
     try {
-        console.log(`[FailedNotifications] saveToStorage called for folder: ${folderPath}`)
-        console.log(`[FailedNotifications] saveToStorage: ${notifications.length} notifications to save`)
+        if (import.meta.env.DEV) {
+            console.log(`[FailedNotifications] saveToStorage called for folder: ${folderPath}`)
+            console.log(`[FailedNotifications] saveToStorage: ${notifications.length} notifications to save`)
+        }
         
         const storageKey = `${STORAGE_KEY_PREFIX}${getStorageKeyForFolder(folderPath)}`
-        console.log(`[FailedNotifications] saveToStorage: storageKey = ${storageKey}`)
+        if (import.meta.env.DEV) {
+            console.log(`[FailedNotifications] saveToStorage: storageKey = ${storageKey}`)
+        }
         
         if (notifications.length === 0) {
-            console.log(`[FailedNotifications] saveToStorage: removing key (0 notifications)`)
+            if (import.meta.env.DEV) {
+                console.log(`[FailedNotifications] saveToStorage: removing key (0 notifications)`)
+            }
             localStorage.removeItem(storageKey)
         } else {
             const json = JSON.stringify(notifications)
-            console.log(`[FailedNotifications] saveToStorage: saving ${json.length} bytes to localStorage`)
+            if (import.meta.env.DEV) {
+                console.log(`[FailedNotifications] saveToStorage: saving ${json.length} bytes to localStorage`)
+            }
             localStorage.setItem(storageKey, json)
-            console.log(`[FailedNotifications] saveToStorage: saved! localStorage.length now = ${localStorage.length}`)
+            if (import.meta.env.DEV) {
+                console.log(`[FailedNotifications] saveToStorage: saved! localStorage.length now = ${localStorage.length}`)
+            }
         }
     } catch (error) {
         console.error(`[FailedNotifications] saveToStorage ERROR:`, error)
@@ -290,14 +300,18 @@ export function cleanupOldNotifications(): void {
 export function preloadAllNotifications(): void {
     // Safety check: only run in browser environment
     if (typeof window === "undefined" || typeof localStorage === "undefined") {
-        console.log("[FailedNotifications] Cannot preload - window or localStorage not available")
+        if (import.meta.env.DEV) {
+            console.log("[FailedNotifications] Cannot preload - window or localStorage not available")
+        }
         return
     }
 
     try {
-        console.log("[FailedNotifications] Starting preload...")
-        console.log("[FailedNotifications] localStorage length:", localStorage.length)
-        console.log("[FailedNotifications] STORAGE_KEY_PREFIX:", STORAGE_KEY_PREFIX)
+        if (import.meta.env.DEV) {
+            console.log("[FailedNotifications] Starting preload...")
+            console.log("[FailedNotifications] localStorage length:", localStorage.length)
+            console.log("[FailedNotifications] STORAGE_KEY_PREFIX:", STORAGE_KEY_PREFIX)
+        }
 
         log.debug("Starting notification preload...")
         const folderPaths = new Set<string>()
@@ -305,11 +319,15 @@ export function preloadAllNotifications(): void {
 
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i)
-            console.log(`[FailedNotifications] Checking key ${i}: ${key}`)
+            if (import.meta.env.DEV) {
+                console.log(`[FailedNotifications] Checking key ${i}: ${key}`)
+            }
             if (key?.startsWith(STORAGE_KEY_PREFIX)) {
                 const stored = localStorage.getItem(key)
                 if (stored) {
-                    console.log(`[FailedNotifications] Found storage key: ${key}`)
+                    if (import.meta.env.DEV) {
+                        console.log(`[FailedNotifications] Found storage key: ${key}`)
+                    }
                     try {
                         const parsed = JSON.parse(stored)
                         if (Array.isArray(parsed)) {
@@ -317,12 +335,16 @@ export function preloadAllNotifications(): void {
                                 if (n.folderPath) {
                                     // New format - has folderPath, extract and use
                                     folderPaths.add(n.folderPath)
-                                    console.log(`[FailedNotifications] Found new format for folder: ${n.folderPath}`)
+                                    if (import.meta.env.DEV) {
+                                        console.log(`[FailedNotifications] Found new format for folder: ${n.folderPath}`)
+                                    }
                                     log.debug(`Found new format notifications for folder: ${n.folderPath}`)
                                 } else if (n.instanceId) {
                                     // Old format - has instanceId but no folderPath
                                     // We'll load these for display but can't persist them
-                                    console.log(`[FailedNotifications] Found old format with instanceId: ${n.instanceId}`)
+                                    if (import.meta.env.DEV) {
+                                        console.log(`[FailedNotifications] Found old format with instanceId: ${n.instanceId}`)
+                                    }
                                     log.debug(`Found old format notification (instanceId: ${n.instanceId})`)
                                 }
                             })
@@ -338,8 +360,10 @@ export function preloadAllNotifications(): void {
             }
         }
 
-        console.log(`[FailedNotifications] Found ${folderPaths.size} folders with new format`)
-        console.log(`[FailedNotifications] Found ${oldKeysToKeep.length} old format entries`)
+        if (import.meta.env.DEV) {
+            console.log(`[FailedNotifications] Found ${folderPaths.size} folders with new format`)
+            console.log(`[FailedNotifications] Found ${oldKeysToKeep.length} old format entries`)
+        }
 
         // Load all folders into memory
         const notificationsToLoad = new Map<string, FailedNotification[]>()
@@ -352,7 +376,9 @@ export function preloadAllNotifications(): void {
             }
         })
 
-        console.log(`[FailedNotifications] Loading ${notificationsToLoad.size} folders into map`)
+        if (import.meta.env.DEV) {
+            console.log(`[FailedNotifications] Loading ${notificationsToLoad.size} folders into map`)
+        }
 
         if (notificationsToLoad.size > 0 || oldKeysToKeep.length > 0) {
             setFailedNotificationsMap((prev) => {
@@ -371,7 +397,9 @@ export function preloadAllNotifications(): void {
                     }
                 })
 
-                console.log(`[FailedNotifications] Map now has ${next.size} entries`)
+                if (import.meta.env.DEV) {
+                    console.log(`[FailedNotifications] Map now has ${next.size} entries`)
+                }
                 return next
             })
 
@@ -383,16 +411,22 @@ export function preloadAllNotifications(): void {
                 (sum, item) => sum + item.notifications.length,
                 0
             )
-            console.log(`[FailedNotifications] Preloaded ${totalCount} new + ${oldCount} old notifications`)
+            if (import.meta.env.DEV) {
+                console.log(`[FailedNotifications] Preloaded ${totalCount} new + ${oldCount} old notifications`)
+            }
             log.debug(`Preloaded ${totalCount} new + ${oldCount} old notifications for ${notificationsToLoad.size} folders + ${oldKeysToKeep.length} instance IDs`)
 
             setTimeout(() => {
                 const map = failedNotificationsMap()
-                console.log(`[FailedNotifications] After preload, map contains ${map.size} entries:`, Array.from(map.keys()))
+                if (import.meta.env.DEV) {
+                    console.log(`[FailedNotifications] After preload, map contains ${map.size} entries:`, Array.from(map.keys()))
+                }
                 log.debug(`After preload, map contains ${map.size} entries:`, Array.from(map.keys()))
             }, 100)
         } else {
-            console.log("[FailedNotifications] No notifications to load")
+            if (import.meta.env.DEV) {
+                console.log("[FailedNotifications] No notifications to load")
+            }
         }
     } catch (error) {
         console.error("[FailedNotifications] Preload error:", error)

@@ -228,11 +228,25 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   // Auto-open question wizard when a pending question appears (unless minimized)
   createEffect(() => {
     const pending = getPendingQuestion(props.instance.id)
+    if (import.meta.env.DEV) {
+      console.log('[Instance Shell] createEffect check:', {
+        instanceId: props.instance.id,
+        pendingQuestionId: pending?.id ?? null,
+        minimized: questionWizardMinimized(),
+        willOpen: !!(pending && !questionWizardMinimized())
+      })
+    }
     if (pending && !questionWizardMinimized()) {
       // Auto-open only if user hasn't minimized
+      if (import.meta.env.DEV) {
+        console.log('[Instance Shell] Opening question wizard for:', pending.id)
+      }
       setQuestionWizardOpen(true)
     } else if (!pending) {
       // Reset states when no pending questions
+      if (import.meta.env.DEV) {
+        console.log('[Instance Shell] No pending question, closing wizard')
+      }
       setQuestionWizardOpen(false)
       setQuestionWizardMinimized(false)
     }
@@ -619,14 +633,20 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
   // Initialize MCP bridge for this instance
   onMount(() => {
-    console.log('[Instance Shell] onMount fired - checking window...')
-    console.log('[Instance Shell] window type:', typeof window)
-    console.log('[Instance Shell] window exists:', typeof window !== 'undefined')
+    if (import.meta.env.DEV) {
+      console.log('[Instance Shell] onMount fired - checking window...')
+      console.log('[Instance Shell] window type:', typeof window)
+      console.log('[Instance Shell] window exists:', typeof window !== 'undefined')
+    }
     if (typeof window === "undefined") {
-      console.log('[Instance Shell] window is undefined, skipping MCP bridge init')
+      if (import.meta.env.DEV) {
+        console.log('[Instance Shell] window is undefined, skipping MCP bridge init')
+      }
       return
     }
-    console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
+    if (import.meta.env.DEV) {
+      console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
+    }
     try {
       initMcpBridge(props.instance.id)
     } catch (error) {
@@ -635,7 +655,9 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
     // Cleanup MCP bridge when instance unmounts
     onCleanup(() => {
-      console.log(`[Instance Shell] Cleaning up MCP bridge for instance: ${props.instance.id}`)
+      if (import.meta.env.DEV) {
+        console.log(`[Instance Shell] Cleaning up MCP bridge for instance: ${props.instance.id}`)
+      }
       try {
         cleanupMcpBridge(props.instance.id)
       } catch (error) {

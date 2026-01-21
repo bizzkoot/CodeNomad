@@ -1,6 +1,7 @@
 import type { QuestionAnswer } from '../types/question.js';
 import { addQuestionToQueueWithSource, handleQuestionFailure } from '../stores/questions.js';
-import { instances } from '../stores/instances';
+import { activeInstanceId, instances } from '../stores/instances';
+import { showToastNotification } from './notifications';
 
 /**
  * Check if we're in Electron environment
@@ -24,10 +25,18 @@ const cleanupFunctions = new Map<string, () => void>();
 const processedQuestions = new Set<string>();
 
 /**
+ * Track which instance a request belongs to
+ */
+const requestInstanceMap = new Map<string, string>();
+const notifiedQuestionRequests = new Set<string>();
+
+/**
  * Send answer to main process (for MCP questions)
  */
 export function sendMcpAnswer(requestId: string, answers: QuestionAnswer[]): void {
-    console.log(`[MCP Bridge UI] Sending answer: ${requestId}`);
+            if (import.meta.env.DEV) {
+                console.log(`[MCP Bridge UI] Sending answer: ${requestId}`);
+            }
 
     try {
         if (isElectronEnvironment()) {
@@ -44,7 +53,9 @@ export function sendMcpAnswer(requestId: string, answers: QuestionAnswer[]): voi
  * Send cancel to main process (for MCP questions)
  */
 export function sendMcpCancel(requestId: string): void {
-    console.log(`[MCP Bridge UI] Sending cancel: ${requestId}`);
+            if (import.meta.env.DEV) {
+                console.log(`[MCP Bridge UI] Sending cancel: ${requestId}`);
+            }
 
     try {
         if (isElectronEnvironment()) {
@@ -63,7 +74,9 @@ export function sendMcpCancel(requestId: string): void {
 export function initMcpBridge(instanceId: string): void {
     // Prevent multiple initializations for same instance
     if (cleanupFunctions.has(instanceId)) {
-        console.log(`[MCP Bridge UI] Already initialized for instance: ${instanceId}, skipping`);
+        if (import.meta.env.DEV) {
+            console.log(`[MCP Bridge UI] Already initialized for instance: ${instanceId}, skipping`);
+        }
         return;
     }
 
@@ -76,7 +89,9 @@ export function initMcpBridge(instanceId: string): void {
         // Ignore if electron not available yet
     }
 
-    console.log(`[MCP Bridge UI] Initializing for instance: ${instanceId}`);
+    if (import.meta.env.DEV) {
+        console.log(`[MCP Bridge UI] Initializing for instance: ${instanceId}`);
+    }
 
     if (!isElectronEnvironment()) {
         console.warn('[MCP Bridge UI] Not in Electron environment, skipping MCP bridge');
@@ -86,7 +101,9 @@ export function initMcpBridge(instanceId: string): void {
     try {
         const electronAPI = (window as any).electronAPI;
 
-        console.log('[MCP Bridge UI] Setting up IPC listeners');
+        if (import.meta.env.DEV) {
+            console.log('[MCP Bridge UI] Setting up IPC listeners');
+        }
 
         // Listen for questions from MCP server (via main process)
         const cleanup = electronAPI.mcpOn('ask_user.asked', (payload: any) => {
@@ -94,16 +111,36 @@ export function initMcpBridge(instanceId: string): void {
 
             // Deduplicate at bridge layer to prevent race conditions
             if (processedQuestions.has(requestId)) {
-                console.log('[MCP Bridge UI] Ignoring duplicate question:', requestId);
+                if (import.meta.env.DEV) {
+                    console.log('[MCP Bridge UI] Ignoring duplicate question:', requestId);
+                }
                 return;
             }
             processedQuestions.add(requestId);
 
-            console.log('[MCP Bridge UI] Received question:', payload);
+            const activeId = activeInstanceId();
+            const targetInstanceId = activeId ?? instanceId;
+            requestInstanceMap.set(requestId, targetInstanceId);
+
+            if (import.meta.env.DEV) {
+                console.log('[MCP Bridge UI] Received question:', payload, 'for instance:', targetInstanceId);
+            }
+
+            if (activeId && activeId !== instanceId && !notifiedQuestionRequests.has(requestId)) {
+                const instance = instances().get(instanceId);
+                const instanceName = instance?.folder ?? instanceId;
+                showToastNotification({
+                    title: 'Question received',
+                    message: `A question arrived for ${instanceName}. Open that workspace to answer.`,
+                    variant: 'warning',
+                    duration: 12000,
+                });
+                notifiedQuestionRequests.add(requestId);
+            }
 
             // Map MCP question format to CodeNomad question format
             // Add to question queue with MCP source
-            addQuestionToQueueWithSource(instanceId, {
+            addQuestionToQueueWithSource(targetInstanceId, {
                 id: requestId,
                 questions: questions.map((q: any) => ({
                     id: q.id,
@@ -121,10 +158,15 @@ export function initMcpBridge(instanceId: string): void {
         // Listen for question rejections from MCP server (timeout, cancel, session-stop)
         const cleanupRejected = electronAPI.mcpOn('ask_user.rejected', (payload: any) => {
             const { requestId, timedOut, cancelled, reason } = payload;
-            console.log('[MCP Bridge UI] Received question rejection:', payload);
+            if (import.meta.env.DEV) {
+                console.log('[MCP Bridge UI] Received question rejection:', payload);
+            }
 
             // Clear from processed questions set
             processedQuestions.delete(requestId);
+
+            const targetInstanceId = requestInstanceMap.get(requestId) ?? activeInstanceId() ?? instanceId;
+            requestInstanceMap.delete(requestId);
 
             // Determine failure reason
             let failureReason: 'timeout' | 'cancelled' | 'session-stop' = 'session-stop';
@@ -137,11 +179,11 @@ export function initMcpBridge(instanceId: string): void {
             }
 
             // Get instance folder path for persistent storage
-            const instance = instances().get(instanceId);
+            const instance = instances().get(targetInstanceId);
             const folderPath = instance?.folder ?? '';
 
             // Move question to failed notifications
-            handleQuestionFailure(instanceId, requestId, failureReason, folderPath);
+            handleQuestionFailure(targetInstanceId, requestId, failureReason, folderPath);
         });
 
         // Store cleanup function for this instance (combines both listeners)
@@ -151,7 +193,9 @@ export function initMcpBridge(instanceId: string): void {
             cleanupRejected();
         });
 
-        console.log('[MCP Bridge UI] Initialized successfully');
+        if (import.meta.env.DEV) {
+            console.log('[MCP Bridge UI] Initialized successfully');
+        }
     } catch (error) {
         console.error('[MCP Bridge UI] Failed to initialize:', error);
     }
@@ -163,7 +207,9 @@ export function initMcpBridge(instanceId: string): void {
 export function cleanupMcpBridge(instanceId: string): void {
     const cleanup = cleanupFunctions.get(instanceId);
     if (cleanup) {
-        console.log(`[MCP Bridge UI] Cleaning up MCP bridge for instance: ${instanceId}`);
+        if (import.meta.env.DEV) {
+            console.log(`[MCP Bridge UI] Cleaning up MCP bridge for instance: ${instanceId}`);
+        }
         cleanup(); // Call the cleanup function returned by mcpOn
         cleanupFunctions.delete(instanceId);
     }
@@ -174,4 +220,6 @@ export function cleanupMcpBridge(instanceId: string): void {
  */
 export function clearProcessedQuestion(requestId: string): void {
     processedQuestions.delete(requestId);
+    requestInstanceMap.delete(requestId);
+    notifiedQuestionRequests.delete(requestId);
 }

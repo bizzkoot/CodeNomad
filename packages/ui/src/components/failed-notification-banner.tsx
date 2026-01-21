@@ -10,11 +10,13 @@ interface FailedNotificationBannerProps {
 const FailedNotificationBanner: Component<FailedNotificationBannerProps> = (props) => {
     // Debug log to see what folder path we're using
     createEffect(() => {
-        console.log("[FailedNotificationBanner] Mounted with folderPath:", props.folderPath)
-        console.log("[FailedNotificationBanner] folderPath type:", typeof props.folderPath)
-        console.log("[FailedNotificationBanner] folderPath value:", JSON.stringify(props.folderPath))
-        const storageKey = getStorageKeyForFolder(props.folderPath)
-        console.log("[FailedNotificationBanner] Storage key:", storageKey)
+        if (import.meta.env.DEV) {
+            console.log("[FailedNotificationBanner] Mounted with folderPath:", props.folderPath)
+            console.log("[FailedNotificationBanner] folderPath type:", typeof props.folderPath)
+            console.log("[FailedNotificationBanner] folderPath value:", JSON.stringify(props.folderPath))
+            const storageKey = getStorageKeyForFolder(props.folderPath)
+            console.log("[FailedNotificationBanner] Storage key:", storageKey)
+        }
     })
 
     // Access signal directly for proper reactivity
@@ -22,7 +24,9 @@ const FailedNotificationBanner: Component<FailedNotificationBannerProps> = (prop
         ensureLoaded(props.folderPath)
         const map = failedNotificationsMap()
         const result = (map.get(props.folderPath) ?? []).length
-        console.log("[FailedNotificationBanner] Computed count:", result, "for folder:", props.folderPath)
+        if (import.meta.env.DEV) {
+            console.log("[FailedNotificationBanner] Computed count:", result, "for folder:", props.folderPath)
+        }
         return result
     })
     const hasFailedNotifications = createMemo(() => count() > 0)
@@ -34,7 +38,9 @@ const FailedNotificationBanner: Component<FailedNotificationBannerProps> = (prop
     // Debug logging
     createEffect(() => {
         const currentCount = count()
-        console.log(`[FailedNotificationBanner] Current count: ${currentCount}, hasNotifications: ${hasFailedNotifications()}`)
+        if (import.meta.env.DEV) {
+            console.log(`[FailedNotificationBanner] Current count: ${currentCount}, hasNotifications: ${hasFailedNotifications()}`)
+        }
     })
 
     return (

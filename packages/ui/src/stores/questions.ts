@@ -27,7 +27,11 @@ export function getQuestionQueue(instanceId: string): QuestionRequest[] {
  */
 export function getPendingQuestion(instanceId: string): QuestionRequest | null {
     const queue = getQuestionQueue(instanceId)
-    return queue.length > 0 ? (queue[0] ?? null) : null
+    const result = queue.length > 0 ? (queue[0] ?? null) : null
+    if (import.meta.env.DEV) {
+        console.log('[questions] getPendingQuestion:', { instanceId, queueSize: queue.length, result: result?.id ?? null });
+    }
+    return result
 }
 
 /**
@@ -60,7 +64,13 @@ export function addQuestionToQueue(instanceId: string, question: QuestionRequest
  * Add a question request to the queue with explicit source
  */
 export function addQuestionToQueueWithSource(instanceId: string, question: QuestionRequest, source: 'opencode' | 'mcp'): void {
-    addQuestionToQueue(instanceId, { ...question, source })
+    if (import.meta.env.DEV) {
+        console.log('[questions] addQuestionToQueueWithSource:', { instanceId, questionId: question.id, source });
+    }
+    addQuestionToQueue(instanceId, { ...question, source });
+    if (import.meta.env.DEV) {
+        console.log('[questions] Queue size after add:', getQuestionQueue(instanceId).length);
+    }
 }
 
 /**

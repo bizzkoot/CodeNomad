@@ -19,9 +19,13 @@ if (typeof document !== "undefined") {
   document.documentElement.dataset.runtimePlatform = runtimeEnv.platform
 
   // Preload failed notifications from localStorage BEFORE app renders
-  console.log("[Main.tsx] Calling preloadAllNotifications()...")
+  if (import.meta.env.DEV) {
+    console.log("[Main.tsx] Calling preloadAllNotifications()...")
+  }
   preloadAllNotifications()
-  console.log("[Main.tsx] preloadAllNotifications() call completed")
+  if (import.meta.env.DEV) {
+    console.log("[Main.tsx] preloadAllNotifications() call completed")
+  }
 }
 
 if (typeof document !== "undefined") {
