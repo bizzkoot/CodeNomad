@@ -195,11 +195,15 @@ function handleWorkspaceEvent(event: WorkspaceEventPayload) {
       upsertWorkspace(event.workspace)
       break
     case "workspace.stopped":
+      // Get instance before removing to access folder path
+      const stoppingInstance = instances().get(event.workspaceId)
+      const folderPath = stoppingInstance?.folder ?? ""
+
       // Move all pending questions to failed notifications before cleanup
       import("./questions").then(({ getQuestionQueue, handleQuestionFailure }) => {
         const pendingQuestions = getQuestionQueue(event.workspaceId)
         pendingQuestions.forEach((q) => {
-          handleQuestionFailure(event.workspaceId, q.id, "session-stop")
+          handleQuestionFailure(event.workspaceId, q.id, "session-stop", folderPath)
         })
       }).catch((error) => {
         log.error("Failed to handle pending questions on workspace stop", error)
@@ -208,7 +212,7 @@ function handleWorkspaceEvent(event: WorkspaceEventPayload) {
       // Move all pending permissions to failed notifications before cleanup
       const pendingPermissions = getPermissionQueue(event.workspaceId)
       pendingPermissions.forEach((p) => {
-        handlePermissionFailure(event.workspaceId, p.id, "session-stop")
+        handlePermissionFailure(event.workspaceId, p.id, "session-stop", folderPath)
       })
 
       releaseInstanceResources(event.workspaceId)
@@ -671,9 +675,13 @@ sseManager.onQuestionRejected = (instanceId, event) => {
     const reason = event.properties.timedOut ? "timeout" :
       event.properties.cancelled ? "cancelled" : "session-stop"
 
+    // Get instance folder path for persistent storage
+    const instance = instances().get(instanceId)
+    const folderPath = instance?.folder ?? ""
+
     // Import and call handleQuestionFailure to move to failed notifications
     import("./questions").then(({ handleQuestionFailure }) => {
-      handleQuestionFailure(instanceId, event.properties.requestID, reason)
+      handleQuestionFailure(instanceId, event.properties.requestID, reason, folderPath)
     }).catch((error) => {
       log.error("Failed to handle question failure", error)
       // Fallback: just remove from queue
@@ -731,12 +739,13 @@ export {
 
 /**
  * Handle permission failure - move from active queue to failed notifications
- * This is the KEY FIX for ensuring failed permissions are properly dismissed
+ * This is KEY FIX for ensuring failed permissions are properly dismissed
  */
 export function handlePermissionFailure(
   instanceId: string,
   permissionId: string,
-  reason: "timeout" | "session-stop"
+  reason: "timeout" | "session-stop",
+  folderPath: string
 ): void {
   const queue = getPermissionQueue(instanceId)
   const permission = queue.find((p) => p.id === permissionId)
@@ -752,6 +761,7 @@ export function handlePermissionFailure(
         reason,
         timestamp: Date.now(),
         instanceId,
+        folderPath,
         permissionData: { permission }
       })
     }).catch((error) => {
@@ -759,8 +769,8 @@ export function handlePermissionFailure(
     })
 
     // Step 2: CRITICAL - Remove from active permission queue
-    // This ensures the permission badge disappears and it's not shown as "active" anymore
-    // Note: permissionId === requestId in the permission system
+    // This ensures that permission badge disappears and it's not shown as "active" anymore
+    // Note: permissionId === requestId in permission system
     removePermissionFromQueue(instanceId, permissionId)
     removePermissionV2(instanceId, permissionId)
   }

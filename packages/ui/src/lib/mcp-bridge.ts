@@ -1,5 +1,6 @@
 import type { QuestionAnswer } from '../types/question.js';
 import { addQuestionToQueueWithSource, handleQuestionFailure } from '../stores/questions.js';
+import { instances } from '../stores/instances';
 
 /**
  * Check if we're in Electron environment
@@ -135,8 +136,12 @@ export function initMcpBridge(instanceId: string): void {
                 failureReason = 'session-stop';
             }
 
+            // Get instance folder path for persistent storage
+            const instance = instances().get(instanceId);
+            const folderPath = instance?.folder ?? '';
+
             // Move question to failed notifications
-            handleQuestionFailure(instanceId, requestId, failureReason);
+            handleQuestionFailure(instanceId, requestId, failureReason, folderPath);
         });
 
         // Store cleanup function for this instance (combines both listeners)

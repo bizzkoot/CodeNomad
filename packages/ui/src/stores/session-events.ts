@@ -355,13 +355,17 @@ function handleSessionIdle(instanceId: string, event: EventSessionIdle): void {
   ensureSessionStatus(instanceId, sessionId, "idle")
   log.info(`[SSE] Session idle: ${sessionId}`)
 
+  // Get instance folder path for persistent storage
+  const instance = instances().get(instanceId)
+  const folderPath = instance?.folder ?? ""
+
   // When session goes idle, any pending questions that weren't answered = timed out
   // Move them to failed notifications
   const pendingQuestions = getQuestionQueue(instanceId)
   if (pendingQuestions.length > 0) {
     log.info(`[SSE] Session idle with ${pendingQuestions.length} pending questions, moving to failed notifications`)
     pendingQuestions.forEach((q) => {
-      handleQuestionFailure(instanceId, q.id, "timeout")
+      handleQuestionFailure(instanceId, q.id, "timeout", folderPath)
     })
   }
 
@@ -370,7 +374,7 @@ function handleSessionIdle(instanceId: string, event: EventSessionIdle): void {
   if (pendingPermissions.length > 0) {
     log.info(`[SSE] Session idle with ${pendingPermissions.length} pending permissions, moving to failed notifications`)
     pendingPermissions.forEach((p) => {
-      handlePermissionFailure(instanceId, p.id, "timeout")
+      handlePermissionFailure(instanceId, p.id, "timeout", folderPath)
     })
   }
 }

@@ -94,12 +94,13 @@ export function clearQuestionQueue(instanceId: string): void {
 
 /**
  * Handle question failure - move from active queue to failed notifications
- * This is the KEY FIX for ensuring failed questions are properly dismissed
+ * This is KEY FIX for ensuring failed questions are properly dismissed
  */
 export function handleQuestionFailure(
     instanceId: string,
     questionId: string,
-    reason: "timeout" | "session-stop" | "cancelled"
+    reason: "timeout" | "session-stop" | "cancelled",
+    folderPath: string
 ): void {
     const queue = getQuestionQueue(instanceId)
     const question = queue.find((q) => q.id === questionId)
@@ -115,6 +116,7 @@ export function handleQuestionFailure(
                 reason,
                 timestamp: Date.now(),
                 instanceId,
+                folderPath,
                 questionData: {
                     questions: question.questions,
                     requestId: question.id

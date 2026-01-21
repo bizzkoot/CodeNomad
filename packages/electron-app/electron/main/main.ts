@@ -15,6 +15,7 @@ const mainFilename = fileURLToPath(import.meta.url)
 const mainDirname = dirname(mainFilename)
 
 const isMac = process.platform === "darwin"
+const SESSION_PARTITION = "persist:codenomad"
 
 const cliManager = new CliProcessManager()
 let mainWindow: BrowserWindow | null = null
@@ -207,6 +208,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: !isMac,
+      partition: SESSION_PARTITION,
     },
   })
 
@@ -296,6 +298,7 @@ function startCliPreload(url: string) {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: !isMac,
+      partition: SESSION_PARTITION,
     },
   })
 
@@ -389,7 +392,7 @@ async function exchangeBootstrapToken(baseUrl: string, token: string): Promise<b
     return false
   }
 
-  await session.defaultSession.cookies.set({
+  await session.fromPartition(SESSION_PARTITION).cookies.set({
     url: baseUrl,
     name: SESSION_COOKIE_NAME,
     value: sessionId,

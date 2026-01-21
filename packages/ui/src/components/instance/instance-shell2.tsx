@@ -1475,7 +1475,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 </Show>
 
                 <FailedNotificationBanner
-                  instanceId={props.instance.id}
+                  folderPath={props.instance.folder}
                   onClick={() => setFailedPanelOpen(true)}
                 />
 
@@ -1568,7 +1568,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                   />
                 </Show>
                 <FailedNotificationBanner
-                  instanceId={props.instance.id}
+                  folderPath={props.instance.folder}
                   onClick={() => setFailedPanelOpen(true)}
                 />
               </div>
@@ -1723,7 +1723,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       />
 
       <FailedNotificationPanel
-        instanceId={props.instance.id}
+        folderPath={props.instance.folder}
         isOpen={failedPanelOpen()}
         onClose={() => setFailedPanelOpen(false)}
       />

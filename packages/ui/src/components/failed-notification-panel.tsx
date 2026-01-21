@@ -2,7 +2,8 @@ import { Show, For, createMemo, type Component } from "solid-js"
 import { Dialog } from "@kobalte/core"
 import { X, MessageCircleQuestion, ShieldAlert } from "lucide-solid"
 import {
-    getFailedNotifications,
+    failedNotificationsMap,
+    ensureLoaded,
     removeFailedNotification,
     dismissAllFailedNotifications,
     type FailedNotification,
@@ -10,25 +11,31 @@ import {
 import { getPermissionDisplayTitle } from "../types/permission"
 
 interface FailedNotificationPanelProps {
-    instanceId: string
+    folderPath: string
     isOpen: boolean
     onClose: () => void
 }
 
 const FailedNotificationPanel: Component<FailedNotificationPanelProps> = (props) => {
-    const notifications = createMemo(() => getFailedNotifications(props.instanceId))
+    // Access signal directly for proper reactivity
+    const notifications = createMemo(() => {
+        ensureLoaded(props.folderPath)
+        const map = failedNotificationsMap()
+        return map.get(props.folderPath) ?? []
+    })
     const hasNotifications = createMemo(() => notifications().length > 0)
 
     const handleDismiss = (notificationId: string) => {
-        removeFailedNotification(props.instanceId, notificationId)
+        removeFailedNotification(props.folderPath, notificationId)
         // Close panel if no more notifications
-        if (getFailedNotifications(props.instanceId).length === 0) {
+        const currentCount = notifications().length
+        if (currentCount === 0) {
             props.onClose()
         }
     }
 
     const handleDismissAll = () => {
-        dismissAllFailedNotifications(props.instanceId)
+        dismissAllFailedNotifications(props.folderPath)
         props.onClose()
     }
 
