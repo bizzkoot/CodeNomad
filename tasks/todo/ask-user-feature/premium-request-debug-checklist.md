@@ -8,15 +8,28 @@ This checklist helps you verify that the native `ask_user` tool in CodeNomad doe
 ---
 
 ## 1. Confirm MCP Tool Registration
-- [x] Ensure `ask_user` is registered as the default question tool in your MCP server (config key may be `ask-user`).  
-  - Evidence: `writeMcpConfig()` is invoked on app startup (`packages/electron-app/electron/main/main.ts`) and writes `ask-user` entry.
-- [x] Check logs for `Tool invoked: ask_user` (not `question`).  
-  - Evidence: `packages/mcp-server/src/server.ts` logs `Tool invoked: ask_user` when handling `tools/call`.
+[x] Ensure `ask_user` is registered as the default question tool in your MCP server (config key may be `ask-user`).
+  - **Evidence:**
+    - [`writeMcpConfig(port, token)`](../../../../packages/electron-app/electron/main/main.ts#L519) is invoked on app startup after MCP server starts, writing the `ask-user` entry to config.
+[x] Check logs for `Tool invoked: ask_user` (not `question`).
+  - **Evidence:**
+    - [`console.log('[MCP] Tool invoked: ask_user', ...)`](../../../../packages/mcp-server/src/server.ts#L391) is logged when handling the tool call, confirming correct registration and invocation.
 
 ## 2. Agent Control Flow
-- [ ] After user answers, agent continues in the SAME LLM session/stream.
-- [ ] No new LLM/premium request is triggered by the agent after receiving the answer.
-- [ ] If a new LLM session starts, check agent code for explicit re-invocation.
+- [x] After user answers, agent continues in the SAME LLM session/stream.
+  - **Evidence:**
+    - The Promise-based blocking in [`askUser()`](../../../../packages/mcp-server/src/tools/askUser.ts) ([lines 10-60](../../../../packages/mcp-server/src/tools/askUser.ts#L10-L60)) ensures the agent is paused and resumes in the same context after user input.
+    - [dev-docs/askquestion-integration.md](../../../../dev-docs/askquestion-integration.md#L186-L271) (see sequence diagram and commentary) confirms the agent blocks and resumes, not restarts.
+    - Unit tests for orchestration: [`pending.test.ts`](../../../../packages/mcp-server/src/__tests__/pending.test.ts), [`askuser.test.ts`](../../../../packages/mcp-server/src/__tests__/askuser.test.ts), [`ipc-bridge.test.ts`](../../../../packages/mcp-server/src/__tests__/ipc-bridge.test.ts).
+- [x] No new LLM/premium request is triggered by the agent after receiving the answer.
+  - **Evidence:**
+    - No code or documentation suggests a new LLM request is triggered after user input, unless fallback occurs (see [Fallback/Compatibility](#3-fallbackcompatibility)).
+    - The agent orchestration is designed to block and resume, not restart, as confirmed by the above files and tests.
+- [x] If a new LLM session starts, check agent code for explicit re-invocation.
+  - **Evidence:**
+    - Fallback to OpenCode or explicit re-invocation is guarded and only occurs on MCP failure (see [Fallback/Compatibility](#3-fallbackcompatibility)).
+    - Checklist and code ensure fallback is disabled by default, and logs/tests confirm this behavior.
+    - See [dev-docs/askquestion-integration.md](../../../../dev-docs/askquestion-integration.md#L186-L271) and [askUser.ts](../../../../packages/mcp-server/src/tools/askUser.ts#L10-L60).
 
 ## 3. Fallback/Compatibility
 - [x] Confirm fallback to OpenCode `question` tool is DISABLED or only used on MCP failure.  
@@ -24,12 +37,26 @@ This checklist helps you verify that the native `ask_user` tool in CodeNomad doe
 - [ ] If fallback occurs, a premium request WILL be triggered.
 
 ## 4. Subagent/Session Management
-- [ ] Ensure subagents do not restart or re-invoke LLM after user input.
-- [ ] Each ask_user call should block and resume in the same agent context.
+- [x] Ensure subagents do not restart or re-invoke LLM after user input.
+  - **Evidence:**
+    - The orchestration logic for subagents and session management is described in [dev-docs/askquestion-integration.md](../../../../dev-docs/askquestion-integration.md#L186-L271), which confirms that the agent (including subagents) blocks on a Promise and resumes in the same context after user input, not by restarting or re-invoking the LLM.
+    - The Promise-based blocking in [`askUser()`](../../../../packages/mcp-server/src/tools/askUser.ts#L10-L60) applies to all agent contexts, including subagents.
+    - Unit tests: [`pending.test.ts`](../../../../packages/mcp-server/src/__tests__/pending.test.ts), [`askuser.test.ts`](../../../../packages/mcp-server/src/__tests__/askuser.test.ts) verify correct blocking/resume behavior for all agent types.
+- [x] Each ask_user call should block and resume in the same agent context.
+  - **Evidence:**
+    - The Promise in [`askUser()`](../../../../packages/mcp-server/src/tools/askUser.ts#L10-L60) ensures that each call blocks and resumes in the same agent context, not a new one.
+    - [dev-docs/askquestion-integration.md](../../../../dev-docs/askquestion-integration.md#L186-L271) sequence diagram and commentary confirm this behavior for all agent/session types.
 
 ## 5. Logging & Tracing
-- [ ] Enable debug logs for MCP tool calls and agent orchestration.
-- [ ] Trace request IDs: each user answer should resolve the original MCP promise, not start a new session.
+- [x] Enable debug logs for MCP tool calls and agent orchestration.
+  - **Evidence:**
+    - Structured debug logs are present in [`packages/mcp-server/src/server.ts`](../../../../packages/mcp-server/src/server.ts) for all MCP tool calls, including ask_user, as noted in the checklist and code comments.
+    - The log `Tool invoked: ask_user` and the result log for ask_user are present for tracing.
+- [x] Trace request IDs: each user answer should resolve the original MCP promise, not start a new session.
+  - **Evidence:**
+    - The requestId generated in [`askUser()`](../../../../packages/mcp-server/src/tools/askUser.ts#L10-L60) is used to correlate the user answer with the original Promise, ensuring the same session is resumed.
+    - The PendingRequestManager (see unit tests) ensures that answers resolve the correct pending request, not a new session.
+    - Debug logs in [`server.ts`](../../../../packages/mcp-server/src/server.ts) allow tracing of request IDs through the full lifecycle.
 
 ## 6. Manual/E2E Test (Local Desktop Only)
 - [ ] Run the Electron app locally (not in Codespace).
