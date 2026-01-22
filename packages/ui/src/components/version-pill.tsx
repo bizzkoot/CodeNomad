@@ -16,21 +16,21 @@ export default function VersionPill() {
   const uiSource = () => meta()?.ui?.source
 
   return (
-    <Show when={serverVersion() || uiVersion()}>
+    <Show when={serverVersion() || uiVersion() || uiSource()}>
       <div class="text-[11px] text-muted whitespace-nowrap">
         <Show when={serverVersion()}>
           {(v) => <span>App {v()}</span>}
         </Show>
-        <Show when={uiVersion()}>
-          {(v) => (
-            <>
+        <Show when={uiVersion() || uiSource()}>
+          <>
+            <Show when={serverVersion()}>
               <span class="mx-2">·</span>
-              <span>
-                UI {v()}
-                <Show when={uiSource()}>{(s) => <span class="opacity-70"> ({s()})</span>}</Show>
-              </span>
-            </>
-          )}
+            </Show>
+            <span>
+              UI{uiVersion() ? ` ${uiVersion()}` : ""}
+              <Show when={uiSource()}>{(s) => <span class="opacity-70"> ({s()})</span>}</Show>
+            </span>
+          </>
         </Show>
       </div>
     </Show>
