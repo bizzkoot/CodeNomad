@@ -45,7 +45,7 @@ try {
 
   execFileSync(
     "npx",
-    ["wrangler", "r2", "object", "put", r2Bucket, objectKey, "--file", zipPath],
+    ["wrangler", "r2", "object", "put", "--remote", `${r2Bucket}/${objectKey}`, "--file", zipPath],
     { cwd: root, stdio: "inherit" },
   )
 
@@ -65,7 +65,15 @@ try {
   )
 
   console.log("[release-ui] Deploying worker")
-  execFileSync("npx", ["wrangler", "deploy"], { cwd: root, stdio: "inherit" })
+  execFileSync("npx", ["wrangler", "deploy"], {
+    cwd: root,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
+      CLOUDFLARE_ACCOUNT_ID: process.env.CLOUDFLARE_ACCOUNT_ID,
+    },
+  })
 
   console.log("[release-ui] Done")
 } finally {
