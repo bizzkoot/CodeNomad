@@ -1,4 +1,4 @@
-import { ipcMain, type BrowserWindow } from 'electron';
+import type { BrowserWindow } from 'electron';
 import type { QuestionInfo, QuestionAnswer } from '../tools/schemas.js';
 import type { QuestionBridge } from '../tools/askUser.js';
 import type { PendingRequestManager } from '../pending.js';
@@ -13,17 +13,31 @@ let globalPendingManager: PendingRequestManager | null = null;
  * Setup IPC handlers for MCP bridge in main process
  * This handles communication between the UI (renderer) and the MCP server
  */
-export function setupMcpBridge(mainWindow: BrowserWindow): void {
+export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
     console.log('[MCP IPC] Setting up main process bridge');
 
+    // Attempt to import electron dynamically. If not available (e.g., in test env), skip attaching handlers.
+    let ipcMain: any = null
+    try {
+        const electron = await import('electron')
+        ipcMain = electron?.ipcMain
+        if (!ipcMain || typeof ipcMain.on !== 'function') {
+            console.warn('[MCP IPC] ipcMain not available on electron import, skipping IPC handler setup')
+            return
+        }
+    } catch (err) {
+        console.warn('[MCP IPC] Electron not available, skipping IPC handler setup')
+        return
+    }
+
     // Handler: Debug messages from renderer
-    ipcMain.on('mcp:debug', (_event, data: any) => {
+    ipcMain.on('mcp:debug', (_event: any, data: any) => {
         const { message, instanceId } = data;
         console.log(`[MCP IPC DEBUG] ${message}${instanceId ? ` (instance: ${instanceId})` : ''}`);
     });
 
     // Handler: UI sends answer for MCP question
-    ipcMain.on('mcp:answer', (_event, data: any) => {
+    ipcMain.on('mcp:answer', (_event: any, data: any) => {
         const { requestId, answers } = data;
         console.log(`[MCP IPC] Received answer from UI: ${requestId}`);
 
@@ -40,7 +54,7 @@ export function setupMcpBridge(mainWindow: BrowserWindow): void {
     });
 
     // Handler: UI sends cancel for MCP question
-    ipcMain.on('mcp:cancel', (_event, data: any) => {
+    ipcMain.on('mcp:cancel', (_event: any, data: any) => {
         const { requestId } = data;
         console.log(`[MCP IPC] Received cancel from UI: ${requestId}`);
 

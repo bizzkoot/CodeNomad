@@ -1,4 +1,4 @@
-# API Specification: `cn_ask_user` MCP Tool
+# API Specification: `ask_user` MCP Tool
 
 **Version:** 1.0  
 **Date:** 2026-01-18  
@@ -7,7 +7,7 @@
 
 ## Overview
 
-This document specifies the API for the `cn_ask_user` MCP tool, including input schema, output schema, error handling, and example usage.
+This document specifies the API for the `ask_user` MCP tool, including input schema, output schema, error handling, and example usage.
 
 ---
 
@@ -17,7 +17,7 @@ This document specifies the API for the `cn_ask_user` MCP tool, including input 
 
 ```json
 {
-    "name": "cn_ask_user",
+    "name": "ask_user",
     "description": "Ask the user questions through CodeNomad's interface. Use this tool when you need user input, clarification, or confirmation before proceeding. The tool blocks until the user responds.",
     "inputSchema": {
         "type": "object",
@@ -517,7 +517,7 @@ If input validation fails, the tool returns an error result:
 
 ```markdown
 When you need user input:
-1. Use the cn_ask_user tool
+1. Use the ask_user tool
 2. Ask clear, specific questions
 3. Handle the response appropriately:
    - If answered: proceed with user's input

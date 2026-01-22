@@ -395,6 +395,9 @@ export class CodeNomadMcpServer {
 
             const result = await askUser(input, this.bridge, this.pendingManager);
 
+            // Log the structured result for easier tracing during debugging
+            console.log(`[MCP] ask_user result for ${id}: ${JSON.stringify(result)}`);
+
             return {
                 jsonrpc: '2.0',
                 id,

@@ -130,7 +130,7 @@ Add new package to root workspace configuration.
 **Depends on:** TASK-1.4  
 
 **Description:**
-Define input/output schemas for the `cn_ask_user` tool.
+Define input/output schemas for the `ask_user` tool.
 
 **File:** `src/tools/schemas.ts`
 
@@ -220,7 +220,7 @@ class PendingRequestManager {
 **Depends on:** TASK-2.1, TASK-2.2  
 
 **Description:**
-Implement the main `cn_ask_user` tool function.
+Implement the main `ask_user` tool function.
 
 **File:** `src/tools/askUser.ts`
 
@@ -260,7 +260,7 @@ Create the main MCP server class that registers tools.
 - [ ] Create `CodeNomadMcpServer` class
 - [ ] Implement constructor with config
 - [ ] Implement `registerTools()` method
-- [ ] Register `cn_ask_user` tool
+- [ ] Register `ask_user` tool
 - [ ] Implement `start()` method
 - [ ] Implement `stop()` method
 - [ ] Add error handling
@@ -378,7 +378,7 @@ Create the renderer process bridge module.
 
 **Subtasks:**
 - [ ] Create `initMcpBridge()` function
-- [ ] Listen for `cn_ask_user.asked` events
+- [ ] Listen for `ask_user.asked` events
 - [ ] Transform to question store format
 - [ ] Add to question queue
 - [ ] Implement `sendMcpAnswer()` function
@@ -701,7 +701,7 @@ Perform manual end-to-end testing.
 - [ ] Start CodeNomad fresh
 - [ ] Verify `mcp_config.json` contains our entry
 - [ ] Open Copilot chat
-- [ ] Prompt: "Ask me a question using cn_ask_user"
+- [ ] Prompt: "Ask me a question using ask_user"
 - [ ] Verify question appears in CodeNomad
 - [ ] Answer the question
 - [ ] Verify Copilot receives the answer

@@ -499,7 +499,13 @@ app.whenReady().then(async () => {
   // Start MCP server FIRST if we have a main window
   let mcpPort: number | undefined
   if (mainWindow) {
-    setupMcpBridge(mainWindow)
+    try {
+      await setupMcpBridge(mainWindow)
+      console.log('[MCP] IPC bridge setup completed')
+    } catch (err) {
+      console.error('[MCP] Failed to setup IPC bridge:', err)
+    }
+
     const server = new CodeNomadMcpServer()
     mcpServer = server
 
