@@ -8,7 +8,7 @@
 **Problem Solved:**
 1. MCP SDK v1.25.2 had a Zod validation bug that prevented tool execution
 2. Implemented raw JSON-RPC 2.0 handler to bypass the SDK entirely
-3. Fixed critical naming inconsistency: all references now use `ask_user` instead of `cn_ask_user`
+3. Fixed critical naming inconsistency: all references now use `ask_user` (underscore) instead of `cn_ask_user` (historical name)
 4. Added missing initialization call: `initMcpBridge()` is now called in instance lifecycle
 
 ### 1. Configuration Injection
@@ -173,7 +173,7 @@ Electron Main Process
 Electron Renderer Process (UI)
   ├─> Question Wizard
   ├─> IPC Events
-  │   ├─> cn_ask_user.asked (MCP → UI)
+  │   ├─> ask_user.asked (MCP → UI)
   │   ├─> mcp:answer (UI → MCP)
   │   └─> mcp:cancel (UI → MCP)
   └─> initMcpBridge() setup

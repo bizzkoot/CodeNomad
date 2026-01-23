@@ -8,7 +8,7 @@
 
 ## Overview
 
-This document describes the technical architecture for implementing a native `cn_ask_user` tool in CodeNomad using the Model Context Protocol (MCP).
+This document describes the technical architecture for implementing a native `ask_user` tool in CodeNomad using the Model Context Protocol (MCP). (Historical references to cn_ask_user are replaced for accuracy.)
 
 ---
 

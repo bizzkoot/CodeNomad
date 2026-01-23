@@ -1,9 +1,10 @@
 import debug from "debug"
 
-export type LoggerNamespace = "sse" | "api" | "session" | "actions"
+export type LoggerNamespace = "sse" | "api" | "session" | "actions" | "questions" | "failed-notifications"
 
 interface Logger {
   log: (...args: unknown[]) => void
+  debug: (...args: unknown[]) => void
   info: (...args: unknown[]) => void
   warn: (...args: unknown[]) => void
   error: (...args: unknown[]) => void
@@ -22,7 +23,7 @@ export interface LoggerControls {
   disableAllLoggers: () => void
 }
 
-const KNOWN_NAMESPACES: LoggerNamespace[] = ["sse", "api", "session", "actions"]
+const KNOWN_NAMESPACES: LoggerNamespace[] = ["sse", "api", "session", "actions", "questions", "failed-notifications"]
 const STORAGE_KEY = "opencode:logger:namespaces"
 
 const namespaceLoggers = new Map<LoggerNamespace, Logger>()
@@ -74,6 +75,7 @@ function buildLogger(namespace: LoggerNamespace): Logger {
   }
   return {
     log: (...args: any[]) => baseLogger(...args),
+    debug: (...args: any[]) => baseLogger(...args),
     info: (...args: any[]) => baseLogger(...args),
     warn: (...args: any[]) => formatAndLog("[warn]", args),
     error: (...args: any[]) => formatAndLog("[error]", args),

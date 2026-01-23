@@ -60,6 +60,8 @@ import FolderTreeBrowser from "../folder-tree-browser"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
 import QuestionNotificationBanner from "../question-notification-banner"
+import FailedNotificationBanner from "../failed-notification-banner"
+import FailedNotificationPanel from "../failed-notification-panel"
 import { AskQuestionWizard } from "../askquestion-wizard"
 import Kbd from "../kbd"
 import { TodoListView } from "../tool-call/renderers/todo"
@@ -68,6 +70,7 @@ import SessionView from "../session/session-view"
 import SearchPanel from "../search-panel"
 import { formatTokenTotal } from "../../lib/formatters"
 import { sseManager } from "../../lib/sse-manager"
+import "../../styles/components/failed-notification.css"
 import { getLogger } from "../../lib/logger"
 import { serverApi } from "../../lib/api-client"
 import { getBackgroundProcesses, loadBackgroundProcesses } from "../../stores/background-processes"
@@ -163,6 +166,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
   const [questionWizardOpen, setQuestionWizardOpen] = createSignal(false)
   const [questionWizardMinimized, setQuestionWizardMinimized] = createSignal(false)
+  const [failedPanelOpen, setFailedPanelOpen] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
 
@@ -224,11 +228,25 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   // Auto-open question wizard when a pending question appears (unless minimized)
   createEffect(() => {
     const pending = getPendingQuestion(props.instance.id)
+    if (import.meta.env.DEV) {
+      console.log('[Instance Shell] createEffect check:', {
+        instanceId: props.instance.id,
+        pendingQuestionId: pending?.id ?? null,
+        minimized: questionWizardMinimized(),
+        willOpen: !!(pending && !questionWizardMinimized())
+      })
+    }
     if (pending && !questionWizardMinimized()) {
       // Auto-open only if user hasn't minimized
+      if (import.meta.env.DEV) {
+        console.log('[Instance Shell] Opening question wizard for:', pending.id)
+      }
       setQuestionWizardOpen(true)
     } else if (!pending) {
       // Reset states when no pending questions
+      if (import.meta.env.DEV) {
+        console.log('[Instance Shell] No pending question, closing wizard')
+      }
       setQuestionWizardOpen(false)
       setQuestionWizardMinimized(false)
     }
@@ -241,19 +259,39 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       return
     }
 
+    if (import.meta.env.DEV) {
+      console.log('[✅ ANSWER SUBMIT] Question answer submitted:', {
+        questionId: question.id,
+        source: question.source || 'NOT_SET',
+        instanceId: props.instance.id,
+        hasAnswers: answers.length > 0,
+        timestamp: new Date().toISOString()
+      })
+    }
+
     // Route by source: MCP or OpenCode
     if (question.source === 'mcp') {
+      if (import.meta.env.DEV) {
+        console.log('[✅ ROUTING] Using MCP path (zero-cost IPC) for question:', question.id)
+      }
       // MCP questions: send via IPC bridge
       try {
         sendMcpAnswer(question.id, answers)
         removeQuestionFromQueue(props.instance.id, question.id)
         clearProcessedQuestion(question.id) // Clear from deduplication set
         setQuestionWizardOpen(false)
+        if (import.meta.env.DEV) {
+          console.log('[✅ MCP SUCCESS] Answer sent via MCP IPC, no premium request')
+        }
       } catch (error) {
         console.error("Failed to submit MCP question answer", error)
       }
 
     } else {
+      if (import.meta.env.DEV) {
+        console.log('[❌ ROUTING] Using OpenCode SDK path (PREMIUM REQUEST) for question:', question.id)
+        console.log('[❌ WARNING] This will consume 1 premium LLM request!')
+      }
       // OpenCode questions: use existing API
       try {
         // Map answers to SDK format: array of string arrays
@@ -272,6 +310,9 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         )
 
         setQuestionWizardOpen(false)
+        if (import.meta.env.DEV) {
+          console.log('[❌ OPENCODE COMPLETED] Answer sent via OpenCode SDK (premium request used)')
+        }
       } catch (error) {
         console.error("Failed to submit question answers", error)
       }
@@ -286,8 +327,19 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       return
     }
 
+    if (import.meta.env.DEV) {
+      console.log('[🚫 CANCEL] Question cancelled:', {
+        questionId: question.id,
+        source: question.source || 'NOT_SET',
+        instanceId: props.instance.id
+      })
+    }
+
     // Route by source: MCP or OpenCode
     if (question.source === 'mcp') {
+      if (import.meta.env.DEV) {
+        console.log('[🚫 ROUTING] Using MCP cancel path (zero-cost) for question:', question.id)
+      }
       // MCP questions: send via IPC bridge
       try {
         sendMcpCancel(question.id)
@@ -299,6 +351,9 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       }
 
     } else {
+      if (import.meta.env.DEV) {
+        console.log('[🚫 ROUTING] Using OpenCode SDK cancel path for question:', question.id)
+      }
       // OpenCode questions: use existing API
       if (!props.instance.client) {
         setQuestionWizardOpen(false)
@@ -615,23 +670,31 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
   // Initialize MCP bridge for this instance
   onMount(() => {
-    console.log('[Instance Shell] onMount fired - checking window...')
-    console.log('[Instance Shell] window type:', typeof window)
-    console.log('[Instance Shell] window exists:', typeof window !== 'undefined')
+    if (import.meta.env.DEV) {
+      console.log('[Instance Shell] onMount fired - checking window...')
+      console.log('[Instance Shell] window type:', typeof window)
+      console.log('[Instance Shell] window exists:', typeof window !== 'undefined')
+    }
     if (typeof window === "undefined") {
-      console.log('[Instance Shell] window is undefined, skipping MCP bridge init')
+      if (import.meta.env.DEV) {
+        console.log('[Instance Shell] window is undefined, skipping MCP bridge init')
+      }
       return
     }
-    console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
+    if (import.meta.env.DEV) {
+      console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
+    }
     try {
       initMcpBridge(props.instance.id)
     } catch (error) {
       console.error("[Instance Shell] Failed to initialize MCP bridge:", error)
     }
-    
+
     // Cleanup MCP bridge when instance unmounts
     onCleanup(() => {
-      console.log(`[Instance Shell] Cleaning up MCP bridge for instance: ${props.instance.id}`)
+      if (import.meta.env.DEV) {
+        console.log(`[Instance Shell] Cleaning up MCP bridge for instance: ${props.instance.id}`)
+      }
       try {
         cleanupMcpBridge(props.instance.id)
       } catch (error) {
@@ -1470,6 +1533,11 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                   />
                 </Show>
 
+                <FailedNotificationBanner
+                  folderPath={props.instance.folder}
+                  onClick={() => setFailedPanelOpen(true)}
+                />
+
                 <button
                   type="button"
                   class="connection-status-button px-2 py-0.5 text-xs whitespace-nowrap flex-shrink-1 min-w-0"
@@ -1558,6 +1626,10 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                     }}
                   />
                 </Show>
+                <FailedNotificationBanner
+                  folderPath={props.instance.folder}
+                  onClick={() => setFailedPanelOpen(true)}
+                />
               </div>
               <button
                 type="button"
@@ -1709,6 +1781,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         onClose={() => setPermissionModalOpen(false)}
       />
 
+      <FailedNotificationPanel
+        folderPath={props.instance.folder}
+        isOpen={failedPanelOpen()}
+        onClose={() => setFailedPanelOpen(false)}
+      />
+
       <Show when={questionWizardOpen() && getPendingQuestion(props.instance.id)}>
         {(pending) => {
           // Map questions to wizard format (like shuvcode does)
@@ -1725,7 +1803,15 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
           }))
 
           return (
-            <div class="askquestion-wizard-overlay">
+            <div
+              class="askquestion-wizard-overlay"
+              onClick={(e) => {
+                // Minimize if clicking the backdrop (not the content)
+                if (e.target === e.currentTarget) {
+                  handleQuestionMinimize()
+                }
+              }}
+            >
               <AskQuestionWizard
                 questions={mappedQuestions()}
                 onSubmit={handleQuestionSubmit}

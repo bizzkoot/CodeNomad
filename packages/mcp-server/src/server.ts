@@ -388,12 +388,25 @@ export class CodeNomadMcpServer {
         }
 
         try {
-            console.log(`[MCP] Tool invoked: ask_user`, JSON.stringify(args, null, 2));
-
             // Validate input manually
             const input = args as CnAskUserInput;
 
+            const isDev = process.env.NODE_ENV !== 'production';
+            if (isDev) {
+                console.log(`[🔧 MCP TOOL INVOKED] ask_user (ZERO-COST)`, {
+                    requestId: id,
+                    questionCount: input.questions?.length || 0,
+                    hasTitle: !!input.title,
+                    timestamp: new Date().toISOString()
+                });
+            }
+
             const result = await askUser(input, this.bridge, this.pendingManager);
+
+            // Log the structured result for easier tracing during debugging
+            if (isDev) {
+                console.log(`[🔧 MCP TOOL RESULT] ask_user completed for ${id}:`, result);
+            }
 
             return {
                 jsonrpc: '2.0',

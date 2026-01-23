@@ -132,7 +132,7 @@ const confirmationTool = vscode.lm.registerTool('ask_user', {
 
 // For MCP Server (what CodeNomad should use):
 this.mcpServer.registerTool(
-    "cn_ask_user",
+    "ask_user",
     {
         inputSchema: z.object({
             questions: z.array(z.object({
@@ -505,7 +505,7 @@ export function setupMcpBridge(mainWindow: BrowserWindow) {
         const { requestId, questions, title } = payload;
         
         // Send to renderer
-        mainWindow.webContents.send('cn_ask_user.asked', {
+        mainWindow.webContents.send('ask_user.asked', {
             requestId,
             questions,
             title,
@@ -571,7 +571,7 @@ import { addQuestionToQueue, removeQuestionFromQueue } from '../stores/questions
 
 export function initMcpBridge() {
     // Listen for questions from MCP server
-    ipcRenderer.on('cn_ask_user.asked', (event, payload) => {
+    ipcRenderer.on('ask_user.asked', (event, payload) => {
         console.log('[MCP Bridge] Received question:', payload);
         
         // Add to existing question queue with 'mcp' source
