@@ -259,31 +259,39 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       return
     }
 
-    console.log('[✅ ANSWER SUBMIT] Question answer submitted:', {
-      questionId: question.id,
-      source: question.source || 'NOT_SET',
-      instanceId: props.instance.id,
-      hasAnswers: answers.length > 0,
-      timestamp: new Date().toISOString()
-    })
+    if (import.meta.env.DEV) {
+      console.log('[✅ ANSWER SUBMIT] Question answer submitted:', {
+        questionId: question.id,
+        source: question.source || 'NOT_SET',
+        instanceId: props.instance.id,
+        hasAnswers: answers.length > 0,
+        timestamp: new Date().toISOString()
+      })
+    }
 
     // Route by source: MCP or OpenCode
     if (question.source === 'mcp') {
-      console.log('[✅ ROUTING] Using MCP path (zero-cost IPC) for question:', question.id)
+      if (import.meta.env.DEV) {
+        console.log('[✅ ROUTING] Using MCP path (zero-cost IPC) for question:', question.id)
+      }
       // MCP questions: send via IPC bridge
       try {
         sendMcpAnswer(question.id, answers)
         removeQuestionFromQueue(props.instance.id, question.id)
         clearProcessedQuestion(question.id) // Clear from deduplication set
         setQuestionWizardOpen(false)
-        console.log('[✅ MCP SUCCESS] Answer sent via MCP IPC, no premium request')
+        if (import.meta.env.DEV) {
+          console.log('[✅ MCP SUCCESS] Answer sent via MCP IPC, no premium request')
+        }
       } catch (error) {
         console.error("Failed to submit MCP question answer", error)
       }
 
     } else {
-      console.log('[❌ ROUTING] Using OpenCode SDK path (PREMIUM REQUEST) for question:', question.id)
-      console.log('[❌ WARNING] This will consume 1 premium LLM request!')
+      if (import.meta.env.DEV) {
+        console.log('[❌ ROUTING] Using OpenCode SDK path (PREMIUM REQUEST) for question:', question.id)
+        console.log('[❌ WARNING] This will consume 1 premium LLM request!')
+      }
       // OpenCode questions: use existing API
       try {
         // Map answers to SDK format: array of string arrays
@@ -302,7 +310,9 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         )
 
         setQuestionWizardOpen(false)
-        console.log('[❌ OPENCODE COMPLETED] Answer sent via OpenCode SDK (premium request used)')
+        if (import.meta.env.DEV) {
+          console.log('[❌ OPENCODE COMPLETED] Answer sent via OpenCode SDK (premium request used)')
+        }
       } catch (error) {
         console.error("Failed to submit question answers", error)
       }
@@ -317,15 +327,19 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       return
     }
 
-    console.log('[🚫 CANCEL] Question cancelled:', {
-      questionId: question.id,
-      source: question.source || 'NOT_SET',
-      instanceId: props.instance.id
-    })
+    if (import.meta.env.DEV) {
+      console.log('[🚫 CANCEL] Question cancelled:', {
+        questionId: question.id,
+        source: question.source || 'NOT_SET',
+        instanceId: props.instance.id
+      })
+    }
 
     // Route by source: MCP or OpenCode
     if (question.source === 'mcp') {
-      console.log('[🚫 ROUTING] Using MCP cancel path (zero-cost) for question:', question.id)
+      if (import.meta.env.DEV) {
+        console.log('[🚫 ROUTING] Using MCP cancel path (zero-cost) for question:', question.id)
+      }
       // MCP questions: send via IPC bridge
       try {
         sendMcpCancel(question.id)
@@ -337,7 +351,9 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       }
 
     } else {
-      console.log('[🚫 ROUTING] Using OpenCode SDK cancel path for question:', question.id)
+      if (import.meta.env.DEV) {
+        console.log('[🚫 ROUTING] Using OpenCode SDK cancel path for question:', question.id)
+      }
       // OpenCode questions: use existing API
       if (!props.instance.client) {
         setQuestionWizardOpen(false)

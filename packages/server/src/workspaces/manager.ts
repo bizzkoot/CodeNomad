@@ -136,6 +136,10 @@ export class WorkspaceManager {
       [OPENCODE_SERVER_PASSWORD_ENV]: opencodePassword,
     }
 
+    if (process.env.OPENCODE_CONFIG_CONTENT) {
+      environment.OPENCODE_CONFIG_CONTENT = process.env.OPENCODE_CONFIG_CONTENT
+    }
+
     try {
       const { pid, port, exitPromise, getLastOutput } = await this.runtime.launch({
         workspaceId: id,

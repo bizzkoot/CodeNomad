@@ -135,14 +135,14 @@ export function initMcpBridge(instanceId: string): void {
             const targetInstanceId = activeId ?? instanceId;
             requestInstanceMap.set(requestId, targetInstanceId);
 
-            console.log('[📥 MCP QUESTION RECEIVED]', {
-                requestId,
-                source: source || 'mcp',
-                targetInstanceId,
-                questionCount: questions.length,
-                timestamp: new Date().toISOString()
-            });
             if (import.meta.env.DEV) {
+                console.log('[📥 MCP QUESTION RECEIVED]', {
+                    requestId,
+                    source: source || 'mcp',
+                    targetInstanceId,
+                    questionCount: questions.length,
+                    timestamp: new Date().toISOString()
+                });
                 console.log('[MCP Bridge UI] Full payload:', payload);
             }
 
