@@ -511,18 +511,26 @@ app.whenReady().then(async () => {
 
     try {
       await mcpServer.start()
+      console.log('[MCP] Server start completed')
       const port = mcpServer.getPort()
       const token = mcpServer.getAuthToken()
 
+      // Debug logging to identify why registration might fail
+      console.log(`[MCP] Debug - port: ${port}, token: ${token ? 'exists' : 'missing'}`)
+
       if (port && token) {
         mcpPort = port
-        writeMcpConfig(port, token)
+        // Pass the correct path to the MCP server entry point
+        const mcpServerPath = join(app.getAppPath(), '../mcp-server/dist/server.js')
+        writeMcpConfig(port, token, mcpServerPath)
         console.log(`[MCP] Registered with Antigravity on port ${port}`)
 
         // Connect MCP server bridge
         if (mcpServer && mainWindow) {
           connectMcpBridge(mcpServer, mainWindow)
         }
+      } else {
+        console.error(`[MCP] Failed to register - port: ${port}, token: ${token}`)
       }
     } catch (error) {
       console.error('[MCP] Failed to start server:', error)

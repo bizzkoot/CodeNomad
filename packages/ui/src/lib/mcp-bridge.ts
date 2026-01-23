@@ -44,9 +44,9 @@ const notifiedQuestionRequests = new Set<string>();
  * Send answer to main process (for MCP questions)
  */
 export function sendMcpAnswer(requestId: string, answers: QuestionAnswer[]): void {
-            if (import.meta.env.DEV) {
-                console.log(`[MCP Bridge UI] Sending answer: ${requestId}`);
-            }
+    if (import.meta.env.DEV) {
+        console.log(`[MCP Bridge UI] Sending answer: ${requestId}`);
+    }
 
     try {
         if (isElectronEnvironment()) {
@@ -63,9 +63,9 @@ export function sendMcpAnswer(requestId: string, answers: QuestionAnswer[]): voi
  * Send cancel to main process (for MCP questions)
  */
 export function sendMcpCancel(requestId: string): void {
-            if (import.meta.env.DEV) {
-                console.log(`[MCP Bridge UI] Sending cancel: ${requestId}`);
-            }
+    if (import.meta.env.DEV) {
+        console.log(`[MCP Bridge UI] Sending cancel: ${requestId}`);
+    }
 
     try {
         if (isElectronEnvironment()) {
@@ -135,8 +135,15 @@ export function initMcpBridge(instanceId: string): void {
             const targetInstanceId = activeId ?? instanceId;
             requestInstanceMap.set(requestId, targetInstanceId);
 
+            console.log('[📥 MCP QUESTION RECEIVED]', {
+                requestId,
+                source: source || 'mcp',
+                targetInstanceId,
+                questionCount: questions.length,
+                timestamp: new Date().toISOString()
+            });
             if (import.meta.env.DEV) {
-                console.log('[MCP Bridge UI] Received question:', payload, 'for instance:', targetInstanceId);
+                console.log('[MCP Bridge UI] Full payload:', payload);
             }
 
             if (activeId && activeId !== instanceId && !notifiedQuestionRequests.has(requestId)) {
@@ -180,7 +187,7 @@ export function initMcpBridge(instanceId: string): void {
             if (timedOut && currentRetries < 1) {
                 // Retry once: route to active instance again
                 retryAttempts.set(requestId, currentRetries + 1);
-                
+
                 const storedPayload = questionPayloads.get(requestId);
                 if (storedPayload) {
                     if (import.meta.env.DEV) {
@@ -189,15 +196,15 @@ export function initMcpBridge(instanceId: string): void {
 
                     // Clear from processed set to allow re-processing
                     processedQuestions.delete(requestId);
-                    
+
                     // Re-route to active instance
                     const activeId = activeInstanceId();
                     if (activeId) {
                         const { questions, source } = storedPayload;
-                        
+
                         // Update target instance for this request
                         requestInstanceMap.set(requestId, activeId);
-                        
+
                         if (import.meta.env.DEV) {
                             console.log(`[MCP Bridge UI] Routing retry to active instance: ${activeId}`);
                         }
@@ -219,7 +226,7 @@ export function initMcpBridge(instanceId: string): void {
 
                         // Re-add to processed set
                         processedQuestions.add(requestId);
-                        
+
                         // Show toast to notify user
                         showToastNotification({
                             title: 'Question retried',
@@ -227,7 +234,7 @@ export function initMcpBridge(instanceId: string): void {
                             variant: 'info',
                             duration: 8000,
                         });
-                        
+
                         return; // Don't proceed with failure handling
                     }
                 }
@@ -255,7 +262,7 @@ export function initMcpBridge(instanceId: string): void {
 
             // Move question to failed notifications
             handleQuestionFailure(targetInstanceId, requestId, failureReason, folderPath);
-            
+
             // Clean up tracking maps to prevent memory leak
             clearProcessedQuestion(requestId);
         });
