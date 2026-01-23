@@ -127,7 +127,7 @@ export class WorkspaceManager {
     }
     this.opencodeAuth.set(id, { username: opencodeUsername, password: opencodePassword, authorization })
 
-    const environment = {
+    const environment: Record<string, string> = {
       ...userEnvironment,
       OPENCODE_CONFIG_DIR: this.opencodeConfigDir,
       CODENOMAD_INSTANCE_ID: id,
