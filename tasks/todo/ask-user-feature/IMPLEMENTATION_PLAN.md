@@ -7,7 +7,7 @@
 
 ## Overview
 
-Step-by-step implementation plan for building the native `cn_ask_user` MCP tool in CodeNomad.
+Step-by-step implementation plan for building the native `ask_user` MCP tool in CodeNomad.
 
 ---
 

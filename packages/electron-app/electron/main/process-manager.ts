@@ -115,6 +115,12 @@ export class CliProcessManager extends EventEmitter {
             url: `http://127.0.0.1:${options.mcpPort}`,
             enabled: true
           }
+        },
+        permission: {
+          question: "deny"
+        },
+        tools: {
+          question: false
         }
       }
       env.OPENCODE_CONFIG_CONTENT = JSON.stringify(mcpConfig)

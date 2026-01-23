@@ -15,6 +15,7 @@ const mainFilename = fileURLToPath(import.meta.url)
 const mainDirname = dirname(mainFilename)
 
 const isMac = process.platform === "darwin"
+const SESSION_PARTITION = "persist:codenomad"
 
 const cliManager = new CliProcessManager()
 let mainWindow: BrowserWindow | null = null
@@ -207,6 +208,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: !isMac,
+      partition: SESSION_PARTITION,
     },
   })
 
@@ -296,6 +298,7 @@ function startCliPreload(url: string) {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: !isMac,
+      partition: SESSION_PARTITION,
     },
   })
 
@@ -389,7 +392,7 @@ async function exchangeBootstrapToken(baseUrl: string, token: string): Promise<b
     return false
   }
 
-  await session.defaultSession.cookies.set({
+  await session.fromPartition(SESSION_PARTITION).cookies.set({
     url: baseUrl,
     name: SESSION_COOKIE_NAME,
     value: sessionId,
@@ -496,24 +499,38 @@ app.whenReady().then(async () => {
   // Start MCP server FIRST if we have a main window
   let mcpPort: number | undefined
   if (mainWindow) {
-    setupMcpBridge(mainWindow)
+    try {
+      await setupMcpBridge(mainWindow)
+      console.log('[MCP] IPC bridge setup completed')
+    } catch (err) {
+      console.error('[MCP] Failed to setup IPC bridge:', err)
+    }
+
     const server = new CodeNomadMcpServer()
     mcpServer = server
 
     try {
       await mcpServer.start()
+      console.log('[MCP] Server start completed')
       const port = mcpServer.getPort()
       const token = mcpServer.getAuthToken()
 
+      // Debug logging to identify why registration might fail
+      console.log(`[MCP] Debug - port: ${port}, token: ${token ? 'exists' : 'missing'}`)
+
       if (port && token) {
         mcpPort = port
-        writeMcpConfig(port, token)
+        // Pass the correct path to the MCP server entry point
+        const mcpServerPath = join(app.getAppPath(), '../mcp-server/dist/server.js')
+        writeMcpConfig(port, token, mcpServerPath)
         console.log(`[MCP] Registered with Antigravity on port ${port}`)
 
         // Connect MCP server bridge
         if (mcpServer && mainWindow) {
           connectMcpBridge(mcpServer, mainWindow)
         }
+      } else {
+        console.error(`[MCP] Failed to register - port: ${port}, token: ${token}`)
       }
     } catch (error) {
       console.error('[MCP] Failed to start server:', error)

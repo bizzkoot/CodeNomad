@@ -19,7 +19,7 @@ import { requestData } from "../lib/opencode-api"
 import { getPermissionId, getPermissionKind, getRequestIdFromPermissionReply } from "../types/permission"
 import type { PermissionReplyEventPropertiesLike, PermissionRequestLike } from "../types/permission"
 import { showToastNotification, ToastVariant } from "../lib/notifications"
-import { instances, addPermissionToQueue, removePermissionFromQueue } from "./instances"
+import { instances, addPermissionToQueue, removePermissionFromQueue, getPermissionQueue, handlePermissionFailure } from "./instances"
 import { showAlertDialog } from "./alerts"
 import { createClientSession, mapSdkSessionStatus, type Session, type SessionStatus } from "../types/session"
 import { sessions, setSessions, syncInstanceSessionIndicator, withSession } from "./session-state"
@@ -27,6 +27,7 @@ import { normalizeMessagePart } from "./message-v2/normalizers"
 import { updateSessionInfo } from "./message-v2/session-info"
 
 import { loadMessages } from "./session-api"
+import { getQuestionQueue, handleQuestionFailure } from "./questions"
 import {
   applyPartUpdateV2,
   replaceMessageIdV2,
@@ -172,13 +173,13 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
   if (event.type === "message.part.updated") {
     const rawPart = event.properties?.part
     if (!rawPart) return
- 
+
     const part = normalizeMessagePart(rawPart)
     const messageInfo = (event as any)?.properties?.message as MessageInfo | undefined
- 
+
     const fallbackSessionId = typeof messageInfo?.sessionID === "string" ? messageInfo.sessionID : undefined
     const fallbackMessageId = typeof messageInfo?.id === "string" ? messageInfo.id : undefined
- 
+
     const sessionId = typeof part.sessionID === "string" ? part.sessionID : fallbackSessionId
     const messageId = typeof part.messageID === "string" ? part.messageID : fallbackMessageId
     if (!sessionId || !messageId) return
@@ -215,7 +216,7 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
     if (messageInfo) {
       upsertMessageInfoV2(instanceId, messageInfo, { status: "streaming" })
     }
- 
+
     applyPartUpdateV2(instanceId, { ...part, sessionID: sessionId, messageID: messageId })
 
 
@@ -291,9 +292,9 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
       time: info.time
         ? { ...info.time }
         : {
-            created: Date.now(),
-            updated: Date.now(),
-          },
+          created: Date.now(),
+          updated: Date.now(),
+        },
     } as Session
 
     let updatedInstanceSessions: Map<string, Session> | undefined
@@ -323,11 +324,11 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
       time: mergedTime,
       revert: info.revert
         ? {
-            messageID: info.revert.messageID,
-            partID: info.revert.partID,
-            snapshot: info.revert.snapshot,
-            diff: info.revert.diff,
-          }
+          messageID: info.revert.messageID,
+          partID: info.revert.partID,
+          snapshot: info.revert.snapshot,
+          diff: info.revert.diff,
+        }
         : existingSession.revert,
     }
 
@@ -353,6 +354,29 @@ function handleSessionIdle(instanceId: string, event: EventSessionIdle): void {
 
   ensureSessionStatus(instanceId, sessionId, "idle")
   log.info(`[SSE] Session idle: ${sessionId}`)
+
+  // Get instance folder path for persistent storage
+  const instance = instances().get(instanceId)
+  const folderPath = instance?.folder ?? ""
+
+  // When session goes idle, any pending questions that weren't answered = timed out
+  // Move them to failed notifications
+  const pendingQuestions = getQuestionQueue(instanceId)
+  if (pendingQuestions.length > 0) {
+    log.info(`[SSE] Session idle with ${pendingQuestions.length} pending questions, moving to failed notifications`)
+    pendingQuestions.forEach((q) => {
+      handleQuestionFailure(instanceId, q.id, "timeout", folderPath)
+    })
+  }
+
+  // Also cleanup pending permissions
+  const pendingPermissions = getPermissionQueue(instanceId)
+  if (pendingPermissions.length > 0) {
+    log.info(`[SSE] Session idle with ${pendingPermissions.length} pending permissions, moving to failed notifications`)
+    pendingPermissions.forEach((p) => {
+      handlePermissionFailure(instanceId, p.id, "timeout", folderPath)
+    })
+  }
 }
 
 function handleSessionStatus(instanceId: string, event: EventSessionStatus): void {

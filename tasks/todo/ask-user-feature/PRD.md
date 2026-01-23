@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-This PRD outlines the implementation of a native `ask_user` (or `cn_ask_user`) tool for CodeNomad that allows AI agents to ask questions to users **without consuming additional premium LLM requests**. This is achieved by implementing an MCP (Model Context Protocol) server that returns tool results within the same LLM request stream.
+This PRD outlines the implementation of a native `ask_user` tool for CodeNomad that allows AI agents to ask questions to users **without consuming additional premium LLM requests**. This is achieved by implementing an MCP (Model Context Protocol) server that returns tool results within the same LLM request stream.
 
 ---
 
@@ -78,7 +78,7 @@ Following seamless-agent's approach:
 **So that** I can proceed with accurate information without consuming extra requests
 
 **Acceptance Criteria:**
-- [ ] Agent can call `cn_ask_user` tool
+- [ ] Agent can call `ask_user` tool
 - [ ] Question appears in CodeNomad's question wizard
 - [ ] User can answer with text, selection, or custom input
 - [ ] Agent receives answer in same LLM stream
@@ -113,7 +113,7 @@ Following seamless-agent's approach:
 
 | Feature                                      | Priority |
 | -------------------------------------------- | -------- |
-| MCP server with `cn_ask_user` tool           | P0       |
+| MCP server with `ask_user` tool           | P0       |
 | Integration with existing question wizard UI | P0       |
 | Auto-registration with Antigravity/Copilot   | P0       |
 | Authentication/security for MCP endpoints    | P0       |

@@ -13,10 +13,10 @@ const log = getLogger("actions")
 type DeepReadonly<T> = T extends (...args: any[]) => unknown
   ? T
   : T extends Array<infer U>
-    ? ReadonlyArray<DeepReadonly<U>>
-    : T extends object
-      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
-      : T
+  ? ReadonlyArray<DeepReadonly<U>>
+  : T extends object
+  ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+  : T
 
 export interface ModelPreference {
   providerId: string
@@ -119,13 +119,18 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
 }
 
 const [internalConfig, setInternalConfig] = createSignal<ConfigData>(buildFallbackConfig())
-
-const config = createMemo<DeepReadonly<ConfigData>>(() => internalConfig())
 const [isConfigLoaded, setIsConfigLoaded] = createSignal(false)
-const preferences = createMemo<Preferences>(() => internalConfig().preferences)
-const recentFolders = createMemo<RecentFolder[]>(() => internalConfig().recentFolders ?? [])
-const opencodeBinaries = createMemo<OpenCodeBinary[]>(() => internalConfig().opencodeBinaries ?? [])
-const themePreference = createMemo<ThemePreference>(() => internalConfig().theme ?? "dark")
+
+import { createRoot } from "solid-js"
+
+const [config, preferences, recentFolders, opencodeBinaries, themePreference] = createRoot(() => {
+  const config = createMemo<DeepReadonly<ConfigData>>(() => internalConfig())
+  const preferences = createMemo<Preferences>(() => internalConfig().preferences)
+  const recentFolders = createMemo<RecentFolder[]>(() => internalConfig().recentFolders ?? [])
+  const opencodeBinaries = createMemo<OpenCodeBinary[]>(() => internalConfig().opencodeBinaries ?? [])
+  const themePreference = createMemo<ThemePreference>(() => internalConfig().theme ?? "dark")
+  return [config, preferences, recentFolders, opencodeBinaries, themePreference]
+})
 let loadPromise: Promise<void> | null = null
 
 function normalizeConfig(config?: ConfigData | null): ConfigData {
@@ -537,7 +542,7 @@ export {
   themePreference,
   setThemePreference,
   recordWorkspaceLaunch,
- }
- 
+}
+
 
 

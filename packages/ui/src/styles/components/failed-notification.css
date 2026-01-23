@@ -1,0 +1,279 @@
+/* Failed Notification Banner Styles */
+
+.failed-notification-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid var(--status-error-fg);
+    background-color: var(--status-error-bg);
+    color: var(--status-error-fg);
+    font-size: 0.75rem;
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.failed-notification-trigger:hover,
+.failed-notification-trigger:focus-visible {
+    outline: none;
+    /* Fallback for browsers without color-mix() support */
+    background-color: var(--surface-hover);
+    /* Modern browsers: blend 70% error bg with surface hover */
+    background-color: color-mix(in srgb, var(--status-error-bg) 70%, var(--surface-hover));
+    transform: translateY(-1px);
+}
+
+.failed-notification-icon {
+    width: 1rem;
+    height: 1rem;
+    color: currentColor;
+}
+
+.failed-notification-count {
+    line-height: 1;
+}
+
+/* Failed Notification Panel Styles */
+
+.failed-notification-overlay {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 9998;
+    animation: fade-in 0.2s ease;
+}
+
+.failed-notification-positioner {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.failed-notification-panel {
+    position: relative;
+    width: 90%;
+    max-width: 600px;
+    max-height: 80vh;
+    background-color: var(--surface-base);
+    border: 1px solid var(--border-base);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+    display: flex;
+    flex-direction: column;
+    pointer-events: auto;
+    animation: slide-up 0.3s ease;
+}
+
+.failed-notification-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-base);
+}
+
+.failed-notification-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.failed-notification-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.failed-notification-dismiss-all {
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background-color: var(--surface-secondary);
+    border: 1px solid var(--border-base);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.failed-notification-dismiss-all:hover {
+    background-color: var(--surface-hover);
+    color: var(--text-primary);
+}
+
+.failed-notification-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.failed-notification-close:hover {
+    background-color: var(--surface-hover);
+    color: var(--text-primary);
+}
+
+.failed-notification-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+}
+
+.failed-notification-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.failed-notification-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.failed-notification-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    background-color: var(--surface-secondary);
+    border: 1px solid var(--border-base);
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+}
+
+.failed-notification-card:hover {
+    background-color: var(--surface-hover);
+}
+
+.failed-notification-card-icon {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    color: var(--status-error-fg);
+}
+
+.failed-notification-card-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.failed-notification-card-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+.failed-notification-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.failed-notification-card-reason {
+    font-weight: 500;
+}
+
+.failed-notification-card-separator {
+    opacity: 0.5;
+}
+
+.failed-notification-card-time {
+    opacity: 0.8;
+}
+
+.failed-notification-card-dismiss {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.failed-notification-card-dismiss:hover {
+    background-color: var(--surface-primary);
+    color: var(--text-primary);
+}
+
+/* Animations */
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slide-up {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Mobile Responsive */
+
+@media (max-width: 640px) {
+    .failed-notification-panel {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    .failed-notification-header {
+        padding: 12px 16px;
+    }
+
+    .failed-notification-content {
+        padding: 12px 16px;
+    }
+
+    .failed-notification-title {
+        font-size: 15px;
+    }
+
+    .failed-notification-dismiss-all {
+        padding: 4px 8px;
+        font-size: 12px;
+    }
+}

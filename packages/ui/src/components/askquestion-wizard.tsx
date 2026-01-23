@@ -117,24 +117,30 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                 if (question.multiple) {
                     // Toggle for multi-select (use label as value)
                     const idx = state.selectedValues.indexOf(optionLabel)
-                    console.log('[AskQuestionWizard] Multi-select toggle', {
-                        optionLabel,
-                        currentIndex: idx,
-                        currentArray: [...state.selectedValues]
-                    })
+                    if (import.meta.env.DEV) {
+                        console.log('[AskQuestionWizard] Multi-select toggle', {
+                            optionLabel,
+                            currentIndex: idx,
+                            currentArray: [...state.selectedValues]
+                        })
+                    }
 
                     if (idx >= 0) {
                         // Remove if already selected
                         state.selectedValues.splice(idx, 1)
-                        console.log('[AskQuestionWizard] Removed from selection', {
-                            newArray: [...state.selectedValues]
-                        })
+                        if (import.meta.env.DEV) {
+                            console.log('[AskQuestionWizard] Removed from selection', {
+                                newArray: [...state.selectedValues]
+                            })
+                        }
                     } else {
                         // Add if not selected
                         state.selectedValues.push(optionLabel)
-                        console.log('[AskQuestionWizard] Added to selection', {
-                            newArray: [...state.selectedValues]
-                        })
+                        if (import.meta.env.DEV) {
+                            console.log('[AskQuestionWizard] Added to selection', {
+                                newArray: [...state.selectedValues]
+                            })
+                        }
                     }
                 } else {
                     // Select for single-select and auto-advance
@@ -419,12 +425,16 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
                         type="button"
                         class="askquestion-wizard-close"
                         onClick={() => {
-                            console.log('[AskQuestionWizard] Close button clicked, calling onCancel')
-                            console.log('[AskQuestionWizard] props.onCancel type:', typeof props.onCancel)
-                            console.log('[AskQuestionWizard] props.onCancel:', props.onCancel)
+                            if (import.meta.env.DEV) {
+                                console.log('[AskQuestionWizard] Close button clicked, calling onCancel')
+                                console.log('[AskQuestionWizard] props.onCancel type:', typeof props.onCancel)
+                                console.log('[AskQuestionWizard] props.onCancel:', props.onCancel)
+                            }
                             try {
                                 props.onCancel()
-                                console.log('[AskQuestionWizard] onCancel called successfully')
+                                if (import.meta.env.DEV) {
+                                    console.log('[AskQuestionWizard] onCancel called successfully')
+                                }
                             } catch (err) {
                                 console.error('[AskQuestionWizard] onCancel threw error:', err)
                             }

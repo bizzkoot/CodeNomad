@@ -44,8 +44,12 @@ export function readMcpConfig(): { mcpServers: Record<string, McpServerConfig> }
 
 /**
  * Write MCP config with CodeNomad entry
+ * 
+ * @param port - MCP server port
+ * @param token - MCP server auth token  
+ * @param serverPath - Absolute path to the MCP server entry point (server.js)
  */
-export function writeMcpConfig(port: number, token: string): void {
+export function writeMcpConfig(port: number, token: string, serverPath?: string): void {
     const configPath = getMcpConfigPath();
 
     try {
@@ -57,11 +61,16 @@ export function writeMcpConfig(port: number, token: string): void {
             config.mcpServers = {};
         }
 
-        // Get path to our built MCP server
-        // registration.ts compiles to dist/config/, so __dirname is dist/config/
-        // We need to go up to dist/ and then index.js
-        const mcpServerPath = path.join(__dirname, '..', 'index.js');
+        // Use provided server path, or try to resolve it
+        let mcpServerPath = serverPath;
+        if (!mcpServerPath) {
+            // Fallback: try to find it relative to this file
+            // registration.ts compiles to dist/config/, so __dirname is dist/config/
+            mcpServerPath = path.join(__dirname, '..', 'server.js');
+        }
         const absoluteMcpServerPath = path.resolve(mcpServerPath);
+
+        console.log(`[MCP Config] Using server path: ${absoluteMcpServerPath}`);
 
         // Add ask_user tool entry
         config.mcpServers['ask-user'] = {
@@ -73,18 +82,33 @@ export function writeMcpConfig(port: number, token: string): void {
             ]
         };
 
+        console.log(`[MCP Config] Config to write:`, JSON.stringify(config, null, 2));
+
         // Ensure directory exists
         const configDir = path.dirname(configPath);
         if (!fs.existsSync(configDir)) {
+            console.log(`[MCP Config] Creating directory: ${configDir}`);
             fs.mkdirSync(configDir, { recursive: true });
         }
 
         // Write config atomically
         const tempPath = configPath + '.tmp';
+        console.log(`[MCP Config] Writing to temp file: ${tempPath}`);
         fs.writeFileSync(tempPath, JSON.stringify(config, null, 2));
+        console.log(`[MCP Config] Temp file written successfully`);
 
         // Atomic rename
+        console.log(`[MCP Config] Renaming ${tempPath} -> ${configPath}`);
         fs.renameSync(tempPath, configPath);
+        console.log(`[MCP Config] File renamed successfully`);
+
+        // Verify the write
+        if (fs.existsSync(configPath)) {
+            const writtenConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            console.log(`[MCP Config] Verification: ask-user entry exists:`, !!writtenConfig.mcpServers['ask-user']);
+        } else {
+            console.error(`[MCP Config] ERROR: Config file does not exist after write!`);
+        }
 
         console.log(`[MCP Config] Registered with Antigravity on port ${port}`);
     } catch (error) {
