@@ -71,6 +71,142 @@ applyTo: '**'
 8. **packages/electron-app/electron/main/process-manager.ts** - Both modified
 
 # Merge History
+## 2026-01-25 - SUCCESSFUL UPSTREAM SYNC v0.9.1
+- **Strategy**: Incremental conflict resolution with strategic file preservation
+- **Branch**: merge/mirror-to-dev-20260125
+- **Merge Commit**: fa5b125
+- **Upstream Source**: origin/mirror (20 commits from v0.9.0 → v0.9.1)
+- **Fork State**: Preserved all custom features (ask_user MCP, search, failed notifications)
+
+### Execution Summary
+- **Phase 1**: Branch analysis and divergence identification (20 commits each side)
+- **Phase 2**: Merge execution with 11 conflicts detected
+- **Phase 3**: Strategic conflict resolution:
+  - Safe changes: Version bumps, configs, workflows (committed first)
+  - Critical files: Kept fork versions of permission-approval-modal.tsx, tool-call.tsx
+  - Hybrid merge: session-events.ts (removed question tool refs, kept upstream structure)
+- **Phase 4**: Build validation and fixes:
+  - Initial build: Failed (rollup issue)
+  - Fix: `rm -rf node_modules package-lock.json && npm install`
+  - Final build: ✅ PASSED (8.31s)
+- **Phase 5**: Typecheck resolution:
+  - Issue: mcp-server .d.ts files not being generated
+  - Root cause: Corrupt tsconfig.tsbuildinfo + moduleResolution: "bundler"
+  - Fix: Changed to moduleResolution: "node", added types field, clean rebuild
+  - Result: ✅ All typechecks pass (UI + electron-app)
+
+### Conflicts Resolved (11 total)
+1. **package.json** → THEIRS (v0.9.1)
+2. **packages/*/package.json** (5 files) → THEIRS (version bumps)
+3. **.gitignore** → MANUAL (merged temp/ + .codenomad/, .tmp/)
+4. **.github/workflows/reusable-release.yml** → THEIRS (added release-ui, publish-server)
+5. **packages/ui/src/components/permission-approval-modal.tsx** → OURS (preserve ask_user MCP)
+6. **packages/ui/src/components/tool-call.tsx** → OURS (preserve section expansion + ask_user rendering)
+7. **packages/ui/src/stores/session-events.ts** → MANUAL (removed question tool refs, kept upstream structure)
+8. **package-lock.json** → REGENERATED (9751 insertions, 4372 deletions)
+
+### Strategic Decisions
+
+#### Ask_user vs. Question Tool
+**Conflict**: Upstream refactored tool-call.tsx into modular components (ansi-render, diff-render, question-block, permission-block) tightly coupled with their question tool.
+
+**Decision**: Keep fork's tool-call.tsx (1050 lines)
+
+**Rationale**:
+- Fork's ask_user MCP tool is fundamentally different and more robust:
+  - Complete MCP server package with JSON-RPC
+  - Native Electron IPC bridge with zero-cost routing
+  - Automatic Claude Desktop registration
+  - Persistent failed notification handling
+- Upstream's question tool is a simple UI component without MCP integration
+- Fork version also includes custom section expansion feature (search integration)
+
+**Files Affected**:
+- ✅ Kept fork: tool-call.tsx, permission-approval-modal.tsx
+- ✅ Modified: session-events.ts (removed reconcilePendingQuestionsV2)
+
+### Merged Upstream Features (v0.9.1)
+
+✅ **New Packages & Infrastructure**
+- Cloudflare package (remote UI hosting)
+- UI auto-update system (version.json manifest)
+- Release workflows (release-ui, publish-server CI/CD)
+
+✅ **UI Enhancements**
+- GitHub stars display with brand-icons component
+- Version pill component for UI version info
+- Enhanced folder picker layout
+- Task UI improvements (steps/model headers, prompt/output panes, ANSI support)
+- Multi-file diff rendering for apply_patch tool
+- Modular tool-call components (we use some, kept our tool-call.tsx)
+
+✅ **Server & API**
+- Filesystem API: create-folder endpoint
+- Remote UI support: auto-update via manifest
+- Process management: improved workspace cleanup
+- UI version serving: emit ui-version.json
+- Enhanced path handling for @file mentions
+
+✅ **Performance & Bug Fixes**
+- Session list optimization (reduced churn)
+- Message block performance (better invalidation)
+- Permission UX improvements
+- Server --host binding configuration
+
+### Fork Features Preserved
+
+✅ **ask_user MCP Tool** (Complete Implementation)
+- packages/mcp-server/* (native MCP server)
+- MCP bridge initialization and cleanup
+- Question wizard with multi-line support
+- Failed notifications with retry logic
+- Automatic Claude Desktop registration
+
+✅ **Custom Features**
+- Section expansion (search integration)
+- Search functionality (chat search with highlighting)
+- Custom tool-call rendering and section expansion
+- MCP IPC bridge (zero-cost routing)
+
+### Build Validation
+| Check | Status | Notes |
+|-------|--------|-------|
+| UI typecheck | ✅ PASSED | No TypeScript errors |
+| electron-app typecheck | ✅ PASSED | Fixed by regenerating .d.ts files |
+| Build | ✅ PASSED | 8.31s compile time |
+| Dev server | ✅ PASSED | All features functional |
+
+### Test Verification
+All fork features tested and working:
+- ✅ MCP bridge initialization
+- ✅ ask_user tool (question wizard)
+- ✅ Failed notifications loading
+- ✅ Section expansion
+- ✅ Search functionality
+- ✅ No runtime errors
+
+### Post-Merge Fixes
+
+**2026-01-25**: Fixed electron-app typecheck errors
+- **Problem**: mcp-server .d.ts declaration files not being generated
+- **Root Cause**: 
+  - Corrupt incremental build cache (tsconfig.tsbuildinfo)
+  - moduleResolution: "bundler" incompatible with TypeScript 5.9.3
+- **Solution**:
+  - Changed tsconfig.json: moduleResolution "bundler" → "node"
+  - Added "types" field to package.json: "dist/server.d.ts"
+  - Clean rebuild: `rm tsconfig.tsbuildinfo && tsc`
+- **Result**: ✅ All typechecks pass, .d.ts files properly generated
+- **Commit**: 011a70e
+
+### Files Changed
+- **60 files total**: +6,611 lines, -1,192 lines
+- **New files (13)**: Cloudflare package, UI components, remote UI system
+- **Modified files (47)**: UI components, server routes, configs, lockfiles
+
+### Documentation
+- **PR.md**: Comprehensive dev→main merge documentation created
+
 ## 2026-01-19 - SUCCESSFUL UPSTREAM MERGE
 - Strategy: Bulk merge with selective conflict resolution
 - Branch: upstream-merge-analysis-20260119
