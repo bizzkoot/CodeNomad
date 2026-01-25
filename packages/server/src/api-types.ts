@@ -95,6 +95,26 @@ export interface FileSystemListResponse {
   metadata: FileSystemListingMetadata
 }
 
+export interface FileSystemCreateFolderRequest {
+  /**
+   * Path identifier for the currently browsed directory.
+   * Matches the `path` parameter used for `/api/filesystem`.
+   */
+  parentPath?: string
+  /** Single folder name (no separators). */
+  name: string
+}
+
+export interface FileSystemCreateFolderResponse {
+  /**
+   * Path identifier that can be passed back to `/api/filesystem` to browse the new folder.
+   * Relative for restricted listings, absolute for unrestricted.
+   */
+  path: string
+  /** Absolute folder path on the server host. */
+  absolutePath: string
+}
+
 export const WINDOWS_DRIVES_ROOT = "__drives__"
 
 export interface WorkspaceFileResponse {
@@ -167,7 +187,6 @@ export type WorkspaceEventType =
   | "instance.dataChanged"
   | "instance.event"
   | "instance.eventStatus"
-  | "app.releaseAvailable"
 
 export type WorkspaceEventPayload =
   | { type: "workspace.created"; workspace: WorkspaceDescriptor }
@@ -180,7 +199,6 @@ export type WorkspaceEventPayload =
   | { type: "instance.dataChanged"; instanceId: string; data: InstanceData }
   | { type: "instance.event"; instanceId: string; event: InstanceStreamEvent }
   | { type: "instance.eventStatus"; instanceId: string; status: InstanceStreamStatus; reason?: string }
-  | { type: "app.releaseAvailable"; release: LatestReleaseInfo }
 
 export interface NetworkAddress {
   ip: string
@@ -196,6 +214,19 @@ export interface LatestReleaseInfo {
   channel: "stable" | "dev"
   publishedAt?: string
   notes?: string
+}
+
+export interface UiMeta {
+  version?: string
+  source: "bundled" | "downloaded" | "previous" | "override" | "dev-proxy" | "missing"
+}
+
+export interface SupportMeta {
+  supported: boolean
+  message?: string
+  minServerVersion?: string
+  latestServerVersion?: string
+  latestServerUrl?: string
 }
 
 export interface ServerMeta {
@@ -215,8 +246,9 @@ export interface ServerMeta {
   workspaceRoot: string
   /** Reachable addresses for this server, external first. */
   addresses: NetworkAddress[]
-  /** Optional metadata about the most recent public release. */
-  latestRelease?: LatestReleaseInfo
+  serverVersion?: string
+  ui?: UiMeta
+  support?: SupportMeta
 }
 
 export type BackgroundProcessStatus = "running" | "stopped" | "error"
