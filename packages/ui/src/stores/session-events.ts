@@ -219,7 +219,6 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
 
     applyPartUpdateV2(instanceId, { ...part, sessionID: sessionId, messageID: messageId })
 
-
     updateSessionInfo(instanceId, sessionId)
   } else if (event.type === "message.updated") {
     const info = event.properties?.info

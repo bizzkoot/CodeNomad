@@ -13,6 +13,16 @@ export interface MarkdownRenderOptions {
   content: string
   size?: "default" | "large"
   disableHighlight?: boolean
+  /**
+   * Optional suffix to avoid render-cache collisions when a tool call renders
+   * multiple markdown regions (e.g. task prompt vs task output).
+   */
+  cacheKey?: string
+  /**
+   * When true, do not register this markdown region with tool-call scroll
+   * tracking (avoids nested scroll + autoscroll interactions).
+   */
+  disableScrollTracking?: boolean
 }
 
 export interface AnsiRenderOptions {
@@ -26,6 +36,11 @@ export interface DiffRenderOptions {
   variant?: string
   disableScrollTracking?: boolean
   label?: string
+  /**
+   * Optional cache key suffix to avoid collisions when rendering multiple diffs
+   * within the same tool call (e.g. apply_patch).
+   */
+  cacheKey?: string
 }
 
 export interface ToolScrollHelpers {

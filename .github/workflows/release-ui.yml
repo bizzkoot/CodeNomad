@@ -1,0 +1,47 @@
+name: Release UI
+
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  release-ui:
+    # Automated via reusable call (main releases); manual runs allowed on dev/main.
+    if: ${{ github.event_name == 'workflow_call' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --workspaces --include=optional
+
+      - name: Ensure rollup native binary
+        run: npm install @rollup/rollup-linux-x64-gnu --no-save
+
+      - name: Install Cloudflare worker deps
+        run: npm ci
+        working-directory: packages/cloudflare
+
+      - name: Build UI
+        run: npm run build --workspace @codenomad/ui
+
+      - name: Publish UI zip + update manifest
+        working-directory: packages/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CODENOMAD_R2_BUCKET: ${{ vars.CODENOMAD_R2_BUCKET }}
+        run: npm run release:ui
