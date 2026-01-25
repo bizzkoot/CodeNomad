@@ -53,6 +53,7 @@ import InfoView from "../info-view"
 import InstanceServiceStatus from "../instance-service-status"
 import AgentSelector from "../agent-selector"
 import ModelSelector from "../model-selector"
+import ThinkingSelector from "../thinking-selector"
 import CommandPalette from "../command-palette"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
@@ -432,6 +433,14 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     return true
   }
 
+  const focusVariantSelectorControl = () => {
+    const input = leftDrawerContentEl()?.querySelector<HTMLInputElement>("[data-thinking-selector]")
+    if (!input) return false
+    input.focus()
+    setTimeout(() => triggerKeyboardEvent(input, { key: "ArrowDown", code: "ArrowDown", keyCode: 40 }), 10)
+    return true
+  }
+
   createEffect(() => {
     const pending = pendingSidebarAction()
     if (!pending) return
@@ -444,7 +453,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       setPendingSidebarAction(null)
       return
     }
-    const handled = action === "focus-agent-selector" ? focusAgentSelectorControl() : focusModelSelectorControl()
+    const handled =
+      action === "focus-agent-selector"
+        ? focusAgentSelectorControl()
+        : action === "focus-model-selector"
+          ? focusModelSelectorControl()
+          : focusVariantSelectorControl()
     if (handled) {
       setPendingSidebarAction(null)
     }
@@ -905,8 +919,11 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                   <span class="hint sidebar-selector-hint sidebar-selector-hint--left">
                     <Kbd shortcut="cmd+shift+a" />
                   </span>
-                  <span class="hint sidebar-selector-hint sidebar-selector-hint--right">
+                  <span class="hint sidebar-selector-hint sidebar-selector-hint--center">
                     <Kbd shortcut="cmd+shift+m" />
+                  </span>
+                  <span class="hint sidebar-selector-hint sidebar-selector-hint--right">
+                    <Kbd shortcut="cmd+shift+t" />
                   </span>
                 </div>
 
@@ -916,6 +933,8 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                   currentModel={activeSession().model}
                   onModelChange={(model) => props.handleSidebarModelChange(activeSession().id, model)}
                 />
+
+                <ThinkingSelector instanceId={props.instance.id} currentModel={activeSession().model} />
               </div>
             </>
           )}
