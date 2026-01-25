@@ -269,7 +269,6 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
               <img src={codeNomadLogo} alt="CodeNomad logo" class="h-32 w-auto sm:h-48" loading="lazy" />
             </div>
             <h1 class="mb-2 text-3xl font-semibold text-primary">CodeNomad</h1>
-            <p class="text-base text-secondary">Select a folder to start coding with AI</p>
             <div class="mt-3 flex justify-center gap-2">
               <a
                 href="https://github.com/NeuralNomadsAI/CodeNomad"
@@ -319,6 +318,7 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
                 <DiscordSymbolIcon class="w-4 h-4" />
               </a>
             </div>
+            <p class="mt-3 text-base text-secondary">Select a folder to start coding with AI</p>
           </div>
 
           <div class="flex-1 min-h-0 overflow-hidden flex flex-col gap-4">
