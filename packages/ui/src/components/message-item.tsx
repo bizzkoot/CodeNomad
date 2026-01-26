@@ -173,24 +173,43 @@ export default function MessageItem(props: MessageItemProps) {
   const speakerLabel = () => (isUser() ? "You" : "Assistant")
 
   const agentIdentifier = () => {
-    if (isUser()) return ""
     const info = props.messageInfo
-    if (!info || info.role !== "assistant") return ""
-    return info.mode || ""
+    if (!info) return ""
+    
+    if (isUser() && info.role === "user") {
+      return info.agent || ""
+    }
+    
+    if (!isUser() && info.role === "assistant") {
+      return (info as any).mode || ""
+    }
+    
+    return ""
   }
 
   const modelIdentifier = () => {
-    if (isUser()) return ""
     const info = props.messageInfo
-    if (!info || info.role !== "assistant") return ""
-    const modelID = info.modelID || ""
-    const providerID = info.providerID || ""
-    if (modelID && providerID) return `${providerID}/${modelID}`
-    return modelID
+    if (!info) return ""
+    
+    if (isUser() && info.role === "user") {
+      const modelID = info.model?.modelID || ""
+      const providerID = info.model?.providerID || ""
+      if (modelID && providerID) return `${providerID}/${modelID}`
+      return modelID
+    }
+    
+    if (!isUser() && info.role === "assistant") {
+      const modelID = (info as any).modelID || ""
+      const providerID = (info as any).providerID || ""
+      if (modelID && providerID) return `${providerID}/${modelID}`
+      return modelID
+    }
+    
+    return ""
   }
 
   const agentMeta = () => {
-    if (isUser() || !props.showAgentMeta) return ""
+    if (!props.showAgentMeta) return ""
     const segments: string[] = []
     const agent = agentIdentifier()
     const model = modelIdentifier()
