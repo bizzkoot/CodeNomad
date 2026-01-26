@@ -17,7 +17,10 @@ export async function askUser(
 
     const requestId = generateRequestId();
 
-    console.log(`[MCP] ask_user called: ${requestId}`);
+    console.log(`[MCP] ask_user called: ${requestId}`, {
+        questions: input.questions.length,
+        title: input.title ?? null
+    });
 
     // Generate IDs for questions if not provided
     const questionsWithIds: Array<QuestionInfo & { id: string }> = input.questions.map((q, index) => ({
