@@ -163,6 +163,83 @@
   white-space: normal;
 }
 
+/* Compact markdown styles for user messages (optimized for screen viewing) */
+.message-text:not(.message-text-assistant) .markdown-body {
+  font-size: var(--font-size-base) !important;
+  line-height: 1.5 !important; /* Standard readable line height */
+}
+
+/* Headings: Compact but distinct */
+.message-text:not(.message-text-assistant) .markdown-body h1,
+.message-text:not(.message-text-assistant) .markdown-body h2,
+.message-text:not(.message-text-assistant) .markdown-body h3,
+.message-text:not(.message-text-assistant) .markdown-body h4,
+.message-text:not(.message-text-assistant) .markdown-body h5,
+.message-text:not(.message-text-assistant) .markdown-body h6 {
+  font-size: var(--font-size-base) !important;
+  margin-top: 1em !important;
+  margin-bottom: 0.25em !important;
+  line-height: 1.4 !important;
+  font-weight: var(--font-weight-bold) !important;
+}
+
+/* Remove margin from the very first element */
+.message-text:not(.message-text-assistant) .markdown-body > *:first-child {
+  margin-top: 0 !important;
+}
+
+/* Remove margin from the very last element */
+.message-text:not(.message-text-assistant) .markdown-body > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* Paragraphs: Moderate spacing to distinguish blocks, but not huge */
+.message-text:not(.message-text-assistant) .markdown-body p {
+  margin-top: 0 !important;
+  margin-bottom: 0.5em !important;
+}
+
+/* Lists: Compact */
+.message-text:not(.message-text-assistant) .markdown-body ul,
+.message-text:not(.message-text-assistant) .markdown-body ol {
+  margin-top: 0 !important;
+  margin-bottom: 0.5em !important;
+  padding-left: 1.5em !important;
+}
+
+/* List items: No extra spacing between items */
+.message-text:not(.message-text-assistant) .markdown-body li {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Nested paragraphs in lists (loose lists): Remove margins to keep lists compact */
+.message-text:not(.message-text-assistant) .markdown-body li > p {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Blockquotes */
+.message-text:not(.message-text-assistant) .markdown-body blockquote {
+  margin: 0.5em 0 !important;
+  padding: 0 1em !important;
+  color: var(--text-muted) !important;
+  border-left: 0.25em solid var(--border-base) !important;
+}
+
+/* Horizontal Rules */
+.message-text:not(.message-text-assistant) .markdown-body hr {
+  height: 1px !important;
+  margin: 1em 0 !important;
+  background-color: var(--border-base) !important;
+  border: none !important;
+}
+
+/* Tables */
+.message-text:not(.message-text-assistant) .markdown-body table {
+  margin-bottom: 0.5em !important;
+}
+
 .message-text pre {
   overflow-x: auto;
   padding: 8px;
