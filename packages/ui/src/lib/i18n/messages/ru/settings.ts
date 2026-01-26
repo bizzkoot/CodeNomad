@@ -28,6 +28,10 @@ export const settingsMessages = {
   "modelSelector.placeholder.search": "Поиск моделей…",
   "modelSelector.none": "Нет",
   "modelSelector.trigger.primary": "Модель: {model}",
+  "modelSelector.favoritesOnly.toggle.ariaLabel": "Только избранное",
+  "modelSelector.favoritesOnly.showAll": "Показать все модели",
+  "modelSelector.favorite.add": "Добавить в избранное",
+  "modelSelector.favorite.remove": "Удалить из избранного",
 
   "thinkingSelector.variant.default": "По умолчанию",
   "thinkingSelector.label": "Размышления: {variant}",

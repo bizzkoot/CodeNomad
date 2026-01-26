@@ -40,6 +40,7 @@ export interface Preferences {
   locale?: string
   environmentVariables: Record<string, string>
   modelRecents: ModelPreference[]
+  modelFavorites: ModelPreference[]
   modelThinkingSelections: Record<string, string>
   diffViewMode: DiffViewMode
   toolOutputExpansion: ExpansionPreference
@@ -66,6 +67,7 @@ export type ThemePreference = NonNullable<ConfigData["theme"]>
 
 const MAX_RECENT_FOLDERS = 20
 const MAX_RECENT_MODELS = 5
+const MAX_FAVORITE_MODELS = 50
 
 const defaultPreferences: Preferences = {
   showThinkingBlocks: false,
@@ -73,6 +75,7 @@ const defaultPreferences: Preferences = {
   showTimelineTools: true,
   environmentVariables: {},
   modelRecents: [],
+  modelFavorites: [],
   modelThinkingSelections: {},
   diffViewMode: "split",
   toolOutputExpansion: "expanded",
@@ -105,6 +108,9 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
   const sourceModelRecents = sanitized.modelRecents ?? defaultPreferences.modelRecents
   const modelRecents = sourceModelRecents.map((item) => ({ ...item }))
 
+  const sourceModelFavorites = sanitized.modelFavorites ?? defaultPreferences.modelFavorites
+  const modelFavorites = sourceModelFavorites.map((item) => ({ ...item }))
+
   const modelThinkingSelections = {
     ...defaultPreferences.modelThinkingSelections,
     ...(sanitized.modelThinkingSelections ?? {}),
@@ -118,6 +124,7 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
     locale: sanitized.locale ?? defaultPreferences.locale,
     environmentVariables,
     modelRecents,
+    modelFavorites,
     modelThinkingSelections,
     diffViewMode: sanitized.diffViewMode ?? defaultPreferences.diffViewMode,
     toolOutputExpansion: sanitized.toolOutputExpansion ?? defaultPreferences.toolOutputExpansion,
@@ -130,6 +137,29 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
 
 function getModelKey(model: { providerId: string; modelId: string }): string {
   return `${model.providerId}/${model.modelId}`
+}
+
+function isFavoriteModelPreference(model: ModelPreference): boolean {
+  if (!model.providerId || !model.modelId) return false
+  return (preferences().modelFavorites ?? []).some(
+    (item) => item.providerId === model.providerId && item.modelId === model.modelId,
+  )
+}
+
+function toggleFavoriteModelPreference(model: ModelPreference): void {
+  if (!model.providerId || !model.modelId) return
+  const favorites = preferences().modelFavorites ?? []
+  const exists = favorites.some((item) => item.providerId === model.providerId && item.modelId === model.modelId)
+
+  if (exists) {
+    const updated = favorites.filter((item) => item.providerId !== model.providerId || item.modelId !== model.modelId)
+    updatePreferences({ modelFavorites: updated })
+    return
+  }
+
+  const filtered = favorites.filter((item) => item.providerId !== model.providerId || item.modelId !== model.modelId)
+  const updated = [model, ...filtered].slice(0, MAX_FAVORITE_MODELS)
+  updatePreferences({ modelFavorites: updated })
 }
 
 function getModelThinkingSelection(model: { providerId: string; modelId: string }): string | undefined {
@@ -566,6 +596,8 @@ export {
   addEnvironmentVariable,
   removeEnvironmentVariable,
   addRecentModelPreference,
+  isFavoriteModelPreference,
+  toggleFavoriteModelPreference,
   getModelThinkingSelection,
   setModelThinkingSelection,
   setAgentModelPreference,

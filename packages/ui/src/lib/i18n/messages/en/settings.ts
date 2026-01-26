@@ -28,6 +28,10 @@ export const settingsMessages = {
   "modelSelector.placeholder.search": "Search models...",
   "modelSelector.none": "None",
   "modelSelector.trigger.primary": "Model: {model}",
+  "modelSelector.favoritesOnly.toggle.ariaLabel": "Toggle favorites only",
+  "modelSelector.favoritesOnly.showAll": "Show all models",
+  "modelSelector.favorite.add": "Add to favorites",
+  "modelSelector.favorite.remove": "Remove from favorites",
 
   "thinkingSelector.variant.default": "Default",
   "thinkingSelector.label": "Thinking: {variant}",

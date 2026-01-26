@@ -28,6 +28,10 @@ export const settingsMessages = {
   "modelSelector.placeholder.search": "モデルを検索...",
   "modelSelector.none": "なし",
   "modelSelector.trigger.primary": "モデル: {model}",
+  "modelSelector.favoritesOnly.toggle.ariaLabel": "お気に入りのみ",
+  "modelSelector.favoritesOnly.showAll": "すべてのモデルを表示",
+  "modelSelector.favorite.add": "お気に入りに追加",
+  "modelSelector.favorite.remove": "お気に入りから削除",
 
   "thinkingSelector.variant.default": "デフォルト",
   "thinkingSelector.label": "思考: {variant}",

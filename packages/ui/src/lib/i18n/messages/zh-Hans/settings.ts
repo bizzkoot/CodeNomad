@@ -28,6 +28,10 @@ export const settingsMessages = {
   "modelSelector.placeholder.search": "搜索模型...",
   "modelSelector.none": "无",
   "modelSelector.trigger.primary": "模型：{model}",
+  "modelSelector.favoritesOnly.toggle.ariaLabel": "仅显示收藏",
+  "modelSelector.favoritesOnly.showAll": "显示所有模型",
+  "modelSelector.favorite.add": "添加到收藏",
+  "modelSelector.favorite.remove": "从收藏移除",
 
   "thinkingSelector.variant.default": "默认",
   "thinkingSelector.label": "思考：{variant}",
