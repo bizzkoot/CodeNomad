@@ -27,6 +27,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
     const [showDiff, setShowDiff] = createSignal(false)
     const [diffContent, setDiffContent] = createSignal("")
     const [diffPath, setDiffPath] = createSignal("")
+    const [isFileContent, setIsFileContent] = createSignal(false)
     const [showBranchPicker, setShowBranchPicker] = createSignal(false)
 
     onMount(() => {
@@ -119,10 +120,20 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
 
     const handleViewDiff = async (file: GitFileChange) => {
         try {
-            const response = await serverApi.fetchGitDiff(props.workspaceId, file.path, file.staged)
-            setDiffPath(file.path)
-            setDiffContent(response.diff)
-            setShowDiff(true)
+            // For untracked files, show full content instead of diff
+            if (file.status === "untracked") {
+                const response = await serverApi.fetchGitFileContent(props.workspaceId, file.path)
+                setDiffPath(file.path)
+                setDiffContent(response.content)
+                setIsFileContent(true)
+                setShowDiff(true)
+            } else {
+                const response = await serverApi.fetchGitDiff(props.workspaceId, file.path, file.staged)
+                setDiffPath(file.path)
+                setDiffContent(response.diff)
+                setIsFileContent(false)
+                setShowDiff(true)
+            }
         } catch (error) {
             console.error("Failed to fetch diff", error)
         }
@@ -168,6 +179,17 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                 <span class={`${textClass} font-mono text-xs whitespace-pre`}>
                     <span class="select-none inline-block w-4 text-gray-500">{prefix}</span>
                     <span class="whitespace-pre-wrap break-all">{content}</span>
+                </span>
+            </div>
+        )
+    }
+
+    const renderFileContentLine = (line: string, index: number) => {
+        return (
+            <div class="px-2 py-0.5 hover:bg-surface-tertiary/50">
+                <span class="text-primary font-mono text-xs whitespace-pre">
+                    <span class="select-none inline-block w-12 text-gray-500 text-right mr-2">{index + 1}</span>
+                    <span class="whitespace-pre-wrap break-all">{line}</span>
                 </span>
             </div>
         )
@@ -527,7 +549,9 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div class="flex items-center justify-between px-4 py-2 border-b border-base">
-                            <span class="font-semibold text-sm">{diffPath()}</span>
+                            <span class="font-semibold text-sm">
+                                {diffPath()} {isFileContent() && <span class="text-secondary text-xs ml-2">(Preview)</span>}
+                            </span>
                             <button type="button" class="p-1 hover:bg-surface-secondary rounded" onClick={() => setShowDiff(false)} title="Close">
                                 ×
                             </button>
@@ -535,9 +559,15 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                         <div class="flex-1 overflow-auto bg-surface-secondary">
                             <Show when={diffContent()} fallback={<p class="text-secondary text-sm p-4">No changes</p>}>
                                 <div class="font-mono text-xs leading-relaxed">
-                                    <For each={diffContent().split("\n")}>
-                                        {(line, index) => renderDiffLine(line, index())}
-                                    </For>
+                                    <Show when={isFileContent()} fallback={
+                                        <For each={diffContent().split("\n")}>
+                                            {(line, index) => renderDiffLine(line, index())}
+                                        </For>
+                                    }>
+                                        <For each={diffContent().split("\n")}>
+                                            {(line, index) => renderFileContentLine(line, index())}
+                                        </For>
+                                    </Show>
                                 </div>
                             </Show>
                         </div>

@@ -367,6 +367,38 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
         },
     )
 
+    // GET /api/workspaces/:id/git/file-content
+    app.get<{ Params: { id: string }; Querystring: { path: string } }>(
+        "/api/workspaces/:id/git/file-content",
+        async (request, reply) => {
+            const workspacePath = getWorkspacePath(request.params.id)
+            if (!workspacePath) {
+                return reply.status(404).send({ error: "Workspace not found" })
+            }
+
+            const filePath = request.query.path
+            if (!filePath) {
+                return reply.status(400).send({ error: "File path is required" })
+            }
+
+            try {
+                const fullPath = path.join(workspacePath, filePath)
+                // Security check: ensure the path is within workspace
+                const normalizedPath = path.normalize(fullPath)
+                const normalizedWorkspace = path.normalize(workspacePath)
+                if (!normalizedPath.startsWith(normalizedWorkspace)) {
+                    return reply.status(403).send({ error: "Access denied" })
+                }
+
+                const content = await fs.readFile(fullPath, "utf-8")
+                return { path: filePath, content }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to read file"
+                return reply.status(500).send({ error: message })
+            }
+        },
+    )
+
     // POST /api/workspaces/:id/git/stage
     app.post<{ Params: { id: string }; Body: GitStageRequest }>(
         "/api/workspaces/:id/git/stage",
