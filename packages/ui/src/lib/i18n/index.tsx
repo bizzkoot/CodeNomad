@@ -1,18 +1,28 @@
 import { createContext, createEffect, createMemo, createSignal, onCleanup, onMount, useContext } from "solid-js"
 import type { ParentComponent } from "solid-js"
 import { useConfig } from "../../stores/preferences"
-import { enMessages } from "./messages/en/index"
+import { enMessages } from "./messages/en"
+import { esMessages } from "./messages/es"
+import { frMessages } from "./messages/fr"
+import { ruMessages } from "./messages/ru"
+import { jaMessages } from "./messages/ja"
+import { zhHansMessages } from "./messages/zh-Hans"
 
 type Messages = Record<string, string>
 
 export type TranslateParams = Record<string, unknown>
 
-export type Locale = "en"
+export type Locale = "en" | "es" | "fr" | "ru" | "ja" | "zh-Hans"
 
-const SUPPORTED_LOCALES: readonly Locale[] = ["en"] as const
+const SUPPORTED_LOCALES: readonly Locale[] = ["en", "es", "fr", "ru", "ja", "zh-Hans"] as const
 
 const messagesByLocale: Record<Locale, Messages> = {
   en: enMessages,
+  es: esMessages,
+  fr: frMessages,
+  ru: ruMessages,
+  ja: jaMessages,
+  "zh-Hans": zhHansMessages,
 }
 
 function normalizeLocaleTag(value: string): string {
@@ -28,8 +38,15 @@ function matchSupportedLocale(value: string | undefined): Locale | null {
   const exact = supportedLower.get(lower)
   if (exact) return exact
 
-  const base = lower.split("-")[0]
+  const parts = lower.split("-")
+  const base = parts[0]
   if (!base) return null
+
+  if (base === "zh") {
+    const zhHans = supportedLower.get("zh-hans")
+    return zhHans ?? null
+  }
+
   const baseMatch = supportedLower.get(base)
   return baseMatch ?? null
 }

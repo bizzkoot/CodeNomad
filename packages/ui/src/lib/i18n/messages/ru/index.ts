@@ -16,7 +16,7 @@ import { timeMessages } from "./time"
 import { toolCallMessages } from "./toolCall"
 import { mergeMessageParts } from "../merge"
 
-export const enMessages = mergeMessageParts(
+export const ruMessages = mergeMessageParts(
   folderSelectionMessages,
   advancedSettingsMessages,
   loadingScreenMessages,
