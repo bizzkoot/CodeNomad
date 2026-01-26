@@ -1,4 +1,6 @@
 export const folderSelectionMessages = {
+  "folderSelection.language.ariaLabel": "Langue",
+
   "folderSelection.logoAlt": "Logo CodeNomad",
   "folderSelection.tagline": "Sélectionnez un dossier pour commencer à coder avec l'IA",
 

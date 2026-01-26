@@ -1,5 +1,6 @@
+import { Select } from "@kobalte/core/select"
 import { Component, createSignal, Show, For, onMount, onCleanup, createEffect } from "solid-js"
-import { Folder, Clock, Trash2, FolderPlus, Settings, ChevronRight, MonitorUp, Star } from "lucide-solid"
+import { Folder, Clock, Trash2, FolderPlus, Settings, ChevronRight, MonitorUp, Star, Languages, ChevronDown } from "lucide-solid"
 import { useConfig } from "../stores/preferences"
 import AdvancedSettingsModal from "./advanced-settings-modal"
 import DirectoryBrowserDialog from "./directory-browser-dialog"
@@ -9,7 +10,7 @@ import VersionPill from "./version-pill"
 import { DiscordSymbolIcon, GitHubMarkIcon } from "./brand-icons"
 import { githubStars } from "../stores/github-stars"
 import { formatCompactCount } from "../lib/formatters"
-import { useI18n } from "../lib/i18n"
+import { useI18n, type Locale } from "../lib/i18n"
 
 const codeNomadLogo = new URL("../images/CodeNomad-Icon.png", import.meta.url).href
 
@@ -24,14 +25,27 @@ interface FolderSelectionViewProps {
 }
 
 const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
-  const { recentFolders, removeRecentFolder, preferences } = useConfig()
-  const { t } = useI18n()
+  const { recentFolders, removeRecentFolder, preferences, updatePreferences } = useConfig()
+  const { t, locale } = useI18n()
   const [selectedIndex, setSelectedIndex] = createSignal(0)
   const [focusMode, setFocusMode] = createSignal<"recent" | "new" | null>("recent")
   const [selectedBinary, setSelectedBinary] = createSignal(preferences().lastUsedBinary || "opencode")
   const [isFolderBrowserOpen, setIsFolderBrowserOpen] = createSignal(false)
   const nativeDialogsAvailable = supportsNativeDialogs()
   let recentListRef: HTMLDivElement | undefined
+
+  type LanguageOption = { value: Locale; label: string }
+
+  const languageOptions: LanguageOption[] = [
+    { value: "en", label: "English" },
+    { value: "es", label: "Español" },
+    { value: "fr", label: "Français" },
+    { value: "ru", label: "Русский" },
+    { value: "ja", label: "日本語" },
+    { value: "zh-Hans", label: "简体中文" },
+  ]
+
+  const selectedLanguageOption = () => languageOptions.find((opt) => opt.value === locale()) ?? languageOptions[0]
  
   const folders = () => recentFolders()
   const isLoading = () => Boolean(props.isLoading)
@@ -255,6 +269,50 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
           class="w-full max-w-5xl h-full px-4 sm:px-8 pb-2 flex flex-col overflow-hidden"
           aria-busy={isLoading() ? "true" : "false"}
         >
+          <div class="absolute top-4 left-6">
+            <Select<LanguageOption>
+              value={selectedLanguageOption()}
+              onChange={(value) => {
+                if (!value) return
+                if (value.value === locale()) return
+                updatePreferences({ locale: value.value })
+              }}
+              options={languageOptions}
+              optionValue="value"
+              optionTextValue="label"
+              itemComponent={(itemProps) => (
+                <Select.Item item={itemProps.item} class="selector-option">
+                  <Select.ItemLabel class="selector-option-label">{itemProps.item.rawValue.label}</Select.ItemLabel>
+                </Select.Item>
+              )}
+            >
+              <Select.Trigger
+                class="selector-trigger"
+                aria-label={t("folderSelection.language.ariaLabel")}
+                title={t("folderSelection.language.ariaLabel")}
+              >
+                <Languages class="w-4 h-4 icon-muted" aria-hidden="true" />
+                <div class="flex-1 min-w-0">
+                  <Select.Value<LanguageOption>>
+                    {(state) => (
+                      <span class="selector-trigger-primary selector-trigger-primary--align-left">
+                        {state.selectedOption()?.label}
+                      </span>
+                    )}
+                  </Select.Value>
+                </div>
+                <Select.Icon class="selector-trigger-icon">
+                  <ChevronDown class="w-3 h-3" />
+                </Select.Icon>
+              </Select.Trigger>
+
+              <Select.Portal>
+                <Select.Content class="selector-popover min-w-[180px]">
+                  <Select.Listbox class="selector-listbox" />
+                </Select.Content>
+              </Select.Portal>
+            </Select>
+          </div>
           <Show when={props.onOpenRemoteAccess}>
             <div class="absolute top-4 right-6">
               <button
