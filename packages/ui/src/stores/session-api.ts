@@ -607,6 +607,22 @@ async function loadMessages(instanceId: string, sessionId: string, force = false
       modelID = defaultModel.modelId
     }
 
+    // Add agent/model info to user messages' info objects
+    for (const message of messages) {
+      const info = messagesInfo.get(message.id)
+      if (info && info.role === "user") {
+        if (!info.agent && agentName) {
+          (info as any).agent = agentName
+        }
+        if (!info.model && providerID && modelID) {
+          (info as any).model = {
+            providerID,
+            modelID
+          }
+        }
+      }
+    }
+
     setSessions((prev) => {
       const next = new Map(prev)
       const nextInstanceSessions = next.get(instanceId)

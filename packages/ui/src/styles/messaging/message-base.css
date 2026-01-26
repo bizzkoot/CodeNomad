@@ -27,6 +27,11 @@
   @apply text-xs text-[var(--message-assistant-border)];
 }
 
+/* User messages use their border color for agent meta */
+.bg-\[var\(--message-user-bg\)\] .message-agent-meta {
+  color: var(--message-user-border);
+}
+
 .message-item-actions {
   @apply flex items-center gap-2;
 }

@@ -155,6 +155,26 @@ async function sendMessage(
     isEphemeral: true,
   })
 
+  // Add agent/model info to user message for display
+  if (session.agent || (session.model.providerId && session.model.modelId)) {
+    const messageInfo: any = {
+      id: messageId,
+      role: "user",
+      sessionID: sessionId,
+      time: { created: createdAt, completed: createdAt }
+    }
+    if (session.agent) {
+      messageInfo.agent = session.agent
+    }
+    if (session.model.providerId && session.model.modelId) {
+      messageInfo.model = {
+        providerID: session.model.providerId,
+        modelID: session.model.modelId
+      }
+    }
+    store.setMessageInfo(messageId, messageInfo)
+  }
+
   withSession(instanceId, sessionId, () => {
     /* trigger reactivity for legacy session data */
   })

@@ -274,7 +274,7 @@ export default function MessageBlock(props: MessageBlockProps) {
     const blockToolKeys: string[] = []
     let segmentIndex = 0
     let pendingParts: ClientPart[] = []
-    let agentMetaAttached = current.role !== "assistant"
+    let agentMetaAttached = false
     const defaultAccentColor = current.role === "user" ? USER_BORDER_COLOR : ASSISTANT_BORDER_COLOR
     let lastAccentColor = defaultAccentColor
 
@@ -283,7 +283,6 @@ export default function MessageBlock(props: MessageBlockProps) {
       const segmentKey = `${current.id}:segment:${segmentIndex}`
       segmentIndex += 1
       const shouldShowAgentMeta =
-        current.role === "assistant" &&
         !agentMetaAttached &&
         pendingParts.some((part) => partHasRenderableText(part))
       let cached = sessionCache.messageItems.get(segmentKey)
@@ -385,7 +384,7 @@ export default function MessageBlock(props: MessageBlockProps) {
         flushContent()
         if (props.showThinking() && reasoningHasRenderableContent(part)) {
           const key = `${current.id}:${part.id ?? partIndex}:reasoning`
-          const showAgentMeta = current.role === "assistant" && !agentMetaAttached
+          const showAgentMeta = !agentMetaAttached
           if (showAgentMeta) {
             agentMetaAttached = true
           }
