@@ -99,30 +99,16 @@ interface MessagePartProps {
       <Match when={partType() === "text"}>
         <Show when={!(props.part.type === "text" && props.part.synthetic) && partHasRenderableText(props.part)}>
           <div class={textContainerClass()}>
-            <Show
-               when={isAssistantMessage()}
-               fallback={
-                 <span>
-                   <SearchHighlightedText 
-                     text={plainTextContent()} 
-                     messageId={props.messageId}
-                     partIndex={props.partIndex}
-                   />
-                 </span>
-               }
-             >
-              <Markdown
-                part={createTextPartForMarkdown()}
-                instanceId={props.instanceId}
-                sessionId={props.sessionId}
-                messageId={props.messageId}
-                partIndex={props.partIndex}
-                isDark={isDark()}
-                size={isAssistantMessage() ? "tight" : "base"}
-                onRendered={props.onRendered}
-              />
-             </Show>
-
+            <Markdown
+              part={createTextPartForMarkdown()}
+              instanceId={props.instanceId}
+              sessionId={props.sessionId}
+              messageId={props.messageId}
+              partIndex={props.partIndex}
+              isDark={isDark()}
+              size={isAssistantMessage() ? "tight" : "base"}
+              onRendered={props.onRendered}
+            />
           </div>
         </Show>
       </Match>
