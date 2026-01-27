@@ -39,6 +39,10 @@ export class InstanceEventBridge {
       this.publishStatus(id, "disconnected")
     }
     this.streams.clear()
+    // Clean up session cache and event queues to prevent memory leaks
+    this.sessionCache.clear()
+    this.sessionFetches.clear()
+    this.eventQueues.clear()
   }
 
   private startStream(workspaceId: string) {
@@ -71,6 +75,15 @@ export class InstanceEventBridge {
     }
     active.controller.abort()
     this.streams.delete(workspaceId)
+    // Clean up workspace-specific cache and queues to prevent memory leaks
+    this.sessionCache.delete(workspaceId)
+    // Clean up session fetches for this workspace
+    for (const [key] of this.sessionFetches) {
+      if (key.startsWith(`${workspaceId}:`)) {
+        this.sessionFetches.delete(key)
+      }
+    }
+    this.eventQueues.delete(workspaceId)
     this.publishStatus(workspaceId, "disconnected", reason)
   }
 
