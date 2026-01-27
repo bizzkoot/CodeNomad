@@ -67,6 +67,39 @@ function isBinaryFile(filePath: string): boolean {
     return binaryExtensions.includes(ext)
 }
 
+/**
+ * Check if file content is binary by examining bytes
+ * Returns true if file contains null bytes or high ratio of non-text bytes
+ */
+async function isBinaryContent(fullPath: string): Promise<boolean> {
+    try {
+        const buffer = await fs.readFile(fullPath)
+        const chunkSize = Math.min(buffer.length, 8192) // Read first 8KB
+        
+        // Check for null bytes (strong indicator of binary)
+        for (let i = 0; i < chunkSize; i++) {
+            if (buffer[i] === 0) {
+                return true
+            }
+        }
+        
+        // Check for high ratio of non-text bytes (bytes > 127)
+        let nonTextCount = 0
+        for (let i = 0; i < chunkSize; i++) {
+            if (buffer[i] > 127) {
+                nonTextCount++
+            }
+        }
+        
+        // If more than 30% of bytes are non-text, consider it binary
+        const ratio = nonTextCount / chunkSize
+        return ratio > 0.3
+    } catch {
+        // If we can't read the file, assume it's not binary to avoid blocking access
+        return false
+    }
+}
+
 function parseStatusLine(line: string): GitFileChange[] {
     if (line.length < 3) return []
 
@@ -410,8 +443,17 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
                     return reply.status(403).send({ error: "Access denied" })
                 }
 
-                // Check if file is binary by extension
+                // Check if file is binary by extension first (fast path)
                 if (isBinaryFile(filePath)) {
+                    return reply.status(400).send({
+                        error: "Cannot preview binary files",
+                        message: "Binary files (images, executables, archives, etc.) cannot be previewed. Please use an external viewer."
+                    })
+                }
+
+                // Fallback: check file content for binary patterns
+                // This catches files without extensions or with uncommon extensions
+                if (await isBinaryContent(fullPath)) {
                     return reply.status(400).send({
                         error: "Cannot preview binary files",
                         message: "Binary files (images, executables, archives, etc.) cannot be previewed. Please use an external viewer."
