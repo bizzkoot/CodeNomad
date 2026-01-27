@@ -47,6 +47,26 @@ async function isGitRepository(cwd: string): Promise<boolean> {
     }
 }
 
+/**
+ * Check if a file is likely binary by examining its extension
+ * Returns true for common binary file extensions
+ */
+function isBinaryFile(filePath: string): boolean {
+    const ext = path.extname(filePath).toLowerCase()
+    const binaryExtensions = [
+        '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.webp',
+        '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+        '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar',
+        '.exe', '.dll', '.so', '.dylib', '.a', '.lib',
+        '.mp3', '.mp4', '.avi', '.mov', '.wav', '.flac',
+        '.ttf', '.otf', '.woff', '.woff2', '.eot',
+        '.bin', '.dat', '.db', '.sqlite', '.sqlite3',
+        '.class', '.jar', '.war', '.ear',
+        '.o', '.obj', '.pyc', '.pyo',
+    ]
+    return binaryExtensions.includes(ext)
+}
+
 function parseStatusLine(line: string): GitFileChange[] {
     if (line.length < 3) return []
 
@@ -388,6 +408,14 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
                 const normalizedWorkspace = path.normalize(workspacePath)
                 if (!normalizedPath.startsWith(normalizedWorkspace)) {
                     return reply.status(403).send({ error: "Access denied" })
+                }
+
+                // Check if file is binary by extension
+                if (isBinaryFile(filePath)) {
+                    return reply.status(400).send({
+                        error: "Cannot preview binary files",
+                        message: "Binary files (images, executables, archives, etc.) cannot be previewed. Please use an external viewer."
+                    })
                 }
 
                 const content = await fs.readFile(fullPath, "utf-8")
