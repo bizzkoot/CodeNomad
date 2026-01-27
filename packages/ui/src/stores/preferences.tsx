@@ -37,8 +37,11 @@ export interface Preferences {
   thinkingBlocksExpansion: ExpansionPreference
   showTimelineTools: boolean
   lastUsedBinary?: string
+  locale?: string
   environmentVariables: Record<string, string>
   modelRecents: ModelPreference[]
+  modelFavorites: ModelPreference[]
+  modelThinkingSelections: Record<string, string>
   diffViewMode: DiffViewMode
   toolOutputExpansion: ExpansionPreference
   diagnosticsExpansion: ExpansionPreference
@@ -64,6 +67,7 @@ export type ThemePreference = NonNullable<ConfigData["theme"]>
 
 const MAX_RECENT_FOLDERS = 20
 const MAX_RECENT_MODELS = 5
+const MAX_FAVORITE_MODELS = 50
 
 const defaultPreferences: Preferences = {
   showThinkingBlocks: false,
@@ -71,6 +75,8 @@ const defaultPreferences: Preferences = {
   showTimelineTools: true,
   environmentVariables: {},
   modelRecents: [],
+  modelFavorites: [],
+  modelThinkingSelections: {},
   diffViewMode: "split",
   toolOutputExpansion: "expanded",
   diagnosticsExpansion: "expanded",
@@ -102,13 +108,24 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
   const sourceModelRecents = sanitized.modelRecents ?? defaultPreferences.modelRecents
   const modelRecents = sourceModelRecents.map((item) => ({ ...item }))
 
+  const sourceModelFavorites = sanitized.modelFavorites ?? defaultPreferences.modelFavorites
+  const modelFavorites = sourceModelFavorites.map((item) => ({ ...item }))
+
+  const modelThinkingSelections = {
+    ...defaultPreferences.modelThinkingSelections,
+    ...(sanitized.modelThinkingSelections ?? {}),
+  }
+
   return {
     showThinkingBlocks: sanitized.showThinkingBlocks ?? defaultPreferences.showThinkingBlocks,
     thinkingBlocksExpansion: sanitized.thinkingBlocksExpansion ?? defaultPreferences.thinkingBlocksExpansion,
     showTimelineTools: sanitized.showTimelineTools ?? defaultPreferences.showTimelineTools,
     lastUsedBinary: sanitized.lastUsedBinary ?? defaultPreferences.lastUsedBinary,
+    locale: sanitized.locale ?? defaultPreferences.locale,
     environmentVariables,
     modelRecents,
+    modelFavorites,
+    modelThinkingSelections,
     diffViewMode: sanitized.diffViewMode ?? defaultPreferences.diffViewMode,
     toolOutputExpansion: sanitized.toolOutputExpansion ?? defaultPreferences.toolOutputExpansion,
     diagnosticsExpansion: sanitized.diagnosticsExpansion ?? defaultPreferences.diagnosticsExpansion,
@@ -116,6 +133,58 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
     autoCleanupBlankSessions: sanitized.autoCleanupBlankSessions ?? defaultPreferences.autoCleanupBlankSessions,
     listeningMode: sanitized.listeningMode ?? defaultPreferences.listeningMode,
   }
+}
+
+function getModelKey(model: { providerId: string; modelId: string }): string {
+  return `${model.providerId}/${model.modelId}`
+}
+
+function isFavoriteModelPreference(model: ModelPreference): boolean {
+  if (!model.providerId || !model.modelId) return false
+  return (preferences().modelFavorites ?? []).some(
+    (item) => item.providerId === model.providerId && item.modelId === model.modelId,
+  )
+}
+
+function toggleFavoriteModelPreference(model: ModelPreference): void {
+  if (!model.providerId || !model.modelId) return
+  const favorites = preferences().modelFavorites ?? []
+  const exists = favorites.some((item) => item.providerId === model.providerId && item.modelId === model.modelId)
+
+  if (exists) {
+    const updated = favorites.filter((item) => item.providerId !== model.providerId || item.modelId !== model.modelId)
+    updatePreferences({ modelFavorites: updated })
+    return
+  }
+
+  const filtered = favorites.filter((item) => item.providerId !== model.providerId || item.modelId !== model.modelId)
+  const updated = [model, ...filtered].slice(0, MAX_FAVORITE_MODELS)
+  updatePreferences({ modelFavorites: updated })
+}
+
+function getModelThinkingSelection(model: { providerId: string; modelId: string }): string | undefined {
+  if (!model.providerId || !model.modelId) return undefined
+  return preferences().modelThinkingSelections?.[getModelKey(model)]
+}
+
+function setModelThinkingSelection(model: { providerId: string; modelId: string }, value: string | undefined): void {
+  if (!model.providerId || !model.modelId) return
+  const key = getModelKey(model)
+  const current = preferences().modelThinkingSelections?.[key]
+  if (current === value) return
+
+  updateConfig((draft) => {
+    const selections = { ...(draft.preferences.modelThinkingSelections ?? {}) }
+    if (!value) {
+      delete selections[key]
+    } else {
+      selections[key] = value
+    }
+    draft.preferences = normalizePreferences({
+      ...draft.preferences,
+      modelThinkingSelections: selections,
+    })
+  })
 }
 
 const [internalConfig, setInternalConfig] = createSignal<ConfigData>(buildFallbackConfig())
@@ -532,6 +601,10 @@ export {
   addEnvironmentVariable,
   removeEnvironmentVariable,
   addRecentModelPreference,
+  isFavoriteModelPreference,
+  toggleFavoriteModelPreference,
+  getModelThinkingSelection,
+  setModelThinkingSelection,
   setAgentModelPreference,
   getAgentModelPreference,
   setDiffViewMode,
@@ -543,6 +616,3 @@ export {
   setThemePreference,
   recordWorkspaceLaunch,
 }
-
-
-

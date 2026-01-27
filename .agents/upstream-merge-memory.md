@@ -5,10 +5,10 @@ applyTo: '**'
 # Fork Metadata
 - Original Repo: https://github.com/NeuralNomadsAI/CodeNomad.git
 - Fork Repo: https://github.com/bizzkoot/CodeNomad
-- Analysis Date: 2026-01-19
-- Current Branch: upstream-merge-analysis-20260119
+- Analysis Date: 2026-01-27
+- Current Branch: dev
 - Base Branch: dev
-- Analysis From: upstream/main
+- Analysis From: origin/mirror
 
 # Divergence Summary
 - Commits Behind Upstream: 30 commits
@@ -71,6 +71,29 @@ applyTo: '**'
 8. **packages/electron-app/electron/main/process-manager.ts** - Both modified
 
 # Merge History
+## 2026-01-27 - UPSTREAM MERGE v0.9.2 (origin/mirror)
+- **Strategy**: Direct merge with manual conflict resolution
+- **Upstream Source**: origin/mirror (15 commits, v0.9.2)
+- **Merge Status**: In-progress (staged, typecheck passed)
+- **Conflicts Resolved (11)**:
+  - packages/ui/src/components/expand-button.tsx
+  - packages/ui/src/components/instance/instance-shell2.tsx
+  - packages/ui/src/components/markdown.tsx
+  - packages/ui/src/components/message-block.tsx
+  - packages/ui/src/components/message-timeline.tsx
+  - packages/ui/src/components/permission-approval-modal.tsx
+  - packages/ui/src/components/permission-notification-banner.tsx
+  - packages/ui/src/components/prompt-input.tsx
+  - packages/ui/src/components/tool-call.tsx
+  - packages/ui/src/lib/markdown.ts
+  - packages/ui/src/main.tsx
+
+### Decisions & Notes
+- **Kept fork ask_user flow**: Removed upstream question-interruption handling from permission modal/tool-call to avoid breaking MCP question wizard.
+- **Adopted i18n scaffolding**: Integrated i18n provider and message catalogs; localized UI labels where possible.
+- **Preserved fork UX**: Retained mobile prompt placeholder shortening and desktop multi-state expand logic.
+- **Typecheck**: `npm run typecheck` ✅ (UI + electron-app)
+
 ## 2026-01-25 - SUCCESSFUL UPSTREAM SYNC v0.9.1
 - **Strategy**: Incremental conflict resolution with strategic file preservation
 - **Branch**: merge/mirror-to-dev-20260125

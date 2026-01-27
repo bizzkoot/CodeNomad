@@ -15,6 +15,7 @@ import { getActiveInstance } from "../stores/instances"
 import { agents, getSessionDraftPrompt, setSessionDraftPrompt, clearSessionDraftPrompt, executeCustomCommand } from "../stores/sessions"
 import { getCommands } from "../stores/commands"
 import { showAlertDialog } from "../stores/alerts"
+import { useI18n } from "../lib/i18n"
 import { getLogger } from "../lib/logger"
 const log = getLogger("actions")
 
@@ -33,6 +34,7 @@ interface PromptInputProps {
 }
 
 export default function PromptInput(props: PromptInputProps) {
+  const { t } = useI18n()
   const [prompt, setPromptInternal] = createSignal("")
   const [history, setHistory] = createSignal<string[]>([])
   const HISTORY_LIMIT = 100
@@ -121,13 +123,13 @@ export default function PromptInput(props: PromptInputProps) {
 
   const getPlaceholder = () => {
     if (mode() === "shell") {
-      return "Run a shell command (Esc to exit)..."
+      return t("promptInput.placeholder.shell")
     }
     // Use shorter placeholder on mobile to prevent overlap with expand button
     if (isMobileWidth()) {
       return "Type message, @file, @agent..."
     }
-    return "Type your message, @file, @agent, or paste images and text..."
+    return t("promptInput.placeholder.default")
   }
 
 
@@ -717,8 +719,8 @@ export default function PromptInput(props: PromptInputProps) {
       }
     } catch (error) {
       log.error("Failed to send message:", error)
-      showAlertDialog("Failed to send message", {
-        title: "Send failed",
+      showAlertDialog(t("promptInput.send.errorFallback"), {
+        title: t("promptInput.send.errorTitle"),
         detail: error instanceof Error ? error.message : String(error),
         variant: "error",
       })
@@ -1123,8 +1125,11 @@ export default function PromptInput(props: PromptInputProps) {
     return hasText || attachments().length > 0
   }
 
-  const shellHint = () => (mode() === "shell" ? { key: "Esc", text: "to exit shell mode" } : { key: "!", text: "Shell mode" })
-  const commandHint = () => ({ key: "/", text: "Commands" })
+  const shellHint = () =>
+    mode() === "shell"
+      ? { key: "Esc", text: t("promptInput.hints.shell.exit") }
+      : { key: "!", text: t("promptInput.hints.shell.enable") }
+  const commandHint = () => ({ key: "/", text: t("promptInput.hints.commands") })
 
   const shouldShowOverlay = () => prompt().length === 0
 
@@ -1197,7 +1202,7 @@ export default function PromptInput(props: PromptInputProps) {
                     class="prompt-history-button"
                     onClick={() => selectPreviousHistory(true)}
                     disabled={!canHistoryGoPrevious()}
-                    aria-label="Previous prompt"
+                    aria-label={t("promptInput.history.previousAriaLabel")}
                   >
                     <ArrowBigUp class="h-5 w-5" aria-hidden="true" />
                   </button>
@@ -1208,7 +1213,7 @@ export default function PromptInput(props: PromptInputProps) {
                     class="prompt-history-button"
                     onClick={() => selectNextHistory(true)}
                     disabled={!canHistoryGoNext()}
-                    aria-label="Next prompt"
+                    aria-label={t("promptInput.history.nextAriaLabel")}
                   >
                     <ArrowBigDown class="h-5 w-5" aria-hidden="true" />
                   </button>
@@ -1227,10 +1232,10 @@ export default function PromptInput(props: PromptInputProps) {
                     fallback={
                       <>
                         <span class="prompt-overlay-text">
-                          <Kbd>Enter</Kbd> New line • <Kbd shortcut="cmd+enter" /> Send • <Kbd>@</Kbd> Files/agents • <Kbd>↑↓</Kbd> History
+                          <Kbd>Enter</Kbd> {t("promptInput.overlay.newLine")} • <Kbd shortcut="cmd+enter" /> {t("promptInput.overlay.send")} • <Kbd>@</Kbd> {t("promptInput.overlay.filesAgents")} • <Kbd>↑↓</Kbd> {t("promptInput.overlay.history")}
                         </span>
                         <Show when={attachments().length > 0}>
-                          <span class="prompt-overlay-text prompt-overlay-muted">• {attachments().length} file(s) attached</span>
+                          <span class="prompt-overlay-text prompt-overlay-muted">{t("promptInput.overlay.attachments", { count: attachments().length })}</span>
                         </Show>
                         <span class="prompt-overlay-text">
                           • <Kbd>{shellHint().key}</Kbd> {shellHint().text}
@@ -1241,17 +1246,17 @@ export default function PromptInput(props: PromptInputProps) {
                           </span>
                         </Show>
                         <Show when={mode() === "shell"}>
-                          <span class="prompt-overlay-shell-active">Shell mode active</span>
+                          <span class="prompt-overlay-shell-active">{t("promptInput.overlay.shellModeActive")}</span>
                         </Show>
                       </>
                     }
                   >
                     <>
                       <span class="prompt-overlay-text prompt-overlay-warning">
-                        Press <Kbd>Esc</Kbd> again to abort session
+                        {t("promptInput.overlay.press")} <Kbd>Esc</Kbd> {t("promptInput.overlay.againToAbort")}
                       </span>
                       <Show when={mode() === "shell"}>
-                        <span class="prompt-overlay-shell-active">Shell mode active</span>
+                        <span class="prompt-overlay-shell-active">{t("promptInput.overlay.shellModeActive")}</span>
                       </Show>
                     </>
                   </Show>
@@ -1267,8 +1272,8 @@ export default function PromptInput(props: PromptInputProps) {
             class="stop-button"
             onClick={handleAbort}
             disabled={!canStop()}
-            aria-label="Stop session"
-            title="Stop session"
+            aria-label={t("promptInput.stopSession.ariaLabel")}
+            title={t("promptInput.stopSession.title")}
           >
             <svg class="stop-icon" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <rect x="4" y="4" width="12" height="12" rx="2" />
@@ -1279,7 +1284,7 @@ export default function PromptInput(props: PromptInputProps) {
             class={`send-button ${mode() === "shell" ? "shell-mode" : ""}`}
             onClick={handleSend}
             disabled={!canSend()}
-            aria-label="Send message"
+            aria-label={t("promptInput.send.ariaLabel")}
           >
             <Show
               when={mode() === "shell"}

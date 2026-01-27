@@ -1,5 +1,6 @@
 import { createSignal, Show } from "solid-js"
 import { Maximize2, Minimize2 } from "lucide-solid"
+import { useI18n } from "../lib/i18n"
 import { isElectronHost } from "../lib/runtime-env"
 
 interface ExpandButtonProps {
@@ -14,6 +15,7 @@ export default function ExpandButton(props: ExpandButtonProps) {
 
   // Check if we're in Electron (desktop app with 3-state support)
   const isDesktopApp = isElectronHost()
+  const { t } = useI18n()
 
   function handleClick() {
     const current = props.expandState()
@@ -96,7 +98,7 @@ export default function ExpandButton(props: ExpandButtonProps) {
       class={`prompt-expand-button ${isDesktopApp ? "desktop-mode" : "web-mode"}`}
       onClick={handleClick}
       disabled={false}
-      aria-label="Toggle chat input height"
+      aria-label={t("expandButton.toggleAriaLabel")}
       data-tooltip={getTooltip()}
     >
       <Show
