@@ -545,7 +545,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                     onClick={() => setShowDiff(false)}
                 >
                     <div
-                        class="bg-surface-primary border border-base rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col"
+                        class="bg-surface-base border border-base rounded-lg shadow-xl max-w-4xl w-full max-h-[80vh] flex flex-col"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <div class="flex items-center justify-between px-4 py-2 border-b border-base">
