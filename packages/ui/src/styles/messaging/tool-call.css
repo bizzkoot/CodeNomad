@@ -283,10 +283,6 @@
   border-right: 1px solid var(--border-base);
 }
 
-.tool-call-diff-viewer .diff-line-new-content {
-  border-right: none;
-}
-
 .tool-call-diff-fallback {
   margin: 0;
   padding: 0.75rem;
