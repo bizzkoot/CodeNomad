@@ -415,6 +415,7 @@ async function renameSession(instanceId: string, sessionId: string, nextTitle: s
   })
 }
 
+
 export {
   abortSession,
   executeCustomCommand,

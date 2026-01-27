@@ -532,6 +532,7 @@ const configContextValue: ConfigContextValue = {
   toggleUsageMetrics,
   toggleAutoCleanupBlankSessions,
   setDiffViewMode,
+
   setToolOutputExpansion,
   setDiagnosticsExpansion,
   setThinkingBlocksExpansion,
