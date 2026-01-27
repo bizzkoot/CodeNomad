@@ -272,6 +272,8 @@
 /* Split view specific styles */
 .tool-call-diff-viewer .diff-tailwindcss-wrapper table {
   table-layout: fixed;
+  width: max-content !important;
+  min-width: 100% !important;
 }
 
 .tool-call-diff-viewer .diff-tailwindcss-wrapper td {
@@ -292,6 +294,12 @@
 .tool-call-diff-viewer .diff-table-new-num-col,
 .tool-call-diff-viewer .diff-table-old-num-col {
   width: 50px !important;
+}
+
+/* Set content column to take remaining space */
+.tool-call-diff-viewer .diff-table-new-content-col,
+.tool-call-diff-viewer .diff-table-old-content-col {
+  width: auto !important;
 }
 
 /* Ensure line number cells don't add extra spacing */
