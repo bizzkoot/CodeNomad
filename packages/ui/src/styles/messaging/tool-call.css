@@ -226,7 +226,7 @@
    Avoid nested scroll areas inside the diff viewer. */
 .tool-call-diff-shell .tool-call-diff-viewer {
   max-height: none;
-  overflow: visible;
+  overflow: auto;
 }
 
 .tool-call-diff-toolbar-label {
@@ -261,6 +261,8 @@
 .tool-call-diff-viewer .diff-tailwindcss-wrapper {
   background-color: transparent;
   color: inherit;
+  width: 100%;
+  min-width: 0;
 }
 
 .tool-call-diff-viewer .diff-view-wrapper {
