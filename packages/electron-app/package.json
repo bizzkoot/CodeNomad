@@ -34,11 +34,13 @@
     "package:linux": "electron-builder --linux"
   },
   "dependencies": {
-    "@codenomad/ui": "file:../ui",
     "@codenomad/mcp-server": "file:../mcp-server",
+    "@codenomad/ui": "file:../ui",
     "@develar/schema-utils": "^2.6.5",
     "@fastify/reply-from": "12.5.0",
     "@neuralnomads/codenomad": "file:../server",
+    "@types/dompurify": "^3.0.5",
+    "dompurify": "^3.3.1",
     "dotenv": "^9.0.2",
     "sax": "^1.4.4",
     "ts-node": "1.7.1"
