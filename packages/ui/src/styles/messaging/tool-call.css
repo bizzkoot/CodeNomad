@@ -283,6 +283,26 @@
   border-right: 1px solid var(--border-base);
 }
 
+/* Fix vertical gaps in split view caused by library's placeholder divs */
+.tool-call-diff-viewer .min-h-\[28px\] {
+  min-height: 0 !important;
+}
+
+/* Fix column widths in split view to eliminate gaps */
+.tool-call-diff-viewer .diff-table-new-num-col,
+.tool-call-diff-viewer .diff-table-old-num-col {
+  width: 50px !important;
+}
+
+/* Ensure line number cells don't add extra spacing */
+.tool-call-diff-viewer .diff-line-num,
+.tool-call-diff-viewer .diff-line-old-num,
+.tool-call-diff-viewer .diff-line-new-num {
+  width: 50px !important;
+  max-width: 50px !important;
+  padding: 0 8px !important;
+}
+
 .tool-call-diff-fallback {
   margin: 0;
   padding: 0.75rem;
