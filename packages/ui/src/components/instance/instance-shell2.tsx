@@ -936,6 +936,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 />
 
                 <ThinkingSelector instanceId={props.instance.id} currentModel={activeSession().model} />
+
+                <div class="session-sidebar-selector-hints" aria-hidden="true">
+                  <Kbd shortcut="cmd+shift+a" />
+                  <Kbd shortcut="cmd+shift+m" />
+                  <Kbd shortcut="cmd+shift+t" />
+                </div>
               </div>
             </>
           )}
