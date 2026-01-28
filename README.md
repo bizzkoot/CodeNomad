@@ -112,6 +112,12 @@ This fork includes several major enhancements not available in the upstream repo
 
 _Last updated: 2026-01-28_
 
+## CI/CD on Forks
+
+Since this repository uses GitHub Actions for automated releases, forks may encounter failures in the `release-ui` and `publish-server` jobs due to missing secrets (`CLOUDFLARE_API_TOKEN`, `NPM_TOKEN`) or version conflicts.
+
+To prevent these failures, the workflows are configured to **skip** these specific jobs unless running on the upstream repository or if explicitly enabled. The `build-and-upload` job (which generates the release binaries) will still run and attach artifacts to the GitHub Release on your fork.
+
 ## Troubleshooting
 
 ### macOS says the app is damaged

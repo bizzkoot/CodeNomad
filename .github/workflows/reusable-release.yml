@@ -70,6 +70,7 @@ jobs:
     secrets: inherit
 
   release-ui:
+    if: github.repository == 'NeuralNomadsAI/CodeNomad'
     needs: prepare-release
     permissions:
       contents: read
@@ -77,6 +78,7 @@ jobs:
     secrets: inherit
 
   publish-server:
+    if: github.repository == 'NeuralNomadsAI/CodeNomad'
     needs:
       - prepare-release
       - build-and-upload
