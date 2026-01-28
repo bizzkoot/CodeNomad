@@ -78,6 +78,16 @@ We've replaced the standard `question` tool with a native **Model Context Protoc
 
 This change is critical for users on metered plans (like GitHub Copilot), effectively "unlocking" unlimited user interactions without draining quotas.
 
+### 🔄 Upstream v0.9.2 Synced
+
+This fork stays synchronized with the core CodeNomad experience.
+
+| Category | New in v0.9.2 |
+| :--- | :--- |
+| **🌍 Internationalization** | Full UI support for **English, Spanish, French, Japanese, Russian, and Chinese** |
+| **🧠 Model UX** | **Pin favorite models**, toggle "thinking" models, and use inline selector shortcuts |
+| **🔧 Reliability** | Enhanced shutdown safeguards and improved process management |
+
 ## Requirements
 
 - **[OpenCode CLI](https://opencode.ai)**: Must be installed and available in your `PATH`.
@@ -87,40 +97,20 @@ This change is critical for users on metered plans (like GitHub Copilot), effect
 
 This fork includes several major enhancements not available in the upstream repository:
 
-### 🎯 Native MCP `ask_user` Integration
-- **Zero-Cost User Interactions**: Native Model Context Protocol (MCP) server that eliminates premium request consumption for user questions
-- **Extended Timeout**: 5-minute timeout (configurable via `mcp_timeout` in opencode.jsonc) with automatic retry logic for failed questions
-- **Rich UI**: Multi-line markdown rendering, minimizable wizard, keyboard navigation, and platform-specific mobile optimization
-- **Active Instance Routing**: Questions automatically route to the currently active instance
-
-### 🔔 Failed Notification Banner
-- **Persistent Notifications**: Banner appears for timed-out questions and stopped sessions
-- **One-Click Retry**: Quickly retry failed questions without losing context
-- **Folder Path Persistence**: Notifications persist across app restarts
-
-### 🔍 Chat Search
-- **Powerful Search Panel**: Search through your entire chat history with debounced auto-search
-- **Result Highlighting**: Search results are highlighted in the messages
-- **Auto-Expand**: Collapsed sections automatically expand when navigating to results
-
-### 📂 Source Control Panel
-- **Git Integration**: Built-in git status, diff viewer, and branch management
-- **Publish Branch**: Publish branches with one click
-- **File Management**: Delete untracked files directly from the UI
-
-### 🌳 Folder Tree Browser
-- **Tree View Navigation**: Navigate workspace files with an intuitive tree view
-- **Markdown Preview**: Instantly preview markdown files with GitHub-style rendering
-
-### 📝 Enhanced Chat Input
-- **Expandable Editor**: Double-click to expand the chat input to a larger editor
-- **Smart Attachments**: Tab key for file selection, auto-collapse on send
-- **Platform Optimization**: Mobile-optimized with platform-specific behavior
+| Feature | Key Capabilities |
+| :--- | :--- |
+| **🎯 Native MCP** | • **Zero-Cost Interactions**: No premium usage for questions<br>• **Reliability**: 5-minute timeout with auto-retry logic<br>• **Rich UI**: Minimizable markdown wizard & mobile optimization |
+| **📂 Source Control** | • **Git Integration**: Built-in status, diff viewer, and branch management<br>• **Smart Previews**: View untracked files with binary detection<br>• **Actions**: Publish branches and delete files directly |
+| **🔔 Notifications** | • **Persistent**: Error banner for timed-out questions/tasks<br>• **Recovery**: One-click retry without losing context<br>• **State**: Notifications persist across restarts |
+| **🔍 Chat Search** | • **Deep Search**: Query entire history with debounced input<br>• **Visual**: Result highlighting and auto-expansion of collapsed blocks |
+| **🌳 Folder Tree** | • **Navigation**: VSCode-style file explorer for workspaces<br>• **Preview**: Instant GitHub-style markdown rendering |
+| **📝 Enhanced Input** | • **Editor**: Expandable multi-line chat input<br>• **Smart Attachments**: Tab-key file selection & auto-collapse |
+| **🎨 Polish & Perf** | • **Visual**: Seamless dark mode, improved split-view diffs<br>• **Speed**: 10x faster dev icon loading via Vite optimization |
 
 > [!NOTE]
 > These features are not included in upstream and represent divergent functionality from the original CodeNomad repository.
 
-_Last updated: 2026-01-26_
+_Last updated: 2026-01-28_
 
 ## Troubleshooting
 
