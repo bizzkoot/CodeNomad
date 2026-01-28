@@ -22,6 +22,9 @@ interface ActiveStream {
 
 export class InstanceEventBridge {
   private readonly streams = new Map<string, ActiveStream>()
+  private readonly sessionCache = new Map<string, Map<string, { parentID: string | null }>>()
+  private readonly sessionFetches = new Map<string, Promise<any | null>>()
+  private readonly eventQueues = new Map<string, Promise<void>>()
 
   constructor(private readonly options: InstanceEventBridgeOptions) {
     const bus = this.options.eventBus
@@ -36,6 +39,10 @@ export class InstanceEventBridge {
       this.publishStatus(id, "disconnected")
     }
     this.streams.clear()
+    // Clean up session cache and event queues to prevent memory leaks
+    this.sessionCache.clear()
+    this.sessionFetches.clear()
+    this.eventQueues.clear()
   }
 
   private startStream(workspaceId: string) {
@@ -68,6 +75,15 @@ export class InstanceEventBridge {
     }
     active.controller.abort()
     this.streams.delete(workspaceId)
+    // Clean up workspace-specific cache and queues to prevent memory leaks
+    this.sessionCache.delete(workspaceId)
+    // Clean up session fetches for this workspace
+    for (const [key] of this.sessionFetches) {
+      if (key.startsWith(`${workspaceId}:`)) {
+        this.sessionFetches.delete(key)
+      }
+    }
+    this.eventQueues.delete(workspaceId)
     this.publishStatus(workspaceId, "disconnected", reason)
   }
 
@@ -170,10 +186,102 @@ export class InstanceEventBridge {
       if (this.options.logger.isLevelEnabled("trace")) {
         this.options.logger.trace({ workspaceId, event }, "Instance SSE event payload")
       }
-      this.options.eventBus.publish({ type: "instance.event", instanceId: workspaceId, event })
+      this.enqueueEvent(workspaceId, event)
     } catch (error) {
       this.options.logger.warn({ workspaceId, chunk: payload, err: error }, "Failed to parse instance SSE payload")
     }
+  }
+
+  private enqueueEvent(workspaceId: string, event: InstanceStreamEvent) {
+    const previous = this.eventQueues.get(workspaceId) ?? Promise.resolve()
+    const next = previous
+      .then(() => this.handleInstanceEvent(workspaceId, event))
+      .catch((error) => {
+        this.options.logger.warn({ workspaceId, err: error, eventType: event.type }, "Failed to handle instance event")
+      })
+    this.eventQueues.set(workspaceId, next)
+  }
+
+  private getSessionCache(workspaceId: string): Map<string, { parentID: string | null }> {
+    const existing = this.sessionCache.get(workspaceId)
+    if (existing) return existing
+    const created = new Map<string, { parentID: string | null }>()
+    this.sessionCache.set(workspaceId, created)
+    return created
+  }
+
+  private async handleInstanceEvent(workspaceId: string, event: InstanceStreamEvent) {
+    if (event.type === "session.updated") {
+      const info = (event as any)?.properties?.info
+      const sessionId = info?.id
+      if (typeof sessionId === "string") {
+        const parentID = info?.parentID ?? null
+        this.getSessionCache(workspaceId).set(sessionId, { parentID })
+      }
+      this.options.eventBus.publish({ type: "instance.event", instanceId: workspaceId, event })
+      return
+    }
+
+    if (event.type === "message.updated") {
+      const info = (event as any)?.properties?.info
+      const sessionId = info?.sessionID
+      if (typeof sessionId === "string") {
+        const cache = this.getSessionCache(workspaceId)
+        if (!cache.has(sessionId)) {
+          const sessionInfo = await this.getSessionInfo(workspaceId, sessionId)
+          if (sessionInfo && typeof sessionInfo.id === "string") {
+            cache.set(sessionInfo.id, { parentID: sessionInfo.parentID ?? null })
+            const syntheticEvent = {
+              type: "session.updated",
+              properties: {
+                info: sessionInfo,
+              },
+            }
+            this.options.eventBus.publish({ type: "instance.event", instanceId: workspaceId, event: syntheticEvent })
+          }
+        }
+      }
+      this.options.eventBus.publish({ type: "instance.event", instanceId: workspaceId, event })
+      return
+    }
+
+    this.options.eventBus.publish({ type: "instance.event", instanceId: workspaceId, event })
+  }
+
+  private async getSessionInfo(workspaceId: string, sessionId: string): Promise<any | null> {
+    const key = `${workspaceId}:${sessionId}`
+    const existing = this.sessionFetches.get(key)
+    if (existing) {
+      return existing
+    }
+
+    const task = (async () => {
+      const port = this.options.workspaceManager.getInstancePort(workspaceId)
+      if (!port) return null
+
+      const url = `http://${INSTANCE_HOST}:${port}/session/${sessionId}`
+      const headers: Record<string, string> = {}
+      const authHeader = this.options.workspaceManager.getInstanceAuthorizationHeader(workspaceId)
+      if (authHeader) {
+        headers["Authorization"] = authHeader
+      }
+
+      try {
+        const response = await fetch(url, { headers })
+        if (!response.ok) {
+          this.options.logger.debug({ workspaceId, sessionId, status: response.status }, "Failed to fetch session info")
+          return null
+        }
+        return (await response.json()) as any
+      } catch (error) {
+        this.options.logger.debug({ workspaceId, sessionId, err: error }, "Failed to fetch session info")
+        return null
+      }
+    })()
+
+    this.sessionFetches.set(key, task)
+    task.finally(() => this.sessionFetches.delete(key)).catch(() => {})
+    return task
   }
 
   private publishStatus(instanceId: string, status: InstanceStreamStatus, reason?: string) {

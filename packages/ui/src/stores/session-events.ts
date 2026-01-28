@@ -25,8 +25,10 @@ import { createClientSession, mapSdkSessionStatus, type Session, type SessionSta
 import { sessions, setSessions, syncInstanceSessionIndicator, withSession } from "./session-state"
 import { normalizeMessagePart } from "./message-v2/normalizers"
 import { updateSessionInfo } from "./message-v2/session-info"
+import { tGlobal } from "../lib/i18n"
 
 import { loadMessages } from "./session-api"
+import { renameSession } from "./session-actions"
 import { getQuestionQueue, handleQuestionFailure } from "./questions"
 import {
   applyPartUpdateV2,
@@ -263,6 +265,34 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
     upsertMessageInfoV2(instanceId, info, { status, bumpRevision: true })
 
     updateSessionInfo(instanceId, sessionId)
+
+    // Auto-rename session using first user message (Zero-cost)
+    if (role === "assistant" && status === "complete") {
+      const session = sessions().get(instanceId)?.get(sessionId)
+      if (session && session.title.startsWith("New session - ")) {
+        const store = messageStoreBus.getOrCreate(instanceId)
+        const messageIds = store.getSessionMessageIds(sessionId)
+        const firstUserMsgId = messageIds.find(id => store.getMessage(id)?.role === "user")
+        
+        if (firstUserMsgId) {
+          const firstMsg = store.getMessage(firstUserMsgId)
+          if (firstMsg && firstMsg.parts) {
+            const textPart = Object.values(firstMsg.parts).find((p) => p.data.type === "text")
+            
+            if (textPart && textPart.data.type === "text" && typeof textPart.data.text === "string") {
+               let newTitle = textPart.data.text.slice(0, 50).trim()
+               if (textPart.data.text.length > 50) newTitle += "..."
+               
+               if (newTitle) {
+                 renameSession(instanceId, sessionId, newTitle).catch((err) => {
+                   log.error("Failed to auto-rename session", err)
+                 })
+               }
+            }
+          }
+        }
+      }
+    }
   }
 }
 
@@ -279,7 +309,7 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
     const newSession = {
       id: info.id,
       instanceId,
-      title: info.title || "Untitled",
+      title: info.title || tGlobal("sessionList.session.untitled"),
       parentId: info.parentID || null,
       agent: "",
       model: {
@@ -409,10 +439,11 @@ function handleSessionCompacted(instanceId: string, event: EventSessionCompacted
   const label = session?.title?.trim() ? session.title : sessionID
   const instanceFolder = instances().get(instanceId)?.folder ?? instanceId
   const instanceName = instanceFolder.split(/[\\/]/).filter(Boolean).pop() ?? instanceFolder
+  const displayLabel = label ? `"${label}"` : sessionID
 
   showToastNotification({
     title: instanceName,
-    message: `Session ${label ? `"${label}"` : sessionID} was compacted`,
+    message: tGlobal("sessionEvents.sessionCompactedToast", { label: displayLabel }),
     variant: "info",
     duration: 10000,
   })
@@ -422,7 +453,7 @@ function handleSessionError(_instanceId: string, event: EventSessionError): void
   const error = event.properties?.error
   log.error(`[SSE] Session error:`, error)
 
-  let message = "Unknown error"
+  let message = tGlobal("sessionEvents.sessionError.unknown")
 
   if (error) {
     if ("data" in error && error.data && typeof error.data === "object" && "message" in error.data) {
@@ -432,8 +463,8 @@ function handleSessionError(_instanceId: string, event: EventSessionError): void
     }
   }
 
-  showAlertDialog(`Error: ${message}`, {
-    title: "Session error",
+  showAlertDialog(tGlobal("sessionEvents.sessionError.message", { message }), {
+    title: tGlobal("sessionEvents.sessionError.title"),
     variant: "error",
   })
 }

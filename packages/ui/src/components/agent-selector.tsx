@@ -3,7 +3,9 @@ import { For, Show, createEffect, createMemo } from "solid-js"
 import { agents, fetchAgents, sessions } from "../stores/sessions"
 import { ChevronDown } from "lucide-solid"
 import type { Agent } from "../types/session"
+import { useI18n } from "../lib/i18n"
 import { getLogger } from "../lib/logger"
+import Kbd from "./kbd"
 const log = getLogger("session")
 
 
@@ -15,6 +17,7 @@ interface AgentSelectorProps {
 }
 
 export default function AgentSelector(props: AgentSelectorProps) {
+  const { t } = useI18n()
   const instanceAgents = () => agents().get(props.instanceId) || []
 
   const session = createMemo(() => {
@@ -71,7 +74,7 @@ export default function AgentSelector(props: AgentSelectorProps) {
         options={availableAgents()}
         optionValue="name"
         optionTextValue="name"
-        placeholder="Select agent..."
+        placeholder={t("agentSelector.placeholder")}
         itemComponent={(itemProps) => (
           <Select.Item
             item={itemProps.item}
@@ -81,7 +84,7 @@ export default function AgentSelector(props: AgentSelectorProps) {
               <Select.ItemLabel class="selector-option-label flex items-center gap-2">
                 <span>{itemProps.item.rawValue.name}</span>
                 <Show when={itemProps.item.rawValue.mode === "subagent"}>
-                  <span class="neutral-badge">subagent</span>
+                  <span class="neutral-badge">{t("agentSelector.badge.subagent")}</span>
                 </Show>
               </Select.ItemLabel>
               <Show when={itemProps.item.rawValue.description}>
@@ -99,15 +102,20 @@ export default function AgentSelector(props: AgentSelectorProps) {
           data-agent-selector
           class="selector-trigger"
         >
-          <Select.Value<Agent>>
-            {(state) => (
-              <div class="selector-trigger-label">
-                <span class="selector-trigger-primary">
-                  Agent: {state.selectedOption()?.name ?? "None"}
-                </span>
-              </div>
-            )}
-          </Select.Value>
+          <div class="flex-1 min-w-0">
+            <Select.Value<Agent>>
+              {(state) => (
+                <div class="selector-trigger-label selector-trigger-label--stacked">
+                  <span class="selector-trigger-primary selector-trigger-primary--align-left">
+                    {t("agentSelector.trigger.primary", { agent: state.selectedOption()?.name ?? t("agentSelector.none") })}
+                  </span>
+                </div>
+              )}
+            </Select.Value>
+          </div>
+          <span class="selector-trigger-hint selector-trigger-hint--top" aria-hidden="true">
+            <Kbd shortcut="cmd+shift+a" />
+          </span>
           <Select.Icon class="selector-trigger-icon">
             <ChevronDown class="w-3 h-3" />
           </Select.Icon>

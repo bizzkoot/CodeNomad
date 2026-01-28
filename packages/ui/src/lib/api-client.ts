@@ -316,6 +316,13 @@ export const serverApi = {
       `/api/workspaces/${encodeURIComponent(workspaceId)}/git/diff${query ? `?${query}` : ""}`,
     )
   },
+  fetchGitFileContent(workspaceId: string, filePath: string): Promise<{ path: string; content: string }> {
+    const params = new URLSearchParams()
+    params.set("path", filePath)
+    return request<{ path: string; content: string }>(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/git/file-content?${params.toString()}`,
+    )
+  },
   stageFiles(workspaceId: string, paths: string[]): Promise<{ success: boolean }> {
     return request<{ success: boolean }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/stage`, {
       method: "POST",

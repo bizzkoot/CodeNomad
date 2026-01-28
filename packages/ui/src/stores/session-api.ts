@@ -483,6 +483,7 @@ async function fetchProviders(instanceId: string): Promise<void> {
         providerId: provider.id,
         limit: model.limit,
         cost: model.cost,
+        variantKeys: Object.keys(model.variants ?? {}),
       })),
     }))
 
@@ -605,6 +606,22 @@ async function loadMessages(instanceId: string, sessionId: string, force = false
       agentName = session.agent
       providerID = defaultModel.providerId
       modelID = defaultModel.modelId
+    }
+
+    // Add agent/model info to user messages' info objects
+    for (const message of messages) {
+      const info = messagesInfo.get(message.id)
+      if (info && info.role === "user") {
+        if (!info.agent && agentName) {
+          (info as any).agent = agentName
+        }
+        if (!info.model && providerID && modelID) {
+          (info as any).model = {
+            providerID,
+            modelID
+          }
+        }
+      }
     }
 
     setSessions((prev) => {

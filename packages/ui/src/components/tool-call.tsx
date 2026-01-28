@@ -9,6 +9,7 @@ import type { DiffViewMode } from "../stores/preferences"
 import { sendPermissionResponse } from "../stores/instances"
 import { getPermissionDisplayTitle, getPermissionKind, getPermissionSessionId } from "../types/permission"
 import type { TextPart, RenderCache } from "../types/message"
+import { useI18n } from "../lib/i18n"
 import { resolveToolRenderer } from "./tool-call/renderers"
 import type {
   DiffPayload,
@@ -222,6 +223,7 @@ function renderDiagnosticsSection(
 export default function ToolCall(props: ToolCallProps) {
   const { preferences, setDiffViewMode } = useConfig()
   const { isDark } = useTheme()
+  const { t } = useI18n()
   const toolCallMemo = createMemo(() => props.toolCall)
   const toolName = createMemo(() => toolCallMemo()?.tool || "")
   const toolCallIdentifier = createMemo(() => {
@@ -798,6 +800,7 @@ export default function ToolCall(props: ToolCallProps) {
     toolCall: toolCallMemo,
     toolState,
     toolName,
+    t,
     messageVersion: messageVersionAccessor,
     partVersion: partVersionAccessor,
     renderMarkdown: renderMarkdownContent,
@@ -872,7 +875,7 @@ export default function ToolCall(props: ToolCallProps) {
       await sendPermissionResponse(props.instanceId, sessionId, permission.id, response)
     } catch (error) {
       log.error("Failed to send permission response", error)
-      setPermissionError(error instanceof Error ? error.message : "Unable to update permission")
+      setPermissionError(error instanceof Error ? error.message : t("toolCall.permission.errors.unableToUpdate"))
     } finally {
       setPermissionSubmitting(false)
     }
@@ -884,7 +887,7 @@ export default function ToolCall(props: ToolCallProps) {
     if (state.status === "error" && state.error) {
       return (
         <div class="tool-call-error-content">
-          <strong>Error:</strong> {state.error}
+          <strong>{t("toolCall.error.label")}</strong> {state.error}
         </div>
       )
     }
@@ -1026,7 +1029,7 @@ export default function ToolCall(props: ToolCallProps) {
           <Show when={status() === "pending" && !pendingPermission()}>
             <div class="tool-call-pending-message">
               <span class="spinner-small"></span>
-              <span>Waiting to run...</span>
+              <span>{t("toolCall.pending.waitingToRun")}</span>
             </div>
           </Show>
         </div>

@@ -47,6 +47,59 @@ async function isGitRepository(cwd: string): Promise<boolean> {
     }
 }
 
+/**
+ * Check if a file is likely binary by examining its extension
+ * Returns true for common binary file extensions
+ */
+function isBinaryFile(filePath: string): boolean {
+    const ext = path.extname(filePath).toLowerCase()
+    const binaryExtensions = [
+        '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.webp',
+        '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+        '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar',
+        '.exe', '.dll', '.so', '.dylib', '.a', '.lib',
+        '.mp3', '.mp4', '.avi', '.mov', '.wav', '.flac',
+        '.ttf', '.otf', '.woff', '.woff2', '.eot',
+        '.bin', '.dat', '.db', '.sqlite', '.sqlite3',
+        '.class', '.jar', '.war', '.ear',
+        '.o', '.obj', '.pyc', '.pyo',
+    ]
+    return binaryExtensions.includes(ext)
+}
+
+/**
+ * Check if file content is binary by examining bytes
+ * Returns true if file contains null bytes or high ratio of non-text bytes
+ */
+async function isBinaryContent(fullPath: string): Promise<boolean> {
+    try {
+        const buffer = await fs.readFile(fullPath)
+        const chunkSize = Math.min(buffer.length, 8192) // Read first 8KB
+        
+        // Check for null bytes (strong indicator of binary)
+        for (let i = 0; i < chunkSize; i++) {
+            if (buffer[i] === 0) {
+                return true
+            }
+        }
+        
+        // Check for high ratio of non-text bytes (bytes > 127)
+        let nonTextCount = 0
+        for (let i = 0; i < chunkSize; i++) {
+            if (buffer[i] > 127) {
+                nonTextCount++
+            }
+        }
+        
+        // If more than 30% of bytes are non-text, consider it binary
+        const ratio = nonTextCount / chunkSize
+        return ratio > 0.3
+    } catch {
+        // If we can't read the file, assume it's not binary to avoid blocking access
+        return false
+    }
+}
+
 function parseStatusLine(line: string): GitFileChange[] {
     if (line.length < 3) return []
 
@@ -362,6 +415,55 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
                 return response
             } catch (error) {
                 const message = error instanceof Error ? error.message : "Failed to get diff"
+                return reply.status(500).send({ error: message })
+            }
+        },
+    )
+
+    // GET /api/workspaces/:id/git/file-content
+    app.get<{ Params: { id: string }; Querystring: { path: string } }>(
+        "/api/workspaces/:id/git/file-content",
+        async (request, reply) => {
+            const workspacePath = getWorkspacePath(request.params.id)
+            if (!workspacePath) {
+                return reply.status(404).send({ error: "Workspace not found" })
+            }
+
+            const filePath = request.query.path
+            if (!filePath) {
+                return reply.status(400).send({ error: "File path is required" })
+            }
+
+            try {
+                const fullPath = path.join(workspacePath, filePath)
+                // Security check: ensure the path is within workspace
+                const normalizedPath = path.normalize(fullPath)
+                const normalizedWorkspace = path.normalize(workspacePath)
+                if (!normalizedPath.startsWith(normalizedWorkspace)) {
+                    return reply.status(403).send({ error: "Access denied" })
+                }
+
+                // Check if file is binary by extension first (fast path)
+                if (isBinaryFile(filePath)) {
+                    return reply.status(400).send({
+                        error: "Cannot preview binary files",
+                        message: "Binary files (images, executables, archives, etc.) cannot be previewed. Please use an external viewer."
+                    })
+                }
+
+                // Fallback: check file content for binary patterns
+                // This catches files without extensions or with uncommon extensions
+                if (await isBinaryContent(fullPath)) {
+                    return reply.status(400).send({
+                        error: "Cannot preview binary files",
+                        message: "Binary files (images, executables, archives, etc.) cannot be previewed. Please use an external viewer."
+                    })
+                }
+
+                const content = await fs.readFile(fullPath, "utf-8")
+                return { path: filePath, content }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to read file"
                 return reply.status(500).send({ error: message })
             }
         },

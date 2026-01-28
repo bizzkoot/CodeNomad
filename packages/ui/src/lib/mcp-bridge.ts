@@ -39,6 +39,7 @@ const retryAttempts = new Map<string, number>();
  */
 const questionPayloads = new Map<string, any>();
 const notifiedQuestionRequests = new Set<string>();
+let mcpLogListenerAttached = false;
 
 /**
  * Send answer to main process (for MCP questions)
@@ -110,6 +111,23 @@ export function initMcpBridge(instanceId: string): void {
 
     try {
         const electronAPI = (window as any).electronAPI;
+
+        if (!mcpLogListenerAttached) {
+            mcpLogListenerAttached = true;
+            electronAPI.mcpOn('mcp:log', (payload: any) => {
+                const { level, message, data } = payload ?? {};
+                const logMethod = level === 'error'
+                    ? console.error
+                    : level === 'warn'
+                        ? console.warn
+                        : console.log;
+                if (data !== undefined) {
+                    logMethod(`[MCP Main] ${message}`, data);
+                } else {
+                    logMethod(`[MCP Main] ${message}`);
+                }
+            });
+        }
 
         if (import.meta.env.DEV) {
             console.log('[MCP Bridge UI] Setting up IPC listeners');

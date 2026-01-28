@@ -226,7 +226,7 @@
    Avoid nested scroll areas inside the diff viewer. */
 .tool-call-diff-shell .tool-call-diff-viewer {
   max-height: none;
-  overflow: visible;
+  overflow: auto;
 }
 
 .tool-call-diff-toolbar-label {
@@ -261,10 +261,54 @@
 .tool-call-diff-viewer .diff-tailwindcss-wrapper {
   background-color: transparent;
   color: inherit;
+  width: 100%;
+  min-width: 0;
 }
 
 .tool-call-diff-viewer .diff-view-wrapper {
   font-family: var(--font-family-mono);
+}
+
+/* Split view specific styles */
+.tool-call-diff-viewer .diff-tailwindcss-wrapper table {
+  table-layout: fixed;
+  width: max-content !important;
+  min-width: 100% !important;
+}
+
+.tool-call-diff-viewer .diff-tailwindcss-wrapper td {
+  min-width: 0;
+}
+
+/* Border between split panes */
+.tool-call-diff-viewer .diff-line-old-content {
+  border-right: 1px solid var(--border-base);
+}
+
+/* Fix vertical gaps in split view caused by library's placeholder divs */
+.tool-call-diff-viewer .min-h-\[28px\] {
+  min-height: 0 !important;
+}
+
+/* Fix column widths in split view to eliminate gaps */
+.tool-call-diff-viewer .diff-table-new-num-col,
+.tool-call-diff-viewer .diff-table-old-num-col {
+  width: 50px !important;
+}
+
+/* Set content column to take remaining space */
+.tool-call-diff-viewer .diff-table-new-content-col,
+.tool-call-diff-viewer .diff-table-old-content-col {
+  width: auto !important;
+}
+
+/* Ensure line number cells don't add extra spacing */
+.tool-call-diff-viewer .diff-line-num,
+.tool-call-diff-viewer .diff-line-old-num,
+.tool-call-diff-viewer .diff-line-new-num {
+  width: 50px !important;
+  max-width: 50px !important;
+  padding: 0 8px !important;
 }
 
 .tool-call-diff-fallback {

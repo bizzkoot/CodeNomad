@@ -1,6 +1,7 @@
 import { For, Show, createMemo, createSignal, createEffect, onCleanup, type Component } from "solid-js"
 import type { PermissionRequestLike } from "../types/permission"
 import { getPermissionCallId, getPermissionDisplayTitle, getPermissionKind, getPermissionMessageId, getPermissionSessionId } from "../types/permission"
+import { useI18n } from "../lib/i18n"
 import { activePermissionId, getPermissionQueue } from "../stores/instances"
 import { loadMessages, setActiveSession } from "../stores/sessions"
 import { messageStoreBus } from "../stores/message-v2/bus"
@@ -89,6 +90,7 @@ function resolveToolCallFromPermission(
 }
 
 const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props) => {
+  const { t } = useI18n()
   const [loadingSession, setLoadingSession] = createSignal<string | null>(null)
 
   const queue = createMemo(() => getPermissionQueue(props.instanceId))
@@ -156,19 +158,24 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
           <div class="permission-center-modal-header">
             <div class="permission-center-modal-title-row">
               <h2 id="permission-center-title" class="permission-center-modal-title">
-                Permissions
+                {t("permissionApproval.title")}
               </h2>
               <Show when={queue().length > 0}>
                 <span class="permission-center-modal-count">{queue().length}</span>
               </Show>
             </div>
-            <button type="button" class="permission-center-modal-close" onClick={props.onClose} aria-label="Close">
+            <button
+              type="button"
+              class="permission-center-modal-close"
+              onClick={props.onClose}
+              aria-label={t("permissionApproval.actions.closeAriaLabel")}
+            >
               ✕
             </button>
           </div>
 
           <div class="permission-center-modal-body">
-            <Show when={hasPermissions()} fallback={<div class="permission-center-empty">No pending permissions.</div>}>
+            <Show when={hasPermissions()} fallback={<div class="permission-center-empty">{t("permissionApproval.empty")}</div>}>
               <div class="permission-center-list" role="list">
                 <For each={orderedQueue()}>
                   {(permission) => {
@@ -187,7 +194,7 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
                           <div class="permission-center-item-heading">
                             <span class="permission-center-item-kind">{getPermissionKind(permission)}</span>
                             <Show when={isActive()}>
-                              <span class="permission-center-item-chip">Active</span>
+                              <span class="permission-center-item-chip">{t("permissionApproval.status.active")}</span>
                             </Show>
                           </div>
 
@@ -197,7 +204,7 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
                               class="permission-center-item-action"
                               onClick={() => handleGoToSession(sessionId)}
                             >
-                              Go to Session
+                              {t("permissionApproval.actions.goToSession")}
                             </button>
                             <Show when={showFallback()}>
                               <button
@@ -206,7 +213,9 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
                                 disabled={loadingSession() === sessionId}
                                 onClick={() => handleLoadSession(sessionId)}
                               >
-                                {loadingSession() === sessionId ? "Loading…" : "Load Session"}
+                                {loadingSession() === sessionId
+                                  ? t("permissionApproval.actions.loadingSession")
+                                  : t("permissionApproval.actions.loadSession")}
                               </button>
                             </Show>
                           </div>
@@ -219,7 +228,7 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
                               <div class="permission-center-fallback-title">
                                 <code>{getPermissionDisplayTitle(permission)}</code>
                               </div>
-                              <div class="permission-center-fallback-hint">Load session for more information.</div>
+                              <div class="permission-center-fallback-hint">{t("permissionApproval.fallbackHint")}</div>
                             </div>
                           }
                         >

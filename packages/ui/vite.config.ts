@@ -29,9 +29,7 @@ export default defineConfig({
       "@": resolve(__dirname, "./src"),
     },
   },
-  optimizeDeps: {
-    exclude: ["lucide-solid"],
-  },
+
   ssr: {
     noExternal: ["lucide-solid"],
   },

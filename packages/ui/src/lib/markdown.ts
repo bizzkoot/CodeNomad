@@ -1,6 +1,8 @@
 import { marked } from "marked"
 import { createHighlighter, type Highlighter, bundledLanguages } from "shiki/bundle/full"
 import { getLogger } from "./logger"
+import { tGlobal } from "./i18n"
+import DOMPurify from "dompurify"
 
 const log = getLogger("actions")
 
@@ -259,19 +261,20 @@ function setupRenderer(isDark: boolean) {
     // Use "text" as default when no language is specified
     const resolvedLang = lang && lang.trim() ? lang.trim() : "text"
     const escapedLang = escapeHtml(resolvedLang)
+    const copyLabel = escapeHtml(tGlobal("markdown.copy"))
 
     const header = `
-<div class="code-block-header">
-  <span class="code-block-language">${escapedLang}</span>
-  <button class="code-block-copy" data-code="${encodedCode}">
+ <div class="code-block-header">
+   <span class="code-block-language">${escapedLang}</span>
+   <button class="code-block-copy" data-code="${encodedCode}">
     <svg class="copy-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
       <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-    </svg>
-    <span class="copy-text">Copy</span>
-  </button>
-</div>
-`.trim()
+     </svg>
+    <span class="copy-text">${copyLabel}</span>
+   </button>
+ </div>
+ `.trim()
 
     if (highlightSuppressed) {
       return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}<pre><code class="language-${escapedLang}">${escapeHtml(decodedCode)}</code></pre></div>`
@@ -354,7 +357,30 @@ export async function renderMarkdown(
 
   try {
     // Proceed to parse immediately - highlighting will be available on next render
-    return marked.parse(decoded) as Promise<string>
+    const html = await marked.parse(decoded)
+    // Sanitize HTML to prevent XSS attacks
+    // Allow common markdown elements while blocking scripts and dangerous attributes
+    return DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: [
+        'p', 'br', 'strong', 'em', 'u', 's', 'a', 'code', 'pre',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'ul', 'ol', 'li', 'blockquote', 'hr',
+        'table', 'thead', 'tbody', 'tr', 'th', 'td',
+        'div', 'span', 'button', 'svg', 'rect', 'path', 'line', 'circle', 'mark'
+      ],
+      ALLOWED_ATTR: [
+        'href', 'target', 'rel', 'title', 'class', 'data-code',
+        'data-language', 'type', 'width', 'height', 'viewBox', 'fill',
+        'stroke', 'stroke-width', 'rx', 'ry', 'd', 'x', 'y', 'cx', 'cy',
+        'data-search-match', 'data-search-message-id', 'data-search-part-index',
+        'data-search-start', 'data-search-end', 'data-search-occurrence'
+      ],
+      ALLOW_DATA_ATTR: false,
+      FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input'],
+      FORBID_ATTR: ['onclick', 'onload', 'onerror', 'onmouseover', 'onfocus', 'onblur'],
+      SANITIZE_DOM: true,
+      KEEP_CONTENT: true
+    })
   } finally {
     highlightSuppressed = previousSuppressed
   }

@@ -73,31 +73,44 @@ We've replaced the standard `question` tool with a native **Model Context Protoc
 | :--- | :--- | :--- |
 | **Cost** | Consumes premium requests per answer | **Zero** premium request consumption |
 | **Architecture** | Remote API loop | Local IPC + MCP Server |
-| **Reliability** | Prone to timeouts on slow answers | No timeouts, robust state management |
+| **Timeout** | Short default timeout | **5-minute timeout** (configurable) |
 | **UX** | Standard | Rich Markdown, Minimizable Wizard |
 
 This change is critical for users on metered plans (like GitHub Copilot), effectively "unlocking" unlimited user interactions without draining quotas.
+
+### 🔄 Upstream v0.9.2 Synced
+
+This fork stays synchronized with the core CodeNomad experience.
+
+| Category | New in v0.9.2 |
+| :--- | :--- |
+| **🌍 Internationalization** | Full UI support for **English, Spanish, French, Japanese, Russian, and Chinese** |
+| **🧠 Model UX** | **Pin favorite models**, toggle "thinking" models, and use inline selector shortcuts |
+| **🔧 Reliability** | Enhanced shutdown safeguards and improved process management |
 
 ## Requirements
 
 - **[OpenCode CLI](https://opencode.ai)**: Must be installed and available in your `PATH`.
 - **Node.js 18+**: Required if running the CLI server or building from source.
 
-## Diverging PRs
+## Enhanced Features (Fork-Specific)
 
-This fork includes the following Pull Requests that modify or enhance the original repository's functionality:
+This fork includes several major enhancements not available in the upstream repository:
 
-| PR | Title | Author | Status | Description |
-|---|---|---|---|---|
-| [#5](https://github.com/bizzkoot/CodeNomad/pull/5) | Add Lightweight Source Control Panel | @bizzkoot | Closed | Adds VS Code-like Git interface with status tracking, branch management, file staging, commit interface, and syntax-highlighted diff viewer integrated into the right sidebar (8 files changed, 1275 insertions) |
-| [#6](https://github.com/bizzkoot/CodeNomad/pull/6) | Add Folder Tree Browser and Markdown File Preview | @bizzkoot | Closed | Introduces VSCode-style file tree modal for workspace navigation and in-app markdown viewer with GitHub-style rendering and LRU caching (port from origin/dev branch) |
-| [#7](https://github.com/bizzkoot/CodeNomad/pull/7) | Add 'question' Tool Integration | @bizzkoot | Closed | Integrates the `question` tool enabling AI agents to request user input via an interactive multi-tab wizard. Features single/multi-select options, custom text inputs, keyboard navigation, and SSE event handling via a minimal SDK passthrough architecture (5 new files, 9 modified) |
-| [#13](https://github.com/bizzkoot/CodeNomad/pull/13) | Native MCP 'ask_user' & Search Overhaul | @bizzkoot | Open | **Major Functional Leap**:<br>• **Zero-Cost `ask_user`**: Native MCP server integration preventing premium request usage.<br>• **Deep Search**: Auto-expanding search results within collapsed code/chat blocks (superior to standard find).<br>• **Smart UI**: Minimizable Question Wizard, Markdown rendering, and Source Control enhancements (Publish Branch, Untracked file mgmt). |
+| Feature | Key Capabilities |
+| :--- | :--- |
+| **🎯 Native MCP** | • **Zero-Cost Interactions**: No premium usage for questions<br>• **Reliability**: 5-minute timeout with auto-retry logic<br>• **Rich UI**: Minimizable markdown wizard & mobile optimization |
+| **📂 Source Control** | • **Git Integration**: Built-in status, diff viewer, and branch management<br>• **Smart Previews**: View untracked files with binary detection<br>• **Actions**: Publish branches and delete files directly |
+| **🔔 Notifications** | • **Persistent**: Error banner for timed-out questions/tasks<br>• **Recovery**: One-click retry without losing context<br>• **State**: Notifications persist across restarts |
+| **🔍 Chat Search** | • **Deep Search**: Query entire history with debounced input<br>• **Visual**: Result highlighting and auto-expansion of collapsed blocks |
+| **🌳 Folder Tree** | • **Navigation**: VSCode-style file explorer for workspaces<br>• **Preview**: Instant GitHub-style markdown rendering |
+| **📝 Enhanced Input** | • **Editor**: Expandable multi-line chat input<br>• **Smart Attachments**: Tab-key file selection & auto-collapse |
+| **🎨 Polish & Perf** | • **Visual**: Seamless dark mode, improved split-view diffs<br>• **Speed**: 10x faster dev icon loading via Vite optimization |
 
 > [!NOTE]
-> These PRs are not included in upstream and represent divergent functionality from the original CodeNomad repository. Please ensure you understand these changes before switching between the original fork and this repository.
+> These features are not included in upstream and represent divergent functionality from the original CodeNomad repository.
 
-_Last updated: 2026-01-19_
+_Last updated: 2026-01-28_
 
 ## Troubleshooting
 

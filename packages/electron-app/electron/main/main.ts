@@ -26,6 +26,18 @@ let showingLoadingScreen = false
 let preloadingView: BrowserView | null = null
 let mcpServer: CodeNomadMcpServer | null = null
 
+type McpLogLevel = "info" | "warn" | "error"
+
+function emitMcpLog(level: McpLogLevel, message: string, data?: unknown) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+  if (mainWindow.webContents.isDestroyed()) {
+    return
+  }
+  mainWindow.webContents.send("mcp:log", { level, message, data })
+}
+
 if (isMac) {
   app.commandLine.appendSwitch("disable-spell-checking")
 }
@@ -502,8 +514,22 @@ app.whenReady().then(async () => {
     try {
       await setupMcpBridge(mainWindow)
       console.log('[MCP] IPC bridge setup completed')
+      emitMcpLog("info", "IPC bridge setup completed")
+      console.log('[MCP] preload path:', getPreloadPath())
+      emitMcpLog("info", "Preload path resolved", { preloadPath: getPreloadPath() })
+      console.log('[MCP] app.isPackaged:', app.isPackaged)
+      emitMcpLog("info", "App packaging state", { isPackaged: app.isPackaged })
+      console.log('[MCP] main window ids:', {
+        windowId: mainWindow.id,
+        webContentsId: mainWindow.webContents?.id,
+      })
+      emitMcpLog("info", "Main window ids", {
+        windowId: mainWindow.id,
+        webContentsId: mainWindow.webContents?.id,
+      })
     } catch (err) {
       console.error('[MCP] Failed to setup IPC bridge:', err)
+      emitMcpLog("error", "Failed to setup IPC bridge", err)
     }
 
     const server = new CodeNomadMcpServer()
@@ -512,11 +538,13 @@ app.whenReady().then(async () => {
     try {
       await mcpServer.start()
       console.log('[MCP] Server start completed')
+      emitMcpLog("info", "MCP server start completed")
       const port = mcpServer.getPort()
       const token = mcpServer.getAuthToken()
 
       // Debug logging to identify why registration might fail
       console.log(`[MCP] Debug - port: ${port}, token: ${token ? 'exists' : 'missing'}`)
+      emitMcpLog("info", "MCP server port/token", { port, token: token ? "exists" : "missing" })
 
       if (port && token) {
         mcpPort = port
@@ -524,16 +552,26 @@ app.whenReady().then(async () => {
         const mcpServerPath = join(app.getAppPath(), '../mcp-server/dist/server.js')
         writeMcpConfig(port, token, mcpServerPath)
         console.log(`[MCP] Registered with Antigravity on port ${port}`)
-
-        // Connect MCP server bridge
-        if (mcpServer && mainWindow) {
-          connectMcpBridge(mcpServer, mainWindow)
-        }
+        emitMcpLog("info", "Registered with Antigravity", { port })
       } else {
         console.error(`[MCP] Failed to register - port: ${port}, token: ${token}`)
+        emitMcpLog("warn", "Failed to register MCP config", { port, token: token ? "exists" : "missing" })
+      }
+
+      // Connect MCP server bridge regardless of registration outcome
+      if (mcpServer && mainWindow) {
+        try {
+          connectMcpBridge(mcpServer, mainWindow)
+          console.log('[MCP] Connected MCP server bridge to IPC')
+          emitMcpLog("info", "Connected MCP server bridge to IPC")
+        } catch (connectError) {
+          console.error('[MCP] Failed to connect MCP bridge:', connectError)
+          emitMcpLog("error", "Failed to connect MCP bridge", connectError)
+        }
       }
     } catch (error) {
       console.error('[MCP] Failed to start server:', error)
+      emitMcpLog("error", "Failed to start MCP server", error)
     }
   }
 
