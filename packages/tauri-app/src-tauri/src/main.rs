@@ -39,7 +39,10 @@ fn is_dev_mode() -> bool {
 fn should_allow_internal(url: &Url) -> bool {
     match url.scheme() {
         "tauri" | "asset" | "file" => true,
-        "http" | "https" => matches!(url.host_str(), Some("127.0.0.1" | "localhost")),
+        // On Windows/WebView2, Tauri serves the app assets from `tauri.localhost`.
+        // This must be treated as an internal origin or the navigation guard will
+        // redirect it to the system browser and the app will appear blank.
+        "http" | "https" => matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "tauri.localhost")),
         _ => false,
     }
 }
