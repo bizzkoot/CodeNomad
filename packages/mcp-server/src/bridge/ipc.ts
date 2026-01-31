@@ -98,6 +98,36 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
         }
     });
 
+    // Handler: UI confirms question was rendered/displayed
+    ipcMain.on('mcp:renderConfirmed', (_event: any, data: any) => {
+        const { requestId } = data;
+        console.log(`[MCP IPC] Received render confirmation from UI: ${requestId}`);
+        emitRendererLog(mainWindow, 'info', 'Received render confirmation from UI', { requestId });
+
+        if (globalPendingManager) {
+            const confirmed = globalPendingManager.confirmRender(requestId);
+            if (confirmed) {
+                console.log(`[MCP IPC] Render confirmed for ${requestId}, starting user response timer`);
+                emitRendererLog(mainWindow, 'info', 'Render confirmed, starting user response timer', { requestId });
+                
+                // Start the 5-minute user response timeout
+                const pending = globalPendingManager.get(requestId);
+                if (pending) {
+                    pending.timeout = setTimeout(() => {
+                        console.log(`[MCP IPC] User response timeout for ${requestId}`);
+                        globalPendingManager?.reject(requestId, new Error('Question timeout'));
+                    }, 300000); // 5 minutes
+                }
+            } else {
+                console.warn(`[MCP IPC] No pending request for render confirmation: ${requestId}`);
+                emitRendererLog(mainWindow, 'warn', 'No pending request for render confirmation', { requestId });
+            }
+        } else {
+            console.warn('[MCP IPC] Pending manager not initialized, cannot process render confirmation');
+            emitRendererLog(mainWindow, 'warn', 'Pending manager not initialized');
+        }
+    });
+
     // Cleanup on window close
     mainWindow.on('closed', () => {
         console.log('[MCP IPC] Window closed, cleaning up pending requests');
@@ -174,6 +204,10 @@ export function createIpcBridge(mainWindow: BrowserWindow, pendingManager: Pendi
         onCancel: (callback: (requestId: string) => void) => {
             // Already handled via 'mcp:cancel' IPC handler in setupMcpBridge
             console.log('[MCP IPC] Cancel handler registered (via IPC)');
+        },
+        onRenderConfirmed: (callback: (requestId: string) => void) => {
+            // Handled via 'mcp:renderConfirmed' IPC handler above
+            console.log('[MCP IPC] Render confirmation handler registered (via IPC)');
         }
     };
 }
