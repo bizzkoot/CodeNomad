@@ -36,6 +36,9 @@ export default defineConfig({
   server: {
     port: 3000,
   },
+  esbuild: {
+    drop: ["console", "debugger"],
+  },
   build: {
     outDir: "dist",
     rollupOptions: {
