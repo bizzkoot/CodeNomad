@@ -105,6 +105,9 @@ export class CliProcessManager extends EventEmitter {
 
     const env = supportsUserShell() ? getUserShellEnv() : { ...process.env }
     env.ELECTRON_RUN_AS_NODE = "1"
+    if (!options.dev) {
+      env.CODENOMAD_PACKAGED = "1"
+    }
 
     // Inject MCP configuration if port is provided
     if (options.mcpPort) {
