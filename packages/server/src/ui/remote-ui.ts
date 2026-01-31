@@ -39,6 +39,7 @@ export interface RemoteUiOptions {
   uiDevServerUrl?: string
   manifestUrl?: string
   configDir?: string
+  packaged?: boolean
   logger: Logger
 }
 
@@ -48,6 +49,16 @@ const MANIFEST_TIMEOUT_MS = 5_000
 const ZIP_TIMEOUT_MS = 30_000
 
 export async function resolveUi(options: RemoteUiOptions): Promise<UiResolution> {
+  if (options.packaged) {
+    const resolved = await resolveStaticUiDir(options.bundledUiDir)
+    return {
+      uiStaticDir: resolved ?? options.bundledUiDir,
+      source: resolved ? "bundled" : "missing",
+      uiVersion: await readUiVersion(resolved ?? options.bundledUiDir),
+      supported: true,
+    }
+  }
+
   const manifestUrl = options.manifestUrl ?? DEFAULT_MANIFEST_URL
 
   if (options.uiDevServerUrl) {

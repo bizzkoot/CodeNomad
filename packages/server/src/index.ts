@@ -238,6 +238,7 @@ async function main() {
     overrideUiDir: uiDirOverride,
     uiDevServerUrl: options.uiDevServer,
     manifestUrl: options.uiManifestUrl,
+    packaged: Boolean(process.env.CODENOMAD_PACKAGED),
     logger: logger.child({ component: "ui" }),
   })
 
