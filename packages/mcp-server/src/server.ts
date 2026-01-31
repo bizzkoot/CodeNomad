@@ -30,6 +30,10 @@ export class CodeNomadMcpServer {
             onCancel: (callback) => {
                 console.log('[MCP] Cancel handler registered');
                 // TODO: Will be connected to Electron IPC bridge
+            },
+            onRenderConfirmed: (callback) => {
+                console.log('[MCP] Render confirmation handler registered');
+                // TODO: Will be connected to Electron IPC bridge
             }
         };
     }
@@ -125,7 +129,15 @@ export class CodeNomadMcpServer {
     private getAskUserToolSchema() {
         return {
             name: "ask_user",
-            description: "Ask the user questions through CodeNomad's interface. Use this tool when you need user input, clarification, or confirmation before proceeding. The tool blocks until the user responds.",
+            description: `Ask the user questions through CodeNomad's interface. 
+
+IMPORTANT INSTRUCTIONS FOR AI AGENT:
+1. This tool blocks until the user responds or a timeout occurs.
+2. If the response has shouldRetry=true, you MUST retry calling this tool immediately with the same parameters.
+3. If shouldRetry=false and timedOut=true, inform the user the question timed out and ask if they want to continue.
+4. If shouldRetry=false and max retries were exceeded, inform the user there was a technical issue displaying the question.
+
+The tool will automatically retry up to 3 times if the UI fails to render the question. You only need to retry when shouldRetry=true is returned.`,
             inputSchema: {
                 type: "object",
                 properties: {
@@ -150,6 +162,20 @@ export class CodeNomadMcpServer {
                         type: "string",
                         description: "Optional title for question dialog",
                         maxLength: 100
+                    },
+                    maxRetries: {
+                        type: "integer",
+                        description: "Maximum retry attempts if UI fails to render (0-5, default: 3)",
+                        minimum: 0,
+                        maximum: 5,
+                        default: 3
+                    },
+                    renderTimeout: {
+                        type: "integer",
+                        description: "Milliseconds to wait for UI render confirmation (10000-60000, default: 30000)",
+                        minimum: 10000,
+                        maximum: 60000,
+                        default: 30000
                     }
                 },
                 required: ["questions"]

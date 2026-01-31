@@ -32,6 +32,10 @@ export const QuestionInfoSchema = z.object({
 export const CnAskUserInputSchema = z.object({
     questions: z.array(QuestionInfoSchema).min(1).max(10),
     title: z.string().max(100).optional(),
+    maxRetries: z.number().int().min(0).max(5).optional().default(3)
+        .describe("Maximum retry attempts if UI fails to render (0-5, default: 3)"),
+    renderTimeout: z.number().int().min(10000).max(60000).optional().default(30000)
+        .describe("Milliseconds to wait for UI render confirmation (10-60s, default: 30s)"),
 });
 
 /**
@@ -47,6 +51,12 @@ export const CnAskUserOutputSchema = z.object({
     answered: z.boolean(),
     cancelled: z.boolean(),
     timedOut: z.boolean(),
+    shouldRetry: z.boolean()
+        .describe("If true, the agent MUST retry this question immediately in the same session"),
+    retryReason: z.string().nullable()
+        .describe("Human-readable reason for retry (for debugging)"),
+    renderConfirmed: z.boolean()
+        .describe("Whether the UI confirmed the question was displayed"),
     answers: z.array(QuestionAnswerSchema),
 });
 
