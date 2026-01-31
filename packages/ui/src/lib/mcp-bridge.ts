@@ -191,6 +191,20 @@ export function initMcpBridge(instanceId: string): void {
                     multiple: q.type === 'multi-select'
                 }))
             }, source || 'mcp');
+
+            // After adding question to queue, send render confirmation back to MCP
+            if (isElectronEnvironment()) {
+                setTimeout(() => {
+                    const electronAPI = (window as any).electronAPI;
+                    electronAPI.mcpSend('mcp:renderConfirmed', { 
+                        requestId,
+                        timestamp: Date.now()
+                    });
+                    if (import.meta.env.DEV) {
+                        console.log(`[MCP Bridge UI] Sent render confirmation for ${requestId}`);
+                    }
+                }, 100); // Small delay to ensure UI actually rendered
+            }
         });
 
         // Listen for question rejections from MCP server (timeout, cancel, session-stop)
@@ -241,6 +255,20 @@ export function initMcpBridge(instanceId: string): void {
                                 multiple: q.type === 'multi-select'
                             }))
                         }, source || 'mcp');
+
+                        // Send render confirmation after retry
+                        if (isElectronEnvironment()) {
+                            setTimeout(() => {
+                                const electronAPI = (window as any).electronAPI;
+                                electronAPI.mcpSend('mcp:renderConfirmed', { 
+                                    requestId,
+                                    timestamp: Date.now()
+                                });
+                                if (import.meta.env.DEV) {
+                                    console.log(`[MCP Bridge UI] Sent render confirmation for retry ${requestId}`);
+                                }
+                            }, 100);
+                        }
 
                         // Re-add to processed set
                         processedQuestions.add(requestId);

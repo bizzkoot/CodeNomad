@@ -246,6 +246,18 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         console.log('[Instance Shell] Opening question wizard for:', pending.id)
       }
       setQuestionWizardOpen(true)
+      
+      // Send render confirmation to MCP server
+      if (typeof window !== 'undefined' && (window as any).electronAPI && pending.source === 'mcp') {
+        const electronAPI = (window as any).electronAPI;
+        electronAPI.mcpSend('mcp:renderConfirmed', { 
+          requestId: pending.id,
+          timestamp: Date.now()
+        });
+        if (import.meta.env.DEV) {
+          console.log('[Instance Shell] Sent render confirmation for:', pending.id);
+        }
+      }
     } else if (!pending) {
       // Reset states when no pending questions
       if (import.meta.env.DEV) {
