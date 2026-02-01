@@ -127,7 +127,7 @@ export function sendMcpCancel(requestId: string): void {
 }
 
 export function isMcpBridgeInitialized(instanceId: string): boolean {
-    return initializedInstances.has(instanceId);
+    return initializedInstances.has(instanceId) && cleanupFunctions.has(instanceId);
 }
 
 /**
@@ -136,16 +136,25 @@ export function isMcpBridgeInitialized(instanceId: string): boolean {
 export function initMcpBridge(instanceId: string): void {
     // Prevent multiple initializations for same instance
     if (initializedInstances.has(instanceId)) {
-        if (import.meta.env.DEV) {
-            console.log(`[MCP Bridge UI] Already initialized for instance: ${instanceId}, skipping`);
+        if (cleanupFunctions.has(instanceId)) {
+            if (import.meta.env.DEV) {
+                console.log(`[MCP Bridge UI] Already initialized for instance: ${instanceId}, skipping`);
+            }
+            return;
         }
-        return;
+        if (import.meta.env.DEV) {
+            console.log(`[MCP Bridge UI] Initialized without listeners for instance: ${instanceId}, reinitializing`);
+        }
     }
 
     // Send IPC message to main process for debugging (will show in terminal)
     try {
         if (isElectronEnvironment()) {
-            (window as any).electronAPI.mcpSend('mcp:debug', { message: '[MCP Bridge UI] initMcpBridge called', instanceId });
+            (window as any).electronAPI.mcpSend('mcp:debug', {
+                message: '[MCP Bridge UI] initMcpBridge called',
+                instanceId,
+                locationHref: typeof window !== 'undefined' ? window.location.href : 'unknown'
+            });
         }
     } catch (e) {
         // Ignore if electron not available yet
@@ -198,6 +207,13 @@ export function initMcpBridge(instanceId: string): void {
         // Listen for questions from MCP server (via main process)
         const cleanup = ensureSingleListener('ask_user.asked', (payload: any) => {
             const { requestId, questions, source } = payload;
+            if (import.meta.env.DEV) {
+                console.log('[MCP Bridge UI] ask_user.asked received in renderer', {
+                    requestId,
+                    source: source || 'mcp',
+                    locationHref: typeof window !== 'undefined' ? window.location.href : 'unknown'
+                });
+            }
 
             // Store payload for potential retry
             questionPayloads.set(requestId, payload);
@@ -252,19 +268,18 @@ export function initMcpBridge(instanceId: string): void {
                     multiple: q.type === 'multi-select'
                 }))
             }, source || 'mcp');
-
-            // After adding question to queue, send render confirmation back to MCP
-            if (isElectronEnvironment()) {
+            // Fallback render confirmation for cases where the wizard mount is delayed
+            if (isElectronEnvironment() && (source || 'mcp') === 'mcp') {
                 setTimeout(() => {
                     const electronAPI = (window as any).electronAPI;
-                    electronAPI.mcpSend('mcp:renderConfirmed', { 
+                    electronAPI.mcpSend('mcp:renderConfirmed', {
                         requestId,
                         timestamp: Date.now()
                     });
                     if (import.meta.env.DEV) {
-                        console.log(`[MCP Bridge UI] Sent render confirmation for ${requestId}`);
+                        console.log(`[MCP Bridge UI] Sent render confirmation fallback for ${requestId}`);
                     }
-                }, 100); // Small delay to ensure UI actually rendered
+                }, 100);
             }
         });
 
@@ -317,17 +332,16 @@ export function initMcpBridge(instanceId: string): void {
                                 multiple: q.type === 'multi-select'
                             }))
                         }, source || 'mcp');
-
-                        // Send render confirmation after retry
-                        if (isElectronEnvironment()) {
+                        // Fallback render confirmation for cases where the wizard mount is delayed
+                        if (isElectronEnvironment() && (source || 'mcp') === 'mcp') {
                             setTimeout(() => {
                                 const electronAPI = (window as any).electronAPI;
-                                electronAPI.mcpSend('mcp:renderConfirmed', { 
+                                electronAPI.mcpSend('mcp:renderConfirmed', {
                                     requestId,
                                     timestamp: Date.now()
                                 });
                                 if (import.meta.env.DEV) {
-                                    console.log(`[MCP Bridge UI] Sent render confirmation for retry ${requestId}`);
+                                    console.log(`[MCP Bridge UI] Sent render confirmation fallback for retry ${requestId}`);
                                 }
                             }, 100);
                         }
