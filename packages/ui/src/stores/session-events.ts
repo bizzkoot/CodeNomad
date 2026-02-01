@@ -39,6 +39,7 @@ import {
   removeMessageV2,
   removePermissionV2,
   setSessionRevertV2,
+  ensureSessionMetadataV2,
 } from "./message-v2/bridge"
 import { messageStoreBus } from "./message-v2/bus"
 import type { InstanceMessageStore } from "./message-v2/instance-store"
@@ -339,6 +340,7 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
 
     syncInstanceSessionIndicator(instanceId, updatedInstanceSessions)
     setSessionRevertV2(instanceId, info.id, info.revert ?? null)
+    ensureSessionMetadataV2(instanceId, newSession)
 
     log.info(`[SSE] New session created: ${info.id}`, newSession)
   } else {
@@ -374,6 +376,7 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
 
     syncInstanceSessionIndicator(instanceId, updatedInstanceSessions)
     setSessionRevertV2(instanceId, info.id, info.revert ?? null)
+    ensureSessionMetadataV2(instanceId, updatedSession)
   }
 }
 
