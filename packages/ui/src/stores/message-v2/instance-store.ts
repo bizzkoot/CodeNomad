@@ -170,9 +170,18 @@ function removeUsageEntry(state: SessionUsageState, messageId: string | undefine
   }
 }
 
-function rebuildUsageStateFromInfos(infos: Iterable<MessageInfo>): SessionUsageState {
+function rebuildUsageStateFromInfos(
+  infos: Iterable<MessageInfo>,
+  sessionsMap?: Record<string, SessionRecord>
+): SessionUsageState {
   const usageState = createEmptyUsageState()
   for (const info of infos) {
+    if (sessionsMap && typeof info.sessionID === "string") {
+      const session = sessionsMap[info.sessionID]
+      if (session?.parentId != null) {
+        continue
+      }
+    }
     const entry = extractUsageEntry(info)
     if (entry) {
       applyUsageState(usageState, entry)
@@ -294,6 +303,19 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
     if (!info || typeof info.sessionID !== "string") return
     const messageId = typeof info.id === "string" ? info.id : undefined
     if (!messageId) return
+    const session = state.sessions[info.sessionID]
+    if (import.meta.env.DEV) {
+      console.log(`[Usage Debug] Session: ${info.sessionID}, parentId: ${session?.parentId ?? 'null'}, role: ${info.role}`)
+    }
+    if (session?.parentId != null) {
+      if (import.meta.env.DEV) {
+        console.log(`[Usage Debug] ⏭️ SKIPPING subagent session ${info.sessionID} - parentId: ${session.parentId}`)
+      }
+      return
+    }
+    if (import.meta.env.DEV) {
+      console.log(`[Usage Debug] ✅ TRACKING main session ${info.sessionID}`)
+    }
     withUsageState(info.sessionID, (draft) => {
       removeUsageEntry(draft, messageId)
       const entry = extractUsageEntry(info)
@@ -304,7 +326,7 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
   }
 
   function rebuildUsage(sessionId: string, infos: Iterable<MessageInfo>) {
-    const usageState = rebuildUsageStateFromInfos(infos)
+    const usageState = rebuildUsageStateFromInfos(infos, state.sessions)
     setState("usage", sessionId, usageState)
   }
 
@@ -379,7 +401,7 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
     })
 
     const infoList = infos ? Array.from(infos) : undefined
-    const usageState = infoList ? rebuildUsageStateFromInfos(infoList) : state.usage[sessionId]
+    const usageState = infoList ? rebuildUsageStateFromInfos(infoList, state.sessions) : state.usage[sessionId]
 
     const nextMessages: Record<string, MessageRecord> = { ...state.messages }
     const nextMessageInfoVersion: Record<string, number> = { ...state.messageInfoVersion }
@@ -1124,5 +1146,4 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
       clearInstance,
     }
   }
-
 

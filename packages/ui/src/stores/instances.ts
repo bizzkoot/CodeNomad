@@ -23,6 +23,7 @@ import { setHasInstances } from "./ui"
 import { messageStoreBus } from "./message-v2/bus"
 import { upsertPermissionV2, removePermissionV2 } from "./message-v2/bridge"
 import { clearCacheForInstance } from "../lib/global-cache"
+import { resetMcpBridge } from "../lib/mcp-bridge"
 import { getLogger } from "../lib/logger"
 import { mergeInstanceMetadata, clearInstanceMetadata } from "./instance-metadata"
 import { addQuestionToQueue, removeQuestionFromQueue, clearQuestionQueue } from "./questions"
@@ -369,6 +370,7 @@ function removeInstance(id: string) {
   clearPermissionQueue(id)
   clearQuestionQueue(id)
   clearInstanceMetadata(id)
+  resetMcpBridge(id)
 
   if (activeInstanceId() === id) {
     setActiveInstanceId(nextActiveId)
@@ -794,4 +796,3 @@ export function handlePermissionFailure(
     removePermissionV2(instanceId, permissionId)
   }
 }
-

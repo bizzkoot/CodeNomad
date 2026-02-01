@@ -85,7 +85,7 @@ import {
 } from "../../lib/session-sidebar-events"
 import { getPendingQuestion, removeQuestionFromQueue } from "../../stores/questions"
 import type { QuestionAnswer } from "../../types/question"
-import { sendMcpAnswer, sendMcpCancel, initMcpBridge, cleanupMcpBridge, clearProcessedQuestion } from "../../lib/mcp-bridge"
+import { sendMcpAnswer, sendMcpCancel, initMcpBridge, cleanupMcpBridge, clearProcessedQuestion, isMcpBridgeInitialized } from "../../lib/mcp-bridge"
 import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
@@ -718,11 +718,13 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       }
       return
     }
-    if (import.meta.env.DEV) {
-      console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
-    }
     try {
-      initMcpBridge(props.instance.id)
+      if (!isMcpBridgeInitialized(props.instance.id)) {
+        if (import.meta.env.DEV) {
+          console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
+        }
+        initMcpBridge(props.instance.id)
+      }
     } catch (error) {
       console.error("[Instance Shell] Failed to initialize MCP bridge:", error)
     }
