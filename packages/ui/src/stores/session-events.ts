@@ -171,8 +171,6 @@ function findPendingMessageId(
 }
 
 function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | MessagePartUpdatedEvent): void {
-  const instanceSessions = sessions().get(instanceId)
-
   if (event.type === "message.part.updated") {
     const rawPart = event.properties?.part
     if (!rawPart) return
