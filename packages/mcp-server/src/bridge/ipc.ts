@@ -150,6 +150,13 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
                 if (activePending) {
                     activePending.timeout = setTimeout(() => {
                         console.log(`[MCP IPC] User response timeout for ${requestId}`);
+                        // Notify UI that question timed out so it can clean up wizard and move to failed notifications
+                        mainWindow.webContents.send('ask_user.rejected', {
+                            requestId,
+                            reason: 'timeout',
+                            timedOut: true,
+                            cancelled: false
+                        });
                         globalPendingManager?.reject(requestId, new Error('Question timeout'));
                     }, 300000); // 5 minutes
                 }
@@ -234,15 +241,15 @@ export function createIpcBridge(mainWindow: BrowserWindow, pendingManager: Pendi
                 emitRendererLog(mainWindow, 'warn', 'Question not found in pending manager', { requestId });
             }
         },
-        onAnswer: (callback: (requestId: string, answers: QuestionAnswer[]) => void) => {
+        onAnswer: (_callback: (requestId: string, answers: QuestionAnswer[]) => void) => {
             // Already handled via 'mcp:answer' IPC handler in setupMcpBridge
             console.log('[MCP IPC] Answer handler registered (via IPC)');
         },
-        onCancel: (callback: (requestId: string) => void) => {
+        onCancel: (_callback: (requestId: string) => void) => {
             // Already handled via 'mcp:cancel' IPC handler in setupMcpBridge
             console.log('[MCP IPC] Cancel handler registered (via IPC)');
         },
-        onRenderConfirmed: (callback: (requestId: string) => void) => {
+        onRenderConfirmed: (_callback: (requestId: string) => void) => {
             // Handled via 'mcp:renderConfirmed' IPC handler above
             console.log('[MCP IPC] Render confirmation handler registered (via IPC)');
         }
