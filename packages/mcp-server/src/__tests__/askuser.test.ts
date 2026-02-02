@@ -13,7 +13,8 @@ const makeBridge = () => {
     },
     getLast: () => last,
     onAnswer: (_cb: any) => {},
-    onCancel: (_cb: any) => {}
+    onCancel: (_cb: any) => {},
+    onRenderConfirmed: (_cb: any) => {}
   }
 }
 
@@ -24,7 +25,9 @@ describe('askUser tool', () => {
 
     const input: CnAskUserInput = {
       questions: [{ question: 'What is your name?', type: 'text', required: true }],
-      title: 'Test'
+      title: 'Test',
+      maxRetries: 3,
+      renderTimeout: 30000
     }
 
     const p = askUser(input, bridge as any, pending)
@@ -35,6 +38,10 @@ describe('askUser tool', () => {
     assert.ok(sent.requestId)
     assert.equal(sent.title, 'Test')
 
+    // Simulate UI confirming render
+    const confirmed = pending.confirmRender(sent.requestId)
+    assert.equal(confirmed, true)
+
     // Simulate UI answering the question
     const answers = [{ questionId: (sent.questions[0].id), values: ['copilot'] }]
 
@@ -43,6 +50,8 @@ describe('askUser tool', () => {
 
     const result = await p
     assert.equal(result.answered, true)
+    assert.equal(result.shouldRetry, false)
+    assert.equal(result.renderConfirmed, true)
     assert.equal(result.answers[0].values[0], 'copilot')
   })
 })

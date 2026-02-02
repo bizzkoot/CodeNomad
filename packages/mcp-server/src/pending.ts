@@ -16,12 +16,21 @@ export interface PendingRequest {
     reject: (error: Error) => void;
     createdAt: number;
     timeout: NodeJS.Timeout | null;
+    // NEW FIELDS
+    renderTimeout: NodeJS.Timeout | null;  // Timer for UI render confirmation
+    renderConfirmed: boolean;               // Whether UI confirmed display
+    maxRetries: number;                     // Max retry attempts allowed
+    retryCount: number;                     // Current retry attempt number
 }
 
 export interface PendingRequestResult {
     answered: boolean;
     cancelled: boolean;
     timedOut: boolean;
+    // NEW FIELDS
+    shouldRetry: boolean;
+    retryReason: string | null;
+    renderConfirmed: boolean;
     answers: QuestionAnswer[];
 }
 
@@ -51,12 +60,18 @@ export class PendingRequestManager {
         if (request.timeout) {
             clearTimeout(request.timeout);
         }
+        if (request.renderTimeout) {
+            clearTimeout(request.renderTimeout);
+        }
 
         // Resolve promise
         request.resolve({
             answered: true,
             cancelled: false,
             timedOut: false,
+            shouldRetry: false,
+            retryReason: null,
+            renderConfirmed: request.renderConfirmed,
             answers
         });
 
@@ -78,12 +93,30 @@ export class PendingRequestManager {
         if (request.timeout) {
             clearTimeout(request.timeout);
         }
+        if (request.renderTimeout) {
+            clearTimeout(request.renderTimeout);
+        }
+
+        const isCancelled = error.message === 'cancelled';
+        const isTimedOut = error.message === 'Question timeout';
+        const isRenderTimeout = error.message === 'Render timeout';
+        
+        // Determine if we should retry
+        const shouldRetry = isRenderTimeout && request.retryCount < request.maxRetries;
+        const retryReason = shouldRetry 
+            ? `UI failed to render question (attempt ${request.retryCount + 1}/${request.maxRetries})`
+            : isRenderTimeout 
+                ? `Max retries (${request.maxRetries}) exceeded`
+                : null;
 
         // Reject promise
         request.resolve({
             answered: false,
-            cancelled: error.message === 'cancelled',
-            timedOut: error.message === 'Question timeout',
+            cancelled: isCancelled,
+            timedOut: isTimedOut,
+            shouldRetry,
+            retryReason,
+            renderConfirmed: request.renderConfirmed,
             answers: []
         });
 
@@ -123,5 +156,47 @@ export class PendingRequestManager {
      */
     count(): number {
         return this.pending.size;
+    }
+
+    /**
+     * Mark request as having confirmed render
+     */
+    confirmRender(id: string): boolean {
+        const request = this.pending.get(id);
+        if (!request) {
+            return false;
+        }
+        
+        // Clear render timeout
+        if (request.renderTimeout) {
+            clearTimeout(request.renderTimeout);
+            request.renderTimeout = null;
+        }
+        
+        request.renderConfirmed = true;
+        return true;
+    }
+
+    /**
+     * Check if request can be retried
+     */
+    canRetry(id: string): boolean {
+        const request = this.pending.get(id);
+        if (!request) {
+            return false;
+        }
+        return request.retryCount < request.maxRetries;
+    }
+
+    /**
+     * Increment retry count for a request
+     */
+    incrementRetry(id: string): boolean {
+        const request = this.pending.get(id);
+        if (!request) {
+            return false;
+        }
+        request.retryCount += 1;
+        return true;
     }
 }

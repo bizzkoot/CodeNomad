@@ -85,7 +85,7 @@ import {
 } from "../../lib/session-sidebar-events"
 import { getPendingQuestion, removeQuestionFromQueue } from "../../stores/questions"
 import type { QuestionAnswer } from "../../types/question"
-import { sendMcpAnswer, sendMcpCancel, initMcpBridge, cleanupMcpBridge, clearProcessedQuestion } from "../../lib/mcp-bridge"
+import { sendMcpAnswer, sendMcpCancel, initMcpBridge, cleanupMcpBridge, clearProcessedQuestion, isMcpBridgeInitialized } from "../../lib/mcp-bridge"
 import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
@@ -174,6 +174,19 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
 
+  // Reactive memo to track pending questions - properly triggers Show component updates
+  const pendingQuestion = createMemo(() => {
+    const result = getPendingQuestion(props.instance.id)
+    if (import.meta.env.DEV) {
+      console.log('[Instance Shell] pendingQuestion memo computed:', { 
+        instanceId: props.instance.id, 
+        pendingId: result?.id ?? null,
+        hasResult: !!result 
+      })
+    }
+    return result
+  })
+
   const desktopQuery = useMediaQuery("(min-width: 1280px)")
 
   const tabletQuery = useMediaQuery("(min-width: 768px)")
@@ -230,8 +243,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   })
 
   // Auto-open question wizard when a pending question appears (unless minimized)
+  // Uses pendingQuestion() memo for proper SolidJS reactivity
   createEffect(() => {
-    const pending = getPendingQuestion(props.instance.id)
+    if (import.meta.env.DEV) {
+      console.log('[Instance Shell] createEffect TRIGGERED (reactive update)')
+    }
+    const pending = pendingQuestion()
     if (import.meta.env.DEV) {
       console.log('[Instance Shell] createEffect check:', {
         instanceId: props.instance.id,
@@ -246,6 +263,8 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         console.log('[Instance Shell] Opening question wizard for:', pending.id)
       }
       setQuestionWizardOpen(true)
+      // Note: render confirmation is sent from AskQuestionWizard's onMount
+      // to ensure it's only sent when the wizard is actually visible
     } else if (!pending) {
       // Reset states when no pending questions
       if (import.meta.env.DEV) {
@@ -706,11 +725,13 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       }
       return
     }
-    if (import.meta.env.DEV) {
-      console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
-    }
     try {
-      initMcpBridge(props.instance.id)
+      if (!isMcpBridgeInitialized(props.instance.id)) {
+        if (import.meta.env.DEV) {
+          console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
+        }
+        initMcpBridge(props.instance.id)
+      }
     } catch (error) {
       console.error("[Instance Shell] Failed to initialize MCP bridge:", error)
     }
@@ -1819,7 +1840,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         onClose={() => setFailedPanelOpen(false)}
       />
 
-      <Show when={questionWizardOpen() && getPendingQuestion(props.instance.id)}>
+      <Show when={questionWizardOpen() && pendingQuestion()}>
         {(pending) => {
           // Map questions to wizard format (like shuvcode does)
           const mappedQuestions = () => pending().questions.map((question, index) => ({
@@ -1849,6 +1870,8 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 onSubmit={handleQuestionSubmit}
                 onCancel={handleQuestionCancel}
                 onMinimize={handleQuestionMinimize}
+                requestId={pending().id}
+                source={pending().source}
               />
             </div>
           )
