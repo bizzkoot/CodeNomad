@@ -45,19 +45,31 @@ export function getQuestionQueueLength(instanceId: string): number {
  * Add a question request to the queue
  */
 export function addQuestionToQueue(instanceId: string, question: QuestionRequest): void {
+    if (import.meta.env.DEV) {
+        console.log('[questions] addQuestionToQueue START:', { instanceId, questionId: question.id });
+    }
     setQuestionQueues((prev) => {
         const next = new Map(prev)
         const queue = next.get(instanceId) ?? []
 
         // Don't add if already in queue
         if (queue.some((q) => q.id === question.id)) {
+            if (import.meta.env.DEV) {
+                console.log('[questions] Question already in queue, skipping:', question.id);
+            }
             return next
         }
 
         const updatedQueue = [...queue, question]
         next.set(instanceId, updatedQueue)
+        if (import.meta.env.DEV) {
+            console.log('[questions] Question added to queue:', { instanceId, questionId: question.id, newQueueSize: updatedQueue.length });
+        }
         return next
     })
+    if (import.meta.env.DEV) {
+        console.log('[questions] addQuestionToQueue COMPLETE:', { instanceId, questionId: question.id, finalQueueSize: getQuestionQueue(instanceId).length });
+    }
 }
 
 /**

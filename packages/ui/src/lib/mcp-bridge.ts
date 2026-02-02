@@ -15,14 +15,24 @@ function isElectronEnvironment(): boolean {
 }
 
 /**
+ * Track instances with initialized bridge (persists across remount cleanup)
+ */
+const initializedInstances = new Set<string>();
+
+/**
  * Store cleanup functions per instance to prevent listener accumulation
  */
 const cleanupFunctions = new Map<string, () => void>();
 
 /**
+ * Track active listeners per channel to prevent duplicates
+ */
+const activeListeners = new Map<string, () => void>();
+
+/**
  * Track processed questions to prevent duplicates from multiple handlers
  */
-const processedQuestions = new Set<string>();
+const processedQuestionsByInstance = new Map<string, Set<string>>();
 
 /**
  * Track which instance a request belongs to
@@ -40,6 +50,43 @@ const retryAttempts = new Map<string, number>();
 const questionPayloads = new Map<string, any>();
 const notifiedQuestionRequests = new Set<string>();
 let mcpLogListenerAttached = false;
+
+function getProcessedQuestions(instanceId: string): Set<string> {
+    const existing = processedQuestionsByInstance.get(instanceId);
+    if (existing) return existing;
+    const next = new Set<string>();
+    processedQuestionsByInstance.set(instanceId, next);
+    return next;
+}
+
+function markQuestionProcessed(instanceId: string, requestId: string): void {
+    getProcessedQuestions(instanceId).add(requestId);
+    requestInstanceMap.set(requestId, instanceId);
+}
+
+function isQuestionProcessed(instanceId: string, requestId: string): boolean {
+    return getProcessedQuestions(instanceId).has(requestId);
+}
+
+function ensureSingleListener(channel: string, handler: (payload: any) => void): () => void {
+    const existingCleanup = activeListeners.get(channel);
+    if (existingCleanup) {
+        if (import.meta.env.DEV) {
+            console.log(`[MCP Bridge UI] Removing existing listener for ${channel}`);
+        }
+        existingCleanup();
+        activeListeners.delete(channel);
+    }
+
+    const electronAPI = (window as any).electronAPI;
+    const cleanup = electronAPI.mcpOn(channel, handler);
+    activeListeners.set(channel, cleanup);
+
+    return () => {
+        cleanup();
+        activeListeners.delete(channel);
+    };
+}
 
 /**
  * Send answer to main process (for MCP questions)
@@ -79,22 +126,35 @@ export function sendMcpCancel(requestId: string): void {
     }
 }
 
+export function isMcpBridgeInitialized(instanceId: string): boolean {
+    return initializedInstances.has(instanceId) && cleanupFunctions.has(instanceId);
+}
+
 /**
  * Initialize MCP bridge in renderer
  */
 export function initMcpBridge(instanceId: string): void {
     // Prevent multiple initializations for same instance
-    if (cleanupFunctions.has(instanceId)) {
-        if (import.meta.env.DEV) {
-            console.log(`[MCP Bridge UI] Already initialized for instance: ${instanceId}, skipping`);
+    if (initializedInstances.has(instanceId)) {
+        if (cleanupFunctions.has(instanceId)) {
+            if (import.meta.env.DEV) {
+                console.log(`[MCP Bridge UI] Already initialized for instance: ${instanceId}, skipping`);
+            }
+            return;
         }
-        return;
+        if (import.meta.env.DEV) {
+            console.log(`[MCP Bridge UI] Initialized without listeners for instance: ${instanceId}, reinitializing`);
+        }
     }
 
     // Send IPC message to main process for debugging (will show in terminal)
     try {
         if (isElectronEnvironment()) {
-            (window as any).electronAPI.mcpSend('mcp:debug', { message: '[MCP Bridge UI] initMcpBridge called', instanceId });
+            (window as any).electronAPI.mcpSend('mcp:debug', {
+                message: '[MCP Bridge UI] initMcpBridge called',
+                instanceId,
+                locationHref: typeof window !== 'undefined' ? window.location.href : 'unknown'
+            });
         }
     } catch (e) {
         // Ignore if electron not available yet
@@ -107,6 +167,17 @@ export function initMcpBridge(instanceId: string): void {
     if (!isElectronEnvironment()) {
         console.warn('[MCP Bridge UI] Not in Electron environment, skipping MCP bridge');
         return;
+    }
+
+    initializedInstances.add(instanceId);
+
+    const existingCleanup = cleanupFunctions.get(instanceId);
+    if (existingCleanup) {
+        if (import.meta.env.DEV) {
+            console.log(`[MCP Bridge UI] Found existing cleanup for instance: ${instanceId}, cleaning up first`);
+        }
+        existingCleanup();
+        cleanupFunctions.delete(instanceId);
     }
 
     try {
@@ -134,24 +205,30 @@ export function initMcpBridge(instanceId: string): void {
         }
 
         // Listen for questions from MCP server (via main process)
-        const cleanup = electronAPI.mcpOn('ask_user.asked', (payload: any) => {
+        const cleanup = ensureSingleListener('ask_user.asked', (payload: any) => {
             const { requestId, questions, source } = payload;
-
-            // Deduplicate at bridge layer to prevent race conditions
-            if (processedQuestions.has(requestId)) {
-                if (import.meta.env.DEV) {
-                    console.log('[MCP Bridge UI] Ignoring duplicate question:', requestId);
-                }
-                return;
+            if (import.meta.env.DEV) {
+                console.log('[MCP Bridge UI] ask_user.asked received in renderer', {
+                    requestId,
+                    source: source || 'mcp',
+                    locationHref: typeof window !== 'undefined' ? window.location.href : 'unknown'
+                });
             }
-            processedQuestions.add(requestId);
 
             // Store payload for potential retry
             questionPayloads.set(requestId, payload);
 
             const activeId = activeInstanceId();
             const targetInstanceId = activeId ?? instanceId;
-            requestInstanceMap.set(requestId, targetInstanceId);
+
+            // Deduplicate at bridge layer to prevent race conditions
+            if (isQuestionProcessed(targetInstanceId, requestId)) {
+                if (import.meta.env.DEV) {
+                    console.log('[MCP Bridge UI] Ignoring duplicate question:', requestId);
+                }
+                return;
+            }
+            markQuestionProcessed(targetInstanceId, requestId);
 
             if (import.meta.env.DEV) {
                 console.log('[📥 MCP QUESTION RECEIVED]', {
@@ -191,24 +268,23 @@ export function initMcpBridge(instanceId: string): void {
                     multiple: q.type === 'multi-select'
                 }))
             }, source || 'mcp');
-
-            // After adding question to queue, send render confirmation back to MCP
-            if (isElectronEnvironment()) {
+            // Fallback render confirmation for cases where the wizard mount is delayed
+            if (isElectronEnvironment() && (source || 'mcp') === 'mcp') {
                 setTimeout(() => {
                     const electronAPI = (window as any).electronAPI;
-                    electronAPI.mcpSend('mcp:renderConfirmed', { 
+                    electronAPI.mcpSend('mcp:renderConfirmed', {
                         requestId,
                         timestamp: Date.now()
                     });
                     if (import.meta.env.DEV) {
-                        console.log(`[MCP Bridge UI] Sent render confirmation for ${requestId}`);
+                        console.log(`[MCP Bridge UI] Sent render confirmation fallback for ${requestId}`);
                     }
-                }, 100); // Small delay to ensure UI actually rendered
+                }, 100);
             }
         });
 
         // Listen for question rejections from MCP server (timeout, cancel, session-stop)
-        const cleanupRejected = electronAPI.mcpOn('ask_user.rejected', (payload: any) => {
+        const cleanupRejected = ensureSingleListener('ask_user.rejected', (payload: any) => {
             const { requestId, timedOut, cancelled, reason } = payload;
             if (import.meta.env.DEV) {
                 console.log('[MCP Bridge UI] Received question rejection:', payload);
@@ -227,7 +303,8 @@ export function initMcpBridge(instanceId: string): void {
                     }
 
                     // Clear from processed set to allow re-processing
-                    processedQuestions.delete(requestId);
+                    const mappedInstanceId = requestInstanceMap.get(requestId) ?? instanceId;
+                    getProcessedQuestions(mappedInstanceId).delete(requestId);
 
                     // Re-route to active instance
                     const activeId = activeInstanceId();
@@ -255,23 +332,22 @@ export function initMcpBridge(instanceId: string): void {
                                 multiple: q.type === 'multi-select'
                             }))
                         }, source || 'mcp');
-
-                        // Send render confirmation after retry
-                        if (isElectronEnvironment()) {
+                        // Fallback render confirmation for cases where the wizard mount is delayed
+                        if (isElectronEnvironment() && (source || 'mcp') === 'mcp') {
                             setTimeout(() => {
                                 const electronAPI = (window as any).electronAPI;
-                                electronAPI.mcpSend('mcp:renderConfirmed', { 
+                                electronAPI.mcpSend('mcp:renderConfirmed', {
                                     requestId,
                                     timestamp: Date.now()
                                 });
                                 if (import.meta.env.DEV) {
-                                    console.log(`[MCP Bridge UI] Sent render confirmation for retry ${requestId}`);
+                                    console.log(`[MCP Bridge UI] Sent render confirmation fallback for retry ${requestId}`);
                                 }
                             }, 100);
                         }
 
                         // Re-add to processed set
-                        processedQuestions.add(requestId);
+                        getProcessedQuestions(activeId).add(requestId);
 
                         // Show toast to notify user
                         showToastNotification({
@@ -287,7 +363,8 @@ export function initMcpBridge(instanceId: string): void {
             }
 
             // Clear from processed questions set
-            processedQuestions.delete(requestId);
+            const mappedInstanceId = requestInstanceMap.get(requestId) ?? instanceId;
+            getProcessedQuestions(mappedInstanceId).delete(requestId);
 
             const targetInstanceId = requestInstanceMap.get(requestId) ?? activeInstanceId() ?? instanceId;
             requestInstanceMap.delete(requestId);
@@ -314,9 +391,8 @@ export function initMcpBridge(instanceId: string): void {
         });
 
         // Store cleanup function for this instance (combines both listeners)
-        const originalCleanup = cleanup;
         cleanupFunctions.set(instanceId, () => {
-            originalCleanup();
+            cleanup();
             cleanupRejected();
         });
 
@@ -325,6 +401,7 @@ export function initMcpBridge(instanceId: string): void {
         }
     } catch (error) {
         console.error('[MCP Bridge UI] Failed to initialize:', error);
+        initializedInstances.delete(instanceId);
     }
 }
 
@@ -343,11 +420,38 @@ export function cleanupMcpBridge(instanceId: string): void {
 }
 
 /**
+ * Reset MCP bridge for true instance removal (allows re-init)
+ */
+export function resetMcpBridge(instanceId: string): void {
+    cleanupMcpBridge(instanceId);
+    initializedInstances.delete(instanceId);
+    processedQuestionsByInstance.delete(instanceId);
+    let hasPending = false;
+    for (const [requestId, mappedInstanceId] of requestInstanceMap.entries()) {
+        if (mappedInstanceId === instanceId) {
+            requestInstanceMap.delete(requestId);
+            retryAttempts.delete(requestId);
+            questionPayloads.delete(requestId);
+            notifiedQuestionRequests.delete(requestId);
+            hasPending = true;
+        }
+    }
+    if (hasPending) {
+        if (import.meta.env.DEV) {
+            console.log(`[MCP Bridge UI] Pending requests cleared for instance: ${instanceId}`);
+        }
+    }
+}
+
+/**
  * Clear processed question from deduplication set (call after answer/cancel)
  */
 export function clearProcessedQuestion(requestId: string): void {
-    processedQuestions.delete(requestId);
-    requestInstanceMap.delete(requestId);
+    const instanceId = requestInstanceMap.get(requestId);
+    if (instanceId) {
+        getProcessedQuestions(instanceId).delete(requestId);
+        requestInstanceMap.delete(requestId);
+    }
     notifiedQuestionRequests.delete(requestId);
     retryAttempts.delete(requestId);
     questionPayloads.delete(requestId);

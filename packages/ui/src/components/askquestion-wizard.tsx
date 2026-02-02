@@ -1,6 +1,6 @@
-import { createMemo, For, onMount, onCleanup, Show, type Component, createSignal } from "solid-js"
+import { createMemo, For, onCleanup, Show, type Component, createSignal } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { createEffect } from "solid-js"
+import { createEffect, onMount } from "solid-js"
 import { Minus } from "lucide-solid"
 import type { WizardQuestion, QuestionAnswer, QuestionOption } from "../types/question"
 import { renderMarkdown } from "../lib/markdown"
@@ -16,6 +16,10 @@ export interface AskQuestionWizardProps {
     onSubmit: (answers: QuestionAnswer[]) => void
     onCancel: () => void
     onMinimize?: () => void
+    /** Request ID for render confirmation (MCP questions only) */
+    requestId?: string
+    /** Source of the question: 'mcp' needs render confirmation */
+    source?: 'opencode' | 'mcp'
 }
 
 interface QuestionState {
@@ -35,6 +39,25 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
         })) as QuestionState[],
         isTypingCustom: false,
         customInputValue: "",
+    })
+
+    // Send render confirmation when wizard actually mounts (MCP questions only)
+    onMount(() => {
+        if (props.source === 'mcp' && props.requestId) {
+            // Small delay to ensure UI is fully rendered
+            setTimeout(() => {
+                if (typeof window !== 'undefined' && (window as any).electronAPI) {
+                    const electronAPI = (window as any).electronAPI;
+                    electronAPI.mcpSend('mcp:renderConfirmed', { 
+                        requestId: props.requestId,
+                        timestamp: Date.now()
+                    });
+                    if (import.meta.env.DEV) {
+                        console.log('[AskQuestionWizard] Sent render confirmation for:', props.requestId);
+                    }
+                }
+            }, 100);
+        }
     })
 
     let containerRef: HTMLDivElement | undefined

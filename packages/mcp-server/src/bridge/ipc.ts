@@ -5,11 +5,30 @@ import type { PendingRequestManager } from '../pending.js';
 
 type McpLogLevel = 'info' | 'warn' | 'error';
 
+let enableDebugLogs = process.env.NODE_ENV !== 'production';
+
 function emitRendererLog(mainWindow: BrowserWindow, level: McpLogLevel, message: string, data?: unknown) {
     if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) {
         return;
     }
     mainWindow.webContents.send('mcp:log', { level, message, data });
+}
+
+function logDebug(message: string, data?: unknown) {
+    if (!enableDebugLogs) {
+        return;
+    }
+    if (data !== undefined) {
+        console.log(message, data);
+        return;
+    }
+    console.log(message);
+}
+
+function formatWindowInfo(mainWindow: BrowserWindow): string {
+    const windowId = mainWindow.id;
+    const contentsId = mainWindow.webContents.id;
+    return `windowId=${windowId} webContentsId=${contentsId}`;
 }
 
 /**
@@ -24,13 +43,15 @@ let globalPendingManager: PendingRequestManager | null = null;
  */
 export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
     console.log('[MCP IPC] Setting up main process bridge');
-    emitRendererLog(mainWindow, 'info', 'Setting up main process bridge');
+    logDebug(`[MCP IPC] Bridge window ${formatWindowInfo(mainWindow)}`);
+    emitRendererLog(mainWindow, 'info', 'Setting up main process bridge', { windowInfo: formatWindowInfo(mainWindow) });
 
     // Attempt to import electron dynamically. If not available (e.g., in test env), skip attaching handlers.
     let ipcMain: any = null
     try {
         const electron = await import('electron')
         ipcMain = electron?.ipcMain
+        enableDebugLogs = !(electron?.app?.isPackaged ?? false);
         if (!ipcMain || typeof ipcMain.on !== 'function') {
             console.warn('[MCP IPC] ipcMain not available on electron import, skipping IPC handler setup')
             emitRendererLog(mainWindow, 'warn', 'ipcMain not available on electron import, skipping IPC handler setup')
@@ -45,15 +66,18 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
     // Handler: Debug messages from renderer
     ipcMain.on('mcp:debug', (_event: any, data: any) => {
         const { message, instanceId } = data;
-        console.log(`[MCP IPC DEBUG] ${message}${instanceId ? ` (instance: ${instanceId})` : ''}`);
-        emitRendererLog(mainWindow, 'info', message, { instanceId });
+        const senderId = _event?.sender?.id;
+        logDebug(`[MCP IPC DEBUG] ${message}${instanceId ? ` (instance: ${instanceId})` : ''} senderWebContentsId=${senderId}`);
+        emitRendererLog(mainWindow, 'info', message, { instanceId, senderWebContentsId: senderId });
     });
 
     // Handler: UI sends answer for MCP question
     ipcMain.on('mcp:answer', (_event: any, data: any) => {
         const { requestId, answers } = data;
+        const senderId = _event?.sender?.id;
         console.log(`[MCP IPC] Received answer from UI: ${requestId}`);
-        emitRendererLog(mainWindow, 'info', 'Received answer from UI', { requestId });
+        logDebug(`[MCP IPC] Answer senderWebContentsId=${senderId}`);
+        emitRendererLog(mainWindow, 'info', 'Received answer from UI', { requestId, senderWebContentsId: senderId });
 
         if (globalPendingManager) {
             const resolved = globalPendingManager.resolve(requestId, answers);
@@ -73,8 +97,10 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
     // Handler: UI sends cancel for MCP question
     ipcMain.on('mcp:cancel', (_event: any, data: any) => {
         const { requestId } = data;
+        const senderId = _event?.sender?.id;
         console.log(`[MCP IPC] Received cancel from UI: ${requestId}`);
-        emitRendererLog(mainWindow, 'info', 'Received cancel from UI', { requestId });
+        logDebug(`[MCP IPC] Cancel senderWebContentsId=${senderId}`);
+        emitRendererLog(mainWindow, 'info', 'Received cancel from UI', { requestId, senderWebContentsId: senderId });
 
         if (globalPendingManager) {
             const rejected = globalPendingManager.reject(requestId, new Error('cancelled'));
@@ -101,19 +127,28 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
     // Handler: UI confirms question was rendered/displayed
     ipcMain.on('mcp:renderConfirmed', (_event: any, data: any) => {
         const { requestId } = data;
+        const senderId = _event?.sender?.id;
         console.log(`[MCP IPC] Received render confirmation from UI: ${requestId}`);
-        emitRendererLog(mainWindow, 'info', 'Received render confirmation from UI', { requestId });
+        logDebug(`[MCP IPC] Render confirmation senderWebContentsId=${senderId}`);
+        emitRendererLog(mainWindow, 'info', 'Received render confirmation from UI', { requestId, senderWebContentsId: senderId });
 
         if (globalPendingManager) {
+            const pending = globalPendingManager.get(requestId);
+            if (pending?.renderConfirmed || pending?.timeout) {
+                logDebug(`[MCP IPC] Render already confirmed for ${requestId}, skipping duplicate confirmation`);
+                emitRendererLog(mainWindow, 'info', 'Render already confirmed, skipping duplicate', { requestId });
+                return;
+            }
+
             const confirmed = globalPendingManager.confirmRender(requestId);
             if (confirmed) {
                 console.log(`[MCP IPC] Render confirmed for ${requestId}, starting user response timer`);
                 emitRendererLog(mainWindow, 'info', 'Render confirmed, starting user response timer', { requestId });
-                
+
                 // Start the 5-minute user response timeout
-                const pending = globalPendingManager.get(requestId);
-                if (pending) {
-                    pending.timeout = setTimeout(() => {
+                const activePending = globalPendingManager.get(requestId);
+                if (activePending) {
+                    activePending.timeout = setTimeout(() => {
                         console.log(`[MCP IPC] User response timeout for ${requestId}`);
                         globalPendingManager?.reject(requestId, new Error('Question timeout'));
                     }, 300000); // 5 minutes
@@ -156,11 +191,13 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
  */
 export function createIpcBridge(mainWindow: BrowserWindow, pendingManager: PendingRequestManager): QuestionBridge {
     console.log('[MCP IPC] Creating IPC bridge for MCP server');
+    logDebug(`[MCP IPC] Bridge window ${formatWindowInfo(mainWindow)}`);
 
     return {
         sendQuestion: (requestId: string, questions: Array<QuestionInfo & { id: string }>, title?: string) => {
             console.log(`[MCP IPC] Sending question to UI: ${requestId}`);
-            emitRendererLog(mainWindow, 'info', 'Sending question to UI', { requestId, questionCount: questions.length, title: title ?? null });
+            logDebug(`[MCP IPC] Target window ${formatWindowInfo(mainWindow)}`);
+            emitRendererLog(mainWindow, 'info', 'Sending question to UI', { requestId, questionCount: questions.length, title: title ?? null, windowInfo: formatWindowInfo(mainWindow) });
 
             if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) {
                 console.warn(`[MCP IPC] Window/webContents destroyed; cannot send question: ${requestId}`);
