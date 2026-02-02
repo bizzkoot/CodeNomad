@@ -170,6 +170,36 @@ function removeUsageEntry(state: SessionUsageState, messageId: string | undefine
   }
 }
 
+/**
+ * Rebuilds usage state from a collection of message infos.
+ *
+ * **Subagent Filtering:** This function filters out subagent sessions based on `session.parentId`.
+ * - Main sessions (where `parentId === null` or `parentId === undefined`) have their usage tracked
+ * - Subagent sessions (where `parentId !== null`, e.g., `parentId: "some-id"`) are skipped
+ *
+ * This ensures that only main agent sessions consume premium API quota, not delegated subagent work.
+ *
+ * **Safe Fallback:** If `sessionsMap` is not provided, all messages are included (no filtering).
+ * If a session is not found in `sessionsMap`, the message is included (safe default).
+ *
+ * @param infos - Iterable of message infos to process
+ * @param sessionsMap - Optional map of session IDs to session records. When provided, subagent
+ *                      sessions are filtered out based on their `parentId` property.
+ * @returns A new SessionUsageState with usage entries for main sessions only
+ *
+ * @example
+ * // With sessionsMap - filters out subagents
+ * const mainSession = { id: 'main', parentId: null }
+ * const subagent = { id: 'sub', parentId: 'main' }
+ * const sessionsMap = { main: mainSession, sub: subagent }
+ * const result = rebuildUsageStateFromInfos(messages, sessionsMap)
+ * // result only includes usage from 'main' session
+ *
+ * @example
+ * // Without sessionsMap - includes all messages
+ * const result = rebuildUsageStateFromInfos(messages)
+ * // result includes all messages (no filtering)
+ */
 function rebuildUsageStateFromInfos(
   infos: Iterable<MessageInfo>,
   sessionsMap?: Record<string, SessionRecord>
@@ -178,6 +208,7 @@ function rebuildUsageStateFromInfos(
   for (const info of infos) {
     if (sessionsMap && typeof info.sessionID === "string") {
       const session = sessionsMap[info.sessionID]
+      // Skip subagent sessions (where parentId !== null)
       if (session?.parentId != null) {
         continue
       }
@@ -299,6 +330,40 @@ export function createInstanceMessageStore(instanceId: string, hooks?: MessageSt
     })
   }
 
+  /**
+   * Updates usage tracking for a message, filtering out subagent sessions.
+   *
+   * **Subagent Filtering:** This function prevents subagent sessions from consuming premium
+   * API quota by checking the session's `parentId` property:
+   *
+   * - Main agent sessions (`parentId === null` or `parentId === undefined`):
+   *   Usage IS tracked toward premium quota
+   *
+   * - Subagent sessions (`parentId !== null`, e.g., `"parent-session-id"`):
+   *   Usage is NOT tracked (skipped)
+   *
+   * **Safe Fallback:** If the session is not yet in `state.sessions` (e.g., race condition
+   * where `message.updated` arrives before `session.updated`), usage is tracked by default.
+   * This ensures we don't lose usage data due to timing issues.
+   *
+   * **Debug Logging:** In DEV mode, logs which sessions are tracked vs skipped for verification.
+   *
+   * @param info - The message info to extract usage data from. Must include a valid `sessionID`
+   *              and `id` to process usage.
+   *
+   * @example
+   * // Main session - usage tracked
+   * updateUsageWithInfo({ sessionID: 'main-123', id: 'msg-1', role: 'assistant', tokens: {...} })
+   * // → Usage added to state.usage['main-123']
+   *
+   * @example
+   * // Subagent session - usage skipped
+   * updateUsageWithInfo({ sessionID: 'sub-456', id: 'msg-2', role: 'assistant', tokens: {...} })
+   * // → state.sessions['sub-456'].parentId = 'main-123'
+   * // → Function returns early, no usage tracked
+   *
+   * @see rebuildUsageStateFromInfos - Similar filtering logic for hydration scenarios
+   */
   function updateUsageWithInfo(info: MessageInfo | undefined) {
     if (!info || typeof info.sessionID !== "string") return
     const messageId = typeof info.id === "string" ? info.id : undefined
