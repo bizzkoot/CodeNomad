@@ -93,8 +93,8 @@ This change is critical for users on metered plans (like GitHub Copilot), effect
 
 This fork stays synchronized with the core CodeNomad experience.
 
-| Category                    | New in v0.9.2                                                                        |
-| :-------------------------- | :----------------------------------------------------------------------------------- |
+| Category                   | New in v0.9.2                                                                        |
+| :------------------------- | :----------------------------------------------------------------------------------- |
 | **🌍 Internationalization** | Full UI support for **English, Spanish, French, Japanese, Russian, and Chinese**     |
 | **🧠 Model UX**             | **Pin favorite models**, toggle "thinking" models, and use inline selector shortcuts |
 | **🔧 Reliability**          | Enhanced shutdown safeguards and improved process management                         |
@@ -108,15 +108,15 @@ This fork stays synchronized with the core CodeNomad experience.
 
 This fork includes several major enhancements not available in the upstream repository:
 
-| Feature               | Key Capabilities                                                                                                                                                                                            |
-| :-------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **🎯 Native MCP**     | • **Zero-Cost Interactions**: No premium usage for questions<br>• **Reliability**: 5-minute timeout with auto-retry logic<br>• **Rich UI**: Minimizable markdown wizard & mobile optimization               |
-| **📂 Source Control** | • **Git Integration**: Built-in status, diff viewer, and branch management<br>• **Smart Previews**: View untracked files with binary detection<br>• **Actions**: Publish branches and delete files directly |
-| **🔔 Notifications**  | • **Persistent**: Error banner for timed-out questions/tasks<br>• **Recovery**: One-click retry without losing context<br>• **State**: Notifications persist across restarts                                |
-| **🔍 Chat Search**    | • **Deep Search**: Query entire history with debounced input<br>• **Visual**: Result highlighting and auto-expansion of collapsed blocks                                                                    |
-| **🌳 Folder Tree**    | • **Navigation**: VSCode-style file explorer for workspaces<br>• **Preview**: Instant GitHub-style markdown rendering                                                                                       |
-| **📝 Enhanced Input** | • **Editor**: Expandable multi-line chat input<br>• **Smart Attachments**: Tab-key file selection & auto-collapse                                                                                           |
-| **🎨 Polish & Perf**  | • **Visual**: Seamless dark mode, improved split-view diffs<br>• **Speed**: 10x faster dev icon loading via Vite optimization                                                                               |
+| Feature              | Key Capabilities                                                                                                                                                                                                                            |
+| :------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **🎯 Native MCP**     | • **Zero-Cost Interactions**: No premium usage for questions<br>• **Reliability**: 5-minute timeout with auto-retry logic<br>• **Rich UI**: Minimizable markdown wizard & mobile optimization                                               |
+| **📂 Source Control** | • **Git Integration**: Built-in status, diff viewer, and branch management<br>• **Smart Previews**: View untracked files with binary detection<br>• **Actions**: Publish branches and delete files directly                                 |
+| **🔔 Notifications**  | • **Persistent**: Error banner for timed-out questions/tasks<br>• **Recovery**: One-click retry without losing context<br>• **Rich Details**: Markdown-rendered failed question panel<br>• **State**: Notifications persist across restarts |
+| **🔍 Chat Search**    | • **Deep Search**: Query entire history with debounced input<br>• **Visual**: Result highlighting and auto-expansion of collapsed blocks                                                                                                    |
+| **🌳 Folder Tree**    | • **Navigation**: VSCode-style file explorer for workspaces<br>• **Preview**: Instant GitHub-style markdown rendering                                                                                                                       |
+| **📝 Enhanced Input** | • **Editor**: Expandable multi-line chat input<br>• **Smart Attachments**: Tab-key file selection & auto-collapse                                                                                                                           |
+| **🎨 Polish & Perf**  | • **Visual**: Seamless dark mode, improved split-view diffs<br>• **Speed**: 10x faster dev icon loading via Vite optimization                                                                                                               |
 
 > [!NOTE]
 > These features are not included in upstream and represent divergent functionality from the original CodeNomad repository.
