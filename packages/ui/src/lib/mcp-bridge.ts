@@ -29,7 +29,7 @@ const cleanupFunctions = new Map<string, () => void>();
 /**
  * Track active listeners per channel to prevent duplicates
  */
-const activeListeners = new Map<string, () => void>();
+// const activeListeners = new Map<string, () => void>();
 
 /**
  * Track processed questions to prevent duplicates from multiple handlers
@@ -70,25 +70,25 @@ function isQuestionProcessed(instanceId: string, requestId: string): boolean {
     return getProcessedQuestions(instanceId).has(requestId);
 }
 
-function ensureSingleListener(channel: string, handler: (payload: any) => void): () => void {
-    const existingCleanup = activeListeners.get(channel);
-    if (existingCleanup) {
-        if (import.meta.env.DEV) {
-            console.log(`[MCP Bridge UI] Removing existing listener for ${channel}`);
-        }
-        existingCleanup();
-        activeListeners.delete(channel);
-    }
-
-    const electronAPI = (window as any).electronAPI;
-    const cleanup = electronAPI.mcpOn(channel, handler);
-    activeListeners.set(channel, cleanup);
-
-    return () => {
-        cleanup();
-        activeListeners.delete(channel);
-    };
-}
+// function ensureSingleListener(channel: string, handler: (payload: any) => void): () => void {
+//     const existingCleanup = activeListeners.get(channel);
+//     if (existingCleanup) {
+//         if (import.meta.env.DEV) {
+//             console.log(`[MCP Bridge UI] Removing existing listener for ${channel}`);
+//         }
+//         existingCleanup();
+//         activeListeners.delete(channel);
+//     }
+// 
+//     const electronAPI = (window as any).electronAPI;
+//     const cleanup = electronAPI.mcpOn(channel, handler);
+//     activeListeners.set(channel, cleanup);
+// 
+//     return () => {
+//         cleanup();
+//         activeListeners.delete(channel);
+//     };
+// }
 
 /**
  * Send answer to main process (for MCP questions)
@@ -244,7 +244,8 @@ export function initMcpBridge(instanceId: string): void {
         });
 
         // Listen for questions from MCP server (via main process)
-        const cleanup = ensureSingleListener('ask_user.asked', (payload: any) => {
+        // const electronAPI = (window as any).electronAPI; // Already defined above
+        const cleanup = electronAPI.mcpOn('ask_user.asked', (payload: any) => {
             const { requestId, questions, source } = payload;
             if (import.meta.env.DEV) {
                 console.log('[MCP Bridge UI] ask_user.asked received in renderer', {
@@ -323,7 +324,7 @@ export function initMcpBridge(instanceId: string): void {
         });
 
         // Listen for question rejections from MCP server (timeout, cancel, session-stop)
-        const cleanupRejected = ensureSingleListener('ask_user.rejected', (payload: any) => {
+        const cleanupRejected = electronAPI.mcpOn('ask_user.rejected', (payload: any) => {
             const { requestId, timedOut, cancelled, reason } = payload;
             if (import.meta.env.DEV) {
                 console.log('[MCP Bridge UI] Received question rejection:', payload);
