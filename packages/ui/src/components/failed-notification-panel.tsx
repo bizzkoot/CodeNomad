@@ -1,6 +1,6 @@
-import { Show, For, createMemo, type Component } from "solid-js"
+import { Show, For, createMemo, createSignal, type Component } from "solid-js"
 import { Dialog } from "@kobalte/core"
-import { X, MessageCircleQuestion, ShieldAlert } from "lucide-solid"
+import { X, MessageCircleQuestion, ShieldAlert, ChevronDown, ChevronUp } from "lucide-solid"
 import {
     failedNotificationsMap,
     ensureLoaded,
@@ -8,7 +8,7 @@ import {
     dismissAllFailedNotifications,
     type FailedNotification,
 } from "../stores/failed-notifications"
-import { getPermissionDisplayTitle } from "../types/permission"
+import { getPermissionDisplayTitle, getPermissionKind, getPermissionPatterns } from "../types/permission"
 
 interface FailedNotificationPanelProps {
     folderPath: string
@@ -17,6 +17,9 @@ interface FailedNotificationPanelProps {
 }
 
 const FailedNotificationPanel: Component<FailedNotificationPanelProps> = (props) => {
+    // Track which notifications are expanded
+    const [expandedIds, setExpandedIds] = createSignal<Set<string>>(new Set())
+
     // Access signal directly for proper reactivity
     const notifications = createMemo(() => {
         ensureLoaded(props.folderPath)
@@ -24,6 +27,20 @@ const FailedNotificationPanel: Component<FailedNotificationPanelProps> = (props)
         return map.get(props.folderPath) ?? []
     })
     const hasNotifications = createMemo(() => notifications().length > 0)
+
+    const isExpanded = (id: string) => expandedIds().has(id)
+
+    const toggleExpanded = (id: string) => {
+        setExpandedIds((prev) => {
+            const next = new Set(prev)
+            if (next.has(id)) {
+                next.delete(id)
+            } else {
+                next.add(id)
+            }
+            return next
+        })
+    }
 
     const handleDismiss = (notificationId: string) => {
         removeFailedNotification(props.folderPath, notificationId)
@@ -116,40 +133,110 @@ const FailedNotificationPanel: Component<FailedNotificationPanelProps> = (props)
                             >
                                 <div class="failed-notification-list">
                                     <For each={notifications()}>
-                                        {(notification) => (
-                                            <div class="failed-notification-card">
-                                                <div class="failed-notification-card-icon">
-                                                    <Show
-                                                        when={notification.type === "question"}
-                                                        fallback={<ShieldAlert size={20} />}
-                                                    >
-                                                        <MessageCircleQuestion size={20} />
-                                                    </Show>
-                                                </div>
-                                                <div class="failed-notification-card-content">
-                                                    <div class="failed-notification-card-title">
-                                                        {getTitleForNotification(notification)}
+                                        {(notification) => {
+                                            const expanded = createMemo(() => isExpanded(notification.id))
+                                            return (
+                                                <div class="failed-notification-card">
+                                                    <div class="failed-notification-card-icon">
+                                                        <Show
+                                                            when={notification.type === "question"}
+                                                            fallback={<ShieldAlert size={20} />}
+                                                        >
+                                                            <MessageCircleQuestion size={20} />
+                                                        </Show>
                                                     </div>
-                                                    <div class="failed-notification-card-meta">
-                                                        <span class="failed-notification-card-reason">
-                                                            {getReasonLabel(notification.reason)}
-                                                        </span>
-                                                        <span class="failed-notification-card-separator">•</span>
-                                                        <span class="failed-notification-card-time">
-                                                            {formatTimestamp(notification.timestamp)}
-                                                        </span>
+                                                    <div class="failed-notification-card-content">
+                                                        <div class="failed-notification-card-header">
+                                                            <div class="failed-notification-card-title">
+                                                                {getTitleForNotification(notification)}
+                                                            </div>
+                                                            <div class="failed-notification-card-meta">
+                                                                <span class="failed-notification-card-reason">
+                                                                    {getReasonLabel(notification.reason)}
+                                                                </span>
+                                                                <span class="failed-notification-card-separator">•</span>
+                                                                <span class="failed-notification-card-time">
+                                                                    {formatTimestamp(notification.timestamp)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        <Show when={expanded()}>
+                                                            <div class="failed-notification-card-details">
+                                                                <Show when={notification.type === "question" && notification.questionData}>
+                                                                    <For each={notification.questionData!.questions}>
+                                                                        {(q) => (
+                                                                            <div class="failed-notification-card-question-section">
+                                                                                <div class="failed-notification-card-question-label">Question</div>
+                                                                                <div class="failed-notification-card-question-text">{q.question}</div>
+                                                                                <Show when={q.options?.length > 0}>
+                                                                                    <div class="failed-notification-card-question-label" style={{ "margin-top": "8px" }}>Options</div>
+                                                                                    <ul class="failed-notification-card-options">
+                                                                                        <For each={q.options}>
+                                                                                            {(opt) => (
+                                                                                                <li class="failed-notification-card-option">
+                                                                                                    <span class="failed-notification-card-option-label">{opt.label}</span>
+                                                                                                    <Show when={opt.description}>
+                                                                                                        <span class="failed-notification-card-option-desc">{opt.description}</span>
+                                                                                                    </Show>
+                                                                                                </li>
+                                                                                            )}
+                                                                                        </For>
+                                                                                    </ul>
+                                                                                </Show>
+                                                                            </div>
+                                                                        )}
+                                                                    </For>
+                                                                </Show>
+
+                                                                <Show when={notification.type === "permission" && notification.permissionData}>
+                                                                    <div class="failed-notification-card-permission">
+                                                                        <div class="failed-notification-card-permission-row">
+                                                                            <span class="failed-notification-card-permission-label">Type:</span>
+                                                                            <span class="failed-notification-card-permission-value">
+                                                                                {getPermissionKind(notification.permissionData!.permission)}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div class="failed-notification-card-permission-row">
+                                                                            <span class="failed-notification-card-permission-label">Resources:</span>
+                                                                            <div class="failed-notification-card-patterns">
+                                                                                <For each={getPermissionPatterns(notification.permissionData!.permission)}>
+                                                                                    {(pattern) => (
+                                                                                        <div class="failed-notification-card-pattern">{pattern}</div>
+                                                                                    )}
+                                                                                </For>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </Show>
+                                                            </div>
+                                                        </Show>
+                                                    </div>
+                                                    
+                                                    <div style={{ display: "flex", gap: "4px" }}>
+                                                        <button
+                                                            type="button"
+                                                            class="failed-notification-card-expand"
+                                                            onClick={() => toggleExpanded(notification.id)}
+                                                            aria-label={expanded() ? "Collapse details" : "Expand details"}
+                                                            data-expanded={expanded()}
+                                                        >
+                                                            <Show when={expanded()} fallback={<ChevronDown size={16} />}>
+                                                                <ChevronUp size={16} />
+                                                            </Show>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            class="failed-notification-card-dismiss"
+                                                            onClick={() => handleDismiss(notification.id)}
+                                                            aria-label="Dismiss"
+                                                        >
+                                                            <X size={16} />
+                                                        </button>
                                                     </div>
                                                 </div>
-                                                <button
-                                                    type="button"
-                                                    class="failed-notification-card-dismiss"
-                                                    onClick={() => handleDismiss(notification.id)}
-                                                    aria-label="Dismiss"
-                                                >
-                                                    <X size={16} />
-                                                </button>
-                                            </div>
-                                        )}
+                                            )
+                                        }}
                                     </For>
                                 </div>
                             </Show>
