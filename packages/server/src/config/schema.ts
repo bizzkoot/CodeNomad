@@ -24,6 +24,7 @@ const PreferencesSchema = z.object({
   showUsageMetrics: z.boolean().default(true),
   autoCleanupBlankSessions: z.boolean().default(true),
   listeningMode: z.enum(["local", "all"]).default("local"),
+  askUserTimeout: z.number().default(300000),
 })
 
 const RecentFolderSchema = z.object({

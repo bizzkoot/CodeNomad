@@ -46,6 +46,9 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
     logDebug(`[MCP IPC] Bridge window ${formatWindowInfo(mainWindow)}`);
     emitRendererLog(mainWindow, 'info', 'Setting up main process bridge', { windowInfo: formatWindowInfo(mainWindow) });
 
+    let requestTimeout = 300000; // Default 5 minutes
+
+
     // Attempt to import electron dynamically. If not available (e.g., in test env), skip attaching handlers.
     let ipcMain: any = null
     try {
@@ -124,6 +127,19 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
         }
     });
 
+    // Handler: UI sends configuration update
+    ipcMain.on('mcp:config', (_event: any, data: any) => {
+        const { requestTimeout: timeout } = data;
+        if (typeof timeout === 'number' && timeout > 0) {
+            console.log(`[MCP IPC] Updating request timeout to ${timeout}ms`);
+            // Store this in a way accessible to the render handler.
+            // Since we are inside setupMcpBridge, we can use a closure variable if we define it above.
+            // See below for variable definition.
+            requestTimeout = timeout;
+            emitRendererLog(mainWindow, 'info', `Updated request timeout to ${timeout}ms`);
+        }
+    });
+
     // Handler: UI confirms question was rendered/displayed
     ipcMain.on('mcp:renderConfirmed', (_event: any, data: any) => {
         const { requestId } = data;
@@ -142,16 +158,23 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
 
             const confirmed = globalPendingManager.confirmRender(requestId);
             if (confirmed) {
-                console.log(`[MCP IPC] Render confirmed for ${requestId}, starting user response timer`);
-                emitRendererLog(mainWindow, 'info', 'Render confirmed, starting user response timer', { requestId });
+                console.log(`[MCP IPC] Render confirmed for ${requestId}, starting user response timer (${requestTimeout}ms)`);
+                emitRendererLog(mainWindow, 'info', 'Render confirmed, starting user response timer', { requestId, timeout: requestTimeout });
 
-                // Start the 5-minute user response timeout
+                // Start the user response timeout
                 const activePending = globalPendingManager.get(requestId);
                 if (activePending) {
                     activePending.timeout = setTimeout(() => {
                         console.log(`[MCP IPC] User response timeout for ${requestId}`);
+                        // Notify UI that question timed out so it can clean up wizard and move to failed notifications
+                        mainWindow.webContents.send('ask_user.rejected', {
+                            requestId,
+                            reason: 'timeout',
+                            timedOut: true,
+                            cancelled: false
+                        });
                         globalPendingManager?.reject(requestId, new Error('Question timeout'));
-                    }, 300000); // 5 minutes
+                    }, requestTimeout);
                 }
             } else {
                 console.warn(`[MCP IPC] No pending request for render confirmation: ${requestId}`);
@@ -234,15 +257,15 @@ export function createIpcBridge(mainWindow: BrowserWindow, pendingManager: Pendi
                 emitRendererLog(mainWindow, 'warn', 'Question not found in pending manager', { requestId });
             }
         },
-        onAnswer: (callback: (requestId: string, answers: QuestionAnswer[]) => void) => {
+        onAnswer: (_callback: (requestId: string, answers: QuestionAnswer[]) => void) => {
             // Already handled via 'mcp:answer' IPC handler in setupMcpBridge
             console.log('[MCP IPC] Answer handler registered (via IPC)');
         },
-        onCancel: (callback: (requestId: string) => void) => {
+        onCancel: (_callback: (requestId: string) => void) => {
             // Already handled via 'mcp:cancel' IPC handler in setupMcpBridge
             console.log('[MCP IPC] Cancel handler registered (via IPC)');
         },
-        onRenderConfirmed: (callback: (requestId: string) => void) => {
+        onRenderConfirmed: (_callback: (requestId: string) => void) => {
             // Handled via 'mcp:renderConfirmed' IPC handler above
             console.log('[MCP IPC] Render confirmation handler registered (via IPC)');
         }

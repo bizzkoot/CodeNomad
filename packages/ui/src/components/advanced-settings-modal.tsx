@@ -3,6 +3,7 @@ import { Dialog } from "@kobalte/core/dialog"
 import OpenCodeBinarySelector from "./opencode-binary-selector"
 import EnvironmentVariablesEditor from "./environment-variables-editor"
 import { useI18n } from "../lib/i18n"
+import { preferences, setAskUserTimeout } from "../stores/preferences"
 
 interface AdvancedSettingsModalProps {
   open: boolean
@@ -40,6 +41,36 @@ const AdvancedSettingsModal: Component<AdvancedSettingsModalProps> = (props) => 
                 </div>
                 <div class="panel-body">
                   <EnvironmentVariablesEditor disabled={Boolean(props.isLoading)} />
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-header">
+                  <h3 class="panel-title">Timeout Settings</h3>
+                  <p class="panel-subtitle">Configure timeouts for various operations</p>
+                </div>
+                <div class="panel-body">
+                  <div class="flex flex-col gap-2">
+                    <label class="text-sm font-medium text-secondary">
+                      Ask User Tool Timeout (seconds)
+                    </label>
+                    <input
+                      type="number"
+                      min="10"
+                      step="1"
+                      value={Math.round((preferences().askUserTimeout || 300000) / 1000)}
+                      onInput={(e) => {
+                        const val = parseInt(e.currentTarget.value)
+                        if (!isNaN(val) && val > 0) {
+                          setAskUserTimeout(val * 1000)
+                        }
+                      }}
+                      class="px-3 py-2 text-sm bg-surface-base border border-base rounded text-primary focus-ring-accent w-32"
+                    />
+                    <p class="text-xs text-muted">
+                      Time to wait for user response before timing out (Default: 300s)
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

@@ -317,7 +317,8 @@ export class CliProcessManager extends EventEmitter {
     const args = ["serve", "--host", host, "--port", "0", "--generate-token"]
 
     if (options.dev) {
-      args.push("--ui-dev-server", "http://localhost:3000", "--log-level", "debug")
+      const devUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL || "http://localhost:3000"
+      args.push("--ui-dev-server", devUrl, "--log-level", "debug")
     }
 
     return args
