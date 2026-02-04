@@ -1,6 +1,8 @@
 import type { QuestionAnswer } from '../types/question.js';
 import { addQuestionToQueueWithSource, handleQuestionFailure } from '../stores/questions.js';
 import { activeInstanceId, instances } from '../stores/instances';
+import { preferences } from '../stores/preferences';
+import { createEffect } from 'solid-js';
 import { showToastNotification } from './notifications';
 
 /**
@@ -105,6 +107,24 @@ export function sendMcpAnswer(requestId: string, answers: QuestionAnswer[]): voi
     } catch (error) {
         console.error('[MCP Bridge UI] Failed to send answer:', error);
     }
+
+}
+
+/**
+ * Send configuration update to main process
+ */
+export function sendMcpConfig(config: { requestTimeout?: number }): void {
+    if (import.meta.env.DEV) {
+        console.log(`[MCP Bridge UI] Sending config update:`, config);
+    }
+
+    try {
+        if (isElectronEnvironment()) {
+            (window as any).electronAPI.mcpSend('mcp:config', config);
+        }
+    } catch (error) {
+        console.error('[MCP Bridge UI] Failed to send config:', error);
+    }
 }
 
 /**
@@ -204,6 +224,25 @@ export function initMcpBridge(instanceId: string): void {
             console.log('[MCP Bridge UI] Setting up IPC listeners');
         }
 
+        // Send initial config
+        sendMcpConfig({ requestTimeout: preferences().askUserTimeout });
+
+        // Watch for changes (this runs in the reactive context of the component calling initMcpBridge)
+        createEffect(() => {
+            const timeout = preferences().askUserTimeout;
+            sendMcpConfig({ requestTimeout: timeout });
+        });
+
+
+        // Send initial config
+        sendMcpConfig({ requestTimeout: preferences().askUserTimeout });
+
+        // Watch for changes (this runs in the reactive context of the component calling initMcpBridge)
+        createEffect(() => {
+            const timeout = preferences().askUserTimeout;
+            sendMcpConfig({ requestTimeout: timeout });
+        });
+
         // Listen for questions from MCP server (via main process)
         const cleanup = ensureSingleListener('ask_user.asked', (payload: any) => {
             const { requestId, questions, source } = payload;
@@ -292,7 +331,12 @@ export function initMcpBridge(instanceId: string): void {
 
             // Check if this is a timeout and we haven't retried yet
             const currentRetries = retryAttempts.get(requestId) ?? 0;
-            if (timedOut && currentRetries < 1) {
+            // NOTE: We disable retry for timeout because the server has already rejected the request.
+            // Retrying with the same ID would be futile as the server won't accept answers for a rejected ID.
+            // This prevents the wizard from getting stuck with a dead question.
+            const shouldRetry = timedOut && currentRetries < 1 && false;
+
+            if (shouldRetry) {
                 // Retry once: route to active instance again
                 retryAttempts.set(requestId, currentRetries + 1);
 

@@ -48,6 +48,7 @@ export interface Preferences {
   showUsageMetrics: boolean
   autoCleanupBlankSessions: boolean
   listeningMode: ListeningMode
+  askUserTimeout: number
 }
 
 
@@ -83,6 +84,7 @@ const defaultPreferences: Preferences = {
   showUsageMetrics: true,
   autoCleanupBlankSessions: true,
   listeningMode: "local",
+  askUserTimeout: 300000,
 }
 
 
@@ -132,6 +134,7 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
     showUsageMetrics: sanitized.showUsageMetrics ?? defaultPreferences.showUsageMetrics,
     autoCleanupBlankSessions: sanitized.autoCleanupBlankSessions ?? defaultPreferences.autoCleanupBlankSessions,
     listeningMode: sanitized.listeningMode ?? defaultPreferences.listeningMode,
+    askUserTimeout: sanitized.askUserTimeout ?? defaultPreferences.askUserTimeout,
   }
 }
 
@@ -378,6 +381,10 @@ function toggleShowThinkingBlocks(): void {
   updatePreferences({ showThinkingBlocks: !preferences().showThinkingBlocks })
 }
 
+function setAskUserTimeout(timeout: number): void {
+  updatePreferences({ askUserTimeout: timeout })
+}
+
 function toggleShowTimelineTools(): void {
   updatePreferences({ showTimelineTools: !preferences().showTimelineTools })
 }
@@ -514,6 +521,7 @@ interface ConfigContextValue {
   addRecentModelPreference: typeof addRecentModelPreference
   setAgentModelPreference: typeof setAgentModelPreference
   getAgentModelPreference: typeof getAgentModelPreference
+  setAskUserTimeout: typeof setAskUserTimeout
 }
 
 const ConfigContext = createContext<ConfigContextValue>()
@@ -550,6 +558,7 @@ const configContextValue: ConfigContextValue = {
   addRecentModelPreference,
   setAgentModelPreference,
   getAgentModelPreference,
+  setAskUserTimeout,
 }
 
 const ConfigProvider: ParentComponent = (props) => {
@@ -616,4 +625,5 @@ export {
   themePreference,
   setThemePreference,
   recordWorkspaceLaunch,
+  setAskUserTimeout,
 }
