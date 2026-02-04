@@ -9,6 +9,8 @@ import {
     type FailedNotification,
 } from "../stores/failed-notifications"
 import { getPermissionDisplayTitle, getPermissionKind, getPermissionPatterns } from "../types/permission"
+import { Markdown } from "./markdown"
+import type { TextPart } from "../types/message"
 
 interface FailedNotificationPanelProps {
     folderPath: string
@@ -98,6 +100,12 @@ const FailedNotificationPanel: Component<FailedNotificationPanelProps> = (props)
         return notification.title
     }
 
+    const createTextPart = (id: string, text: string): TextPart => ({
+        id: `${id}-text`,
+        type: "text",
+        text,
+    })
+
     return (
         <Dialog.Root open={props.isOpen} onOpenChange={(open) => !open && props.onClose()}>
             <Dialog.Portal>
@@ -165,10 +173,16 @@ const FailedNotificationPanel: Component<FailedNotificationPanelProps> = (props)
                                                             <div class="failed-notification-card-details">
                                                                 <Show when={notification.type === "question" && notification.questionData}>
                                                                     <For each={notification.questionData!.questions}>
-                                                                        {(q) => (
+                                                                        {(q, index) => (
                                                                             <div class="failed-notification-card-question-section">
                                                                                 <div class="failed-notification-card-question-label">Question</div>
-                                                                                <div class="failed-notification-card-question-text">{q.question}</div>
+                                                                                <div class="failed-notification-card-question-text">
+                                                                                    <Markdown
+                                                                                        part={createTextPart(`${notification.id}-${index()}`, q.question)}
+                                                                                        size="sm"
+                                                                                        disableHighlight
+                                                                                    />
+                                                                                </div>
                                                                                 <Show when={q.options?.length > 0}>
                                                                                     <div class="failed-notification-card-question-label" style={{ "margin-top": "8px" }}>Options</div>
                                                                                     <ul class="failed-notification-card-options">
@@ -212,7 +226,7 @@ const FailedNotificationPanel: Component<FailedNotificationPanelProps> = (props)
                                                             </div>
                                                         </Show>
                                                     </div>
-                                                    
+
                                                     <div style={{ display: "flex", gap: "4px" }}>
                                                         <button
                                                             type="button"

@@ -239,9 +239,10 @@ function createWindow() {
   }
 
   createApplicationMenu(mainWindow)
-  setupCliIPC(mainWindow, cliManager)
+  const cleanupIPC = setupCliIPC(mainWindow, cliManager)
 
   mainWindow.on("closed", () => {
+    cleanupIPC()
     destroyPreloadingView()
     mainWindow = null
     currentCliUrl = null

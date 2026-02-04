@@ -57,9 +57,10 @@
 
 .failed-notification-panel {
     position: relative;
-    width: 90%;
-    max-width: 600px;
-    max-height: 80vh;
+    width: fit-content;
+    min-width: min(600px, calc(100vw - 3rem));
+    max-width: calc(100vw - 3rem);
+    max-height: 85vh;
     background-color: var(--surface-base);
     border: 1px solid var(--border-base);
     border-radius: 12px;
@@ -282,9 +283,31 @@
 .failed-notification-card-question-text {
     font-weight: 500;
     color: var(--text-primary);
-    white-space: pre-wrap;
     line-height: 1.5;
+    /* Let markdown component handle whitespace/pre-wrap */
 }
+
+/* Markdown overrides specifically for notification card */
+.failed-notification-card-question-text .markdown-body {
+    font-size: 13px;
+    background: transparent !important;
+}
+
+.failed-notification-card-question-text .markdown-body p {
+    margin-bottom: 0.5em;
+}
+
+.failed-notification-card-question-text .markdown-body p:last-child {
+    margin-bottom: 0;
+}
+
+.failed-notification-card-question-text .markdown-body pre {
+    background-color: var(--surface-primary) !important;
+    border: 1px solid var(--border-base);
+    border-radius: 6px;
+    margin: 8px 0;
+}
+
 
 .failed-notification-card-options {
     list-style: none;

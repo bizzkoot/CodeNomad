@@ -2,12 +2,14 @@ const { contextBridge, ipcRenderer } = require("electron")
 
 const electronAPI = {
   onCliStatus: (callback) => {
-    ipcRenderer.on("cli:status", (_, data) => callback(data))
-    return () => ipcRenderer.removeAllListeners("cli:status")
+    const listener = (_, data) => callback(data)
+    ipcRenderer.on("cli:status", listener)
+    return () => ipcRenderer.removeListener("cli:status", listener)
   },
   onCliError: (callback) => {
-    ipcRenderer.on("cli:error", (_, data) => callback(data))
-    return () => ipcRenderer.removeAllListeners("cli:error")
+    const listener = (_, data) => callback(data)
+    ipcRenderer.on("cli:error", listener)
+    return () => ipcRenderer.removeListener("cli:error", listener)
   },
   getCliStatus: () => ipcRenderer.invoke("cli:getStatus"),
   restartCli: () => ipcRenderer.invoke("cli:restart"),
@@ -15,8 +17,9 @@ const electronAPI = {
   // MCP bridge methods
   mcpSend: (channel, data) => ipcRenderer.send(channel, data),
   mcpOn: (channel, callback) => {
-    ipcRenderer.on(channel, (_, data) => callback(data))
-    return () => ipcRenderer.removeAllListeners(channel)
+    const listener = (_, data) => callback(data)
+    ipcRenderer.on(channel, listener)
+    return () => ipcRenderer.removeListener(channel, listener)
   },
 }
 
