@@ -20,9 +20,15 @@ interface ActiveStream {
   task: Promise<void>
 }
 
+interface SessionCacheEntry {
+  parentID: string | null
+  parentIdKnown: boolean
+  verified: boolean
+}
+
 export class InstanceEventBridge {
   private readonly streams = new Map<string, ActiveStream>()
-  private readonly sessionCache = new Map<string, Map<string, { parentID: string | null }>>()
+  private readonly sessionCache = new Map<string, Map<string, SessionCacheEntry>>()
   private readonly sessionFetches = new Map<string, Promise<any | null>>()
   private readonly eventQueues = new Map<string, Promise<void>>()
 
@@ -202,12 +208,28 @@ export class InstanceEventBridge {
     this.eventQueues.set(workspaceId, next)
   }
 
-  private getSessionCache(workspaceId: string): Map<string, { parentID: string | null }> {
+  private getSessionCache(workspaceId: string): Map<string, SessionCacheEntry> {
     const existing = this.sessionCache.get(workspaceId)
     if (existing) return existing
-    const created = new Map<string, { parentID: string | null }>()
+    const created = new Map<string, SessionCacheEntry>()
     this.sessionCache.set(workspaceId, created)
     return created
+  }
+
+  private mergeCachedParentId(
+    cache: Map<string, SessionCacheEntry>,
+    sessionId: string,
+    parentID: string | null,
+    parentIdKnown: boolean,
+    verified: boolean,
+  ) {
+    const existing = cache.get(sessionId)
+    // If the incoming payload doesn't actually include parentID, treat it as "unknown" and
+    // avoid overwriting a previously-known value.
+    const nextKnown = parentIdKnown || existing?.parentIdKnown || false
+    const nextVerified = verified || existing?.verified || false
+    const nextParentID = parentIdKnown ? parentID : (existing?.parentID ?? parentID)
+    cache.set(sessionId, { parentID: nextParentID ?? null, parentIdKnown: nextKnown, verified: nextVerified })
   }
 
   private async handleInstanceEvent(workspaceId: string, event: InstanceStreamEvent) {
@@ -215,8 +237,11 @@ export class InstanceEventBridge {
       const info = (event as any)?.properties?.info
       const sessionId = info?.id
       if (typeof sessionId === "string") {
-        const parentID = info?.parentID ?? null
-        this.getSessionCache(workspaceId).set(sessionId, { parentID })
+        const hasParentIdField = info && typeof info === "object" && Object.prototype.hasOwnProperty.call(info, "parentID")
+        const parentID = typeof info?.parentID === "string" ? info.parentID : null
+        const verified = hasParentIdField && parentID !== null
+        const cache = this.getSessionCache(workspaceId)
+        this.mergeCachedParentId(cache, sessionId, parentID, hasParentIdField, verified)
       }
       this.options.eventBus.publish({ type: "instance.event", instanceId: workspaceId, event })
       return
@@ -227,17 +252,25 @@ export class InstanceEventBridge {
       const sessionId = info?.sessionID
       if (typeof sessionId === "string") {
         const cache = this.getSessionCache(workspaceId)
-        if (!cache.has(sessionId)) {
+        const cached = cache.get(sessionId)
+        // If we've never seen this session OR we have not verified the session via the
+        // session endpoint yet, fetch it once and emit a synthetic session.updated BEFORE
+        // publishing message.updated.
+        if (!cached || !cached.verified) {
           const sessionInfo = await this.getSessionInfo(workspaceId, sessionId)
           if (sessionInfo && typeof sessionInfo.id === "string") {
-            cache.set(sessionInfo.id, { parentID: sessionInfo.parentID ?? null })
             const syntheticEvent = {
               type: "session.updated",
               properties: {
                 info: sessionInfo,
               },
             }
-            this.options.eventBus.publish({ type: "instance.event", instanceId: workspaceId, event: syntheticEvent })
+            // Update cache from the source-of-truth payload, then process synchronously to
+            // preserve ordering (session.updated before message.updated).
+            const hasParentIdField = sessionInfo && typeof sessionInfo === "object" && Object.prototype.hasOwnProperty.call(sessionInfo, "parentID")
+            const parentID = typeof sessionInfo.parentID === "string" ? sessionInfo.parentID : null
+            this.mergeCachedParentId(cache, sessionInfo.id, parentID, hasParentIdField, true)
+            await this.handleInstanceEvent(workspaceId, syntheticEvent as any)
           }
         }
       }
