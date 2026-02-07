@@ -1,6 +1,7 @@
 import { app, BrowserView, BrowserWindow, nativeImage, session, shell } from "electron"
 import http from "node:http"
 import https from "node:https"
+import { randomUUID } from "node:crypto"
 import { existsSync } from "fs"
 import { dirname, join } from "path"
 import { fileURLToPath } from "url"
@@ -9,7 +10,12 @@ import { setupCliIPC } from "./ipc"
 import { CliProcessManager } from "./process-manager"
 import { CodeNomadMcpServer } from "@codenomad/mcp-server"
 import { setupMcpBridge, connectMcpBridge } from "@codenomad/mcp-server/src/bridge/ipc"
-import { writeMcpConfig, unregisterFromMcpConfig } from "@codenomad/mcp-server/src/config/registration"
+import {
+  cleanupLegacyAntigravityRegistration,
+  cleanupStaleInstances,
+  writeMcpConfig,
+  unregisterFromMcpConfig,
+} from "@codenomad/mcp-server/src/config/registration"
 
 const mainFilename = fileURLToPath(import.meta.url)
 const mainDirname = dirname(mainFilename)
@@ -25,6 +31,7 @@ let pendingBootstrapToken: string | null = null
 let showingLoadingScreen = false
 let preloadingView: BrowserView | null = null
 let mcpServer: CodeNomadMcpServer | null = null
+let mcpInstanceId: string | null = null
 
 type McpLogLevel = "info" | "warn" | "error"
 
@@ -537,6 +544,8 @@ app.whenReady().then(async () => {
     mcpServer = server
 
     try {
+      cleanupLegacyAntigravityRegistration()
+      await cleanupStaleInstances()
       await mcpServer.start()
       console.log('[MCP] Server start completed')
       emitMcpLog("info", "MCP server start completed")
@@ -549,11 +558,12 @@ app.whenReady().then(async () => {
 
       if (port && token) {
         mcpPort = port
+        mcpInstanceId = mcpInstanceId ?? randomUUID()
         // Pass the correct path to the MCP server entry point
         const mcpServerPath = join(app.getAppPath(), '../mcp-server/dist/server.js')
-        writeMcpConfig(port, token, mcpServerPath)
-        console.log(`[MCP] Registered with Antigravity on port ${port}`)
-        emitMcpLog("info", "Registered with Antigravity", { port })
+        writeMcpConfig({ instanceId: mcpInstanceId, port, token, serverPath: mcpServerPath })
+        console.log(`[MCP] Registered local instance ${mcpInstanceId} on port ${port}`)
+        emitMcpLog("info", "Registered local MCP instance", { instanceId: mcpInstanceId, port })
       } else {
         console.error(`[MCP] Failed to register - port: ${port}, token: ${token}`)
         emitMcpLog("warn", "Failed to register MCP config", { port, token: token ? "exists" : "missing" })
@@ -588,11 +598,10 @@ app.whenReady().then(async () => {
   app.on("before-quit", async (event) => {
     event.preventDefault()
 
-    // Unregister MCP server from Antigravity config
+    // Unregister MCP server from CodeNomad-local per-instance config
     if (mcpServer) {
-      const port = mcpServer.getPort()
-      if (port) {
-        unregisterFromMcpConfig()
+      if (mcpInstanceId) {
+        unregisterFromMcpConfig(mcpInstanceId)
       }
       await mcpServer.stop()
     }
