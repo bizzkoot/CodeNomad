@@ -1,6 +1,6 @@
 {
   "name": "codenomad-workspace",
-  "version": "0.9.2-patch.3",
+  "version": "0.9.2-patch.4",
   "private": true,
   "description": "CodeNomad monorepo workspace",
   "workspaces": {
@@ -22,6 +22,8 @@
     "build:mac-x64": "npm run build:mac-x64 --workspace @neuralnomads/codenomad-electron-app",
     "build:binaries": "npm run build:binaries --workspace @neuralnomads/codenomad-electron-app",
     "typecheck": "npm run typecheck --workspace @codenomad/ui && npm run typecheck --workspace @neuralnomads/codenomad-electron-app",
+    "lint": "eslint \"packages/ui/src/**/*.{ts,tsx}\" \"packages/electron-app/electron/**/*.{ts,tsx}\"",
+    "lint:fix": "npm run lint -- --fix",
     "bumpVersion": "npm version --workspaces --include-workspace-root --no-git-tag-version"
   },
   "dependencies": {
@@ -29,6 +31,12 @@
     "google-auth-library": "^10.5.0"
   },
   "devDependencies": {
-    "baseline-browser-mapping": "^2.9.11"
+    "@eslint/js": "^9.39.2",
+    "baseline-browser-mapping": "^2.9.11",
+    "eslint": "^9.39.2",
+    "eslint-plugin-solid": "^0.14.5",
+    "globals": "^17.3.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0"
   }
 }
