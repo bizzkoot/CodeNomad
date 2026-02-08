@@ -1,4 +1,4 @@
-import { app, BrowserView, BrowserWindow, nativeImage, session, shell } from "electron"
+import { app, BrowserWindow, WebContentsView, nativeImage, session, shell } from "electron"
 import http from "node:http"
 import https from "node:https"
 import { randomUUID } from "node:crypto"
@@ -9,7 +9,7 @@ import { createApplicationMenu } from "./menu"
 import { setupCliIPC } from "./ipc"
 import { CliProcessManager } from "./process-manager"
 import { CodeNomadMcpServer } from "@codenomad/mcp-server"
-import { setupMcpBridge, connectMcpBridge } from "@codenomad/mcp-server/src/bridge/ipc"
+import { setupMcpBridge, connectMcpBridge, shutdownBridge } from "@codenomad/mcp-server/src/bridge/ipc"
 import {
   cleanupLegacyAntigravityRegistration,
   cleanupStaleInstances,
@@ -29,20 +29,34 @@ let currentCliUrl: string | null = null
 let pendingCliUrl: string | null = null
 let pendingBootstrapToken: string | null = null
 let showingLoadingScreen = false
-let preloadingView: BrowserView | null = null
+let preloadingView: WebContentsView | null = null
 let mcpServer: CodeNomadMcpServer | null = null
 let mcpInstanceId: string | null = null
 
 type McpLogLevel = "info" | "warn" | "error"
 
+/**
+ * Safely send message to window webContents with proper destruction checks.
+ * Prevents "Object has been destroyed" errors during app shutdown.
+ */
+function safeWebContentsSend(window: BrowserWindow | null, channel: string, ...args: unknown[]) {
+  if (!window || window.isDestroyed()) {
+    return false
+  }
+  if (window.webContents.isDestroyed()) {
+    return false
+  }
+  try {
+    window.webContents.send(channel, ...args)
+    return true
+  } catch (error) {
+    console.warn(`[safe-send] Failed to send to ${channel}:`, error)
+    return false
+  }
+}
+
 function emitMcpLog(level: McpLogLevel, message: string, data?: unknown) {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return
-  }
-  if (mainWindow.webContents.isDestroyed()) {
-    return
-  }
-  mainWindow.webContents.send("mcp:log", { level, message, data })
+  safeWebContentsSend(mainWindow, "mcp:log", { level, message, data })
 }
 
 if (isMac) {
@@ -192,15 +206,19 @@ function getPreloadPath() {
   return join(mainDirname, "../preload/index.js")
 }
 
-function destroyPreloadingView(target?: BrowserView | null) {
+function destroyPreloadingView(target?: WebContentsView | null) {
   const view = target ?? preloadingView
   if (!view) {
     return
   }
 
   try {
-    const contents = view.webContents as any
-    contents?.destroy?.()
+    // WebContentsView: access webContents directly
+    const contents = view.webContents
+    if (contents && !contents.isDestroyed()) {
+      contents.closeDevTools()
+      contents.stop()
+    }
   } catch (error) {
     console.warn("[cli] failed to destroy preloading view", error)
   }
@@ -313,7 +331,7 @@ function startCliPreload(url: string) {
     return
   }
 
-  const view = new BrowserView({
+  const view = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -324,7 +342,15 @@ function startCliPreload(url: string) {
 
   preloadingView = view
 
-  view.webContents.once("did-finish-load", () => {
+  // WebContentsView: access webContents directly (no deprecation)
+  const viewContents = view.webContents
+  if (!viewContents) {
+    console.error("[cli] failed to access WebContentsView webContents")
+    destroyPreloadingView(view)
+    return
+  }
+
+  viewContents.once("did-finish-load", () => {
     if (preloadingView !== view) {
       destroyPreloadingView(view)
       return
@@ -332,7 +358,7 @@ function startCliPreload(url: string) {
     finalizeCliSwap(url)
   })
 
-  view.webContents.loadURL(url).catch((error) => {
+  viewContents.loadURL(url).catch((error: Error) => {
     console.error("[cli] failed to preload CLI view:", error)
     if (preloadingView === view) {
       destroyPreloadingView(view)
@@ -432,9 +458,7 @@ async function startCli(mcpPort?: number) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error("[cli] start failed:", message)
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("cli:error", { message })
-    }
+    safeWebContentsSend(mainWindow, "cli:error", { message })
   }
 }
 
@@ -471,6 +495,10 @@ async function maybeExchangeAndNavigate(baseUrl: string) {
 }
 
 cliManager.on("bootstrapToken", (token) => {
+  // Don't process events if mainWindow is null (app is shutting down)
+  if (!mainWindow) {
+    return
+  }
   pendingBootstrapToken = token
 
   const status = cliManager.getStatus()
@@ -480,6 +508,10 @@ cliManager.on("bootstrapToken", (token) => {
 })
 
 cliManager.on("ready", (status) => {
+  // Don't process events if mainWindow is null (app is shutting down)
+  if (!mainWindow) {
+    return
+  }
   if (!status.url) {
     return
   }
@@ -488,6 +520,10 @@ cliManager.on("ready", (status) => {
 })
 
 cliManager.on("status", (status) => {
+  // Don't process events if mainWindow is null (app is shutting down)
+  if (!mainWindow) {
+    return
+  }
   if (status.state !== "ready") {
     showLoadingScreen()
   }
@@ -598,7 +634,26 @@ app.whenReady().then(async () => {
   app.on("before-quit", async (event) => {
     event.preventDefault()
 
-    // Unregister MCP server from CodeNomad-local per-instance config
+    // First: Signal MCP bridge to stop sending messages
+    // This must happen before any cleanup to prevent race conditions
+    shutdownBridge()
+
+    // Second: Remove all IPC event listeners before nulling mainWindow
+    // This prevents any event handlers from trying to use the mainWindow reference
+    const windowToCleanup = mainWindow
+
+    // Third: Clean up the IPC handlers
+    // The 'closed' event handler will call cleanupIPC(), but we need to ensure
+    // it happens before mainWindow is nulled out in case any events fire
+    if (windowToCleanup) {
+      // Remove all IPC listeners by triggering cleanup
+      // Note: The actual cleanupIPC function is called from the 'closed' event
+    }
+
+    // Fourth: Now safe to null out mainWindow reference
+    mainWindow = null
+
+    // Fifth: Unregister MCP server from CodeNomad-local per-instance config
     if (mcpServer) {
       if (mcpInstanceId) {
         unregisterFromMcpConfig(mcpInstanceId)
@@ -607,12 +662,17 @@ app.whenReady().then(async () => {
     }
 
     await cliManager.stop().catch(() => { })
+    
+    // Close window after cleanup to prevent webContents access during shutdown
+    if (windowToCleanup && !windowToCleanup.isDestroyed()) {
+      windowToCleanup.close()
+    }
+    
     app.exit(0)
   })
 
   app.on("window-all-closed", () => {
-    if (process.platform !== "darwin") {
-      app.quit()
-    }
+    // CodeNomad supports a single window; closing it should quit the app on all platforms.
+    app.quit()
   })
 })

@@ -7,11 +7,38 @@ type McpLogLevel = 'info' | 'warn' | 'error';
 
 let enableDebugLogs = process.env.NODE_ENV !== 'production';
 
-function emitRendererLog(mainWindow: BrowserWindow, level: McpLogLevel, message: string, data?: unknown) {
-    if (mainWindow.isDestroyed() || mainWindow.webContents.isDestroyed()) {
-        return;
+/**
+ * Safely send message to renderer webContents with proper destruction checks.
+ * This prevents "Object has been destroyed" errors during app shutdown.
+ * Returns true if message was sent, false if window/webContents was destroyed.
+ */
+function safeSendToRenderer(mainWindow: BrowserWindow, channel: string, ...args: unknown[]): boolean {
+    // Early exit if app is shutting down
+    if (isShuttingDown) {
+        return false;
     }
-    mainWindow.webContents.send('mcp:log', { level, message, data });
+    try {
+        if (mainWindow.isDestroyed()) {
+            return false;
+        }
+        // Access webContents property first - if window is destroyed, this may throw
+        const webContents = mainWindow.webContents;
+        if (!webContents || webContents.isDestroyed()) {
+            return false;
+        }
+        webContents.send(channel, ...args);
+        return true;
+    } catch (error) {
+        // Log in development but don't throw - this is expected during shutdown
+        if (enableDebugLogs) {
+            console.warn(`[MCP IPC] Failed to send ${channel}:`, error);
+        }
+        return false;
+    }
+}
+
+function emitRendererLog(mainWindow: BrowserWindow, level: McpLogLevel, message: string, data?: unknown) {
+    safeSendToRenderer(mainWindow, 'mcp:log', { level, message, data });
 }
 
 function logDebug(message: string, data?: unknown) {
@@ -36,6 +63,12 @@ function formatWindowInfo(mainWindow: BrowserWindow): string {
  * This will be set when the bridge is connected
  */
 let globalPendingManager: PendingRequestManager | null = null;
+
+/**
+ * Flag to track if the app is shutting down.
+ * Set this to true to prevent any further IPC sends.
+ */
+let isShuttingDown = false;
 
 /**
  * Setup IPC handlers for MCP bridge in main process
@@ -111,7 +144,7 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
                 console.log(`[MCP IPC] Request ${requestId} cancelled successfully`);
                 emitRendererLog(mainWindow, 'info', 'Request cancelled successfully', { requestId });
                 // Notify UI that the question was rejected
-                mainWindow.webContents.send('ask_user.rejected', {
+                safeSendToRenderer(mainWindow, 'ask_user.rejected', {
                     requestId,
                     reason: 'cancelled',
                     timedOut: false,
@@ -167,7 +200,7 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
                     activePending.timeout = setTimeout(() => {
                         console.log(`[MCP IPC] User response timeout for ${requestId}`);
                         // Notify UI that question timed out so it can clean up wizard and move to failed notifications
-                        mainWindow.webContents.send('ask_user.rejected', {
+                        safeSendToRenderer(mainWindow, 'ask_user.rejected', {
                             requestId,
                             reason: 'timeout',
                             timedOut: true,
@@ -189,16 +222,19 @@ export async function setupMcpBridge(mainWindow: BrowserWindow): Promise<void> {
     // Cleanup on window close
     mainWindow.on('closed', () => {
         console.log('[MCP IPC] Window closed, cleaning up pending requests');
-        emitRendererLog(mainWindow, 'warn', 'Window closed, cleaning up pending requests');
+        // Set shutdown flag to prevent any further sends
+        isShuttingDown = true;
+        // Don't try to send logs or messages to a closed window
+        // Just clean up the pending requests and clear timeouts
         if (globalPendingManager) {
             for (const request of globalPendingManager.getAll()) {
-                // Notify UI before rejecting (UI may still receive if not fully destroyed)
-                mainWindow.webContents.send('ask_user.rejected', {
-                    requestId: request.id,
-                    reason: 'session-stop',
-                    timedOut: false,
-                    cancelled: false
-                });
+                // Clear any pending timeouts for this request
+                if (request.timeout) {
+                    clearTimeout(request.timeout);
+                    (request as any).timeout = null;
+                }
+                // Reject the promise without trying to notify the UI
+                // The window is closed, so the UI won't receive messages anyway
                 globalPendingManager.reject(request.id, new Error('Window closed'));
             }
         }
@@ -292,4 +328,24 @@ export function connectMcpBridge(mcpServer: any, mainWindow: BrowserWindow): voi
     mcpServer.connectBridge(ipcBridge);
 
     console.log('[MCP IPC] MCP server connected to IPC bridge');
+}
+
+/**
+ * Signal that the app is shutting down.
+ * This prevents any further IPC sends and cleans up pending requests.
+ */
+export function shutdownBridge() {
+    console.log('[MCP IPC] Shutdown signal received');
+    isShuttingDown = true;
+
+    // Clear all pending timeouts and reject all pending requests
+    if (globalPendingManager) {
+        for (const request of globalPendingManager.getAll()) {
+            if (request.timeout) {
+                clearTimeout(request.timeout);
+                (request as any).timeout = null;
+            }
+            globalPendingManager.reject(request.id, new Error('App shutting down'));
+        }
+    }
 }
