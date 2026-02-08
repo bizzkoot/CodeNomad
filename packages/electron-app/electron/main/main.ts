@@ -1,4 +1,4 @@
-import { app, BrowserView, BrowserWindow, nativeImage, session, shell } from "electron"
+import { app, BrowserWindow, WebContentsView, nativeImage, session, shell } from "electron"
 import http from "node:http"
 import https from "node:https"
 import { randomUUID } from "node:crypto"
@@ -29,20 +29,34 @@ let currentCliUrl: string | null = null
 let pendingCliUrl: string | null = null
 let pendingBootstrapToken: string | null = null
 let showingLoadingScreen = false
-let preloadingView: BrowserView | null = null
+let preloadingView: WebContentsView | null = null
 let mcpServer: CodeNomadMcpServer | null = null
 let mcpInstanceId: string | null = null
 
 type McpLogLevel = "info" | "warn" | "error"
 
+/**
+ * Safely send message to window webContents with proper destruction checks.
+ * Prevents "Object has been destroyed" errors during app shutdown.
+ */
+function safeWebContentsSend(window: BrowserWindow | null, channel: string, ...args: unknown[]) {
+  if (!window || window.isDestroyed()) {
+    return false
+  }
+  if (window.webContents.isDestroyed()) {
+    return false
+  }
+  try {
+    window.webContents.send(channel, ...args)
+    return true
+  } catch (error) {
+    console.warn(`[safe-send] Failed to send to ${channel}:`, error)
+    return false
+  }
+}
+
 function emitMcpLog(level: McpLogLevel, message: string, data?: unknown) {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return
-  }
-  if (mainWindow.webContents.isDestroyed()) {
-    return
-  }
-  mainWindow.webContents.send("mcp:log", { level, message, data })
+  safeWebContentsSend(mainWindow, "mcp:log", { level, message, data })
 }
 
 if (isMac) {
@@ -192,15 +206,19 @@ function getPreloadPath() {
   return join(mainDirname, "../preload/index.js")
 }
 
-function destroyPreloadingView(target?: BrowserView | null) {
+function destroyPreloadingView(target?: WebContentsView | null) {
   const view = target ?? preloadingView
   if (!view) {
     return
   }
 
   try {
-    const contents = view.webContents as any
-    contents?.destroy?.()
+    // WebContentsView: access webContents directly
+    const contents = view.webContents
+    if (contents && !contents.isDestroyed()) {
+      contents.closeDevTools()
+      contents.stop()
+    }
   } catch (error) {
     console.warn("[cli] failed to destroy preloading view", error)
   }
@@ -313,7 +331,7 @@ function startCliPreload(url: string) {
     return
   }
 
-  const view = new BrowserView({
+  const view = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -324,7 +342,15 @@ function startCliPreload(url: string) {
 
   preloadingView = view
 
-  view.webContents.once("did-finish-load", () => {
+  // WebContentsView: access webContents directly (no deprecation)
+  const viewContents = view.webContents
+  if (!viewContents) {
+    console.error("[cli] failed to access WebContentsView webContents")
+    destroyPreloadingView(view)
+    return
+  }
+
+  viewContents.once("did-finish-load", () => {
     if (preloadingView !== view) {
       destroyPreloadingView(view)
       return
@@ -332,7 +358,7 @@ function startCliPreload(url: string) {
     finalizeCliSwap(url)
   })
 
-  view.webContents.loadURL(url).catch((error) => {
+  viewContents.loadURL(url).catch((error: Error) => {
     console.error("[cli] failed to preload CLI view:", error)
     if (preloadingView === view) {
       destroyPreloadingView(view)
@@ -432,9 +458,7 @@ async function startCli(mcpPort?: number) {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     console.error("[cli] start failed:", message)
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("cli:error", { message })
-    }
+    safeWebContentsSend(mainWindow, "cli:error", { message })
   }
 }
 
@@ -598,6 +622,10 @@ app.whenReady().then(async () => {
   app.on("before-quit", async (event) => {
     event.preventDefault()
 
+    // Immediately null out mainWindow reference to stop any further webContents.send attempts
+    const windowToCleanup = mainWindow
+    mainWindow = null
+
     // Unregister MCP server from CodeNomad-local per-instance config
     if (mcpServer) {
       if (mcpInstanceId) {
@@ -607,6 +635,12 @@ app.whenReady().then(async () => {
     }
 
     await cliManager.stop().catch(() => { })
+    
+    // Close window after cleanup to prevent webContents access during shutdown
+    if (windowToCleanup && !windowToCleanup.isDestroyed()) {
+      windowToCleanup.close()
+    }
+    
     app.exit(0)
   })
 

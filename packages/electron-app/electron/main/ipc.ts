@@ -13,24 +13,38 @@ interface DialogOpenResult {
   paths: string[]
 }
 
+/**
+ * Safely send message to window webContents with proper destruction checks.
+ * Prevents "Object has been destroyed" errors during app shutdown.
+ */
+function safeWebContentsSend(window: BrowserWindow, channel: string, ...args: unknown[]) {
+  if (window.isDestroyed()) {
+    return false
+  }
+  if (window.webContents.isDestroyed()) {
+    return false
+  }
+  try {
+    window.webContents.send(channel, ...args)
+    return true
+  } catch (error) {
+    console.warn(`[ipc] Failed to send to ${channel}:`, error)
+    return false
+  }
+}
+
 export function setupCliIPC(mainWindow: BrowserWindow, cliManager: CliProcessManager) {
   // Define listeners
   const onStatus = (status: CliStatus) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("cli:status", status)
-    }
+    safeWebContentsSend(mainWindow, "cli:status", status)
   }
 
   const onReady = (status: CliStatus) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("cli:ready", status)
-    }
+    safeWebContentsSend(mainWindow, "cli:ready", status)
   }
 
   const onError = (error: Error) => {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("cli:error", { message: error.message })
-    }
+    safeWebContentsSend(mainWindow, "cli:error", { message: error.message })
   }
 
   // Register listeners
