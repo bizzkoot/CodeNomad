@@ -1,4 +1,4 @@
-import { Show, For, createMemo, createEffect, type Component } from "solid-js"
+import { Show, For, createMemo, createEffect, on, type Component } from "solid-js"
 import { Expand } from "lucide-solid"
 import type { Session } from "../../types/session"
 import type { Attachment } from "../../types/attachment"
@@ -9,7 +9,7 @@ import PromptInput from "../prompt-input"
 import type { Attachment as PromptAttachment } from "../../types/attachment"
 import { getAttachments, removeAttachment } from "../../stores/attachments"
 import { instances } from "../../stores/instances"
-import { loadMessages, sendMessage, forkSession, isSessionMessagesLoading, setActiveParentSession, setActiveSession, runShellCommand, abortSession } from "../../stores/sessions"
+import { loadMessages, sendMessage, forkSession, renameSession, isSessionMessagesLoading, setActiveParentSession, setActiveSession, runShellCommand, abortSession } from "../../stores/sessions"
 import { isSessionBusy as getSessionBusyStatus } from "../../stores/session-status"
 import { showAlertDialog } from "../../stores/alerts"
 import { getLogger } from "../../lib/logger"
@@ -112,6 +112,43 @@ export const SessionView: Component<SessionViewProps> = (props) => {
     if (!props.isActive) return
     scheduleScrollToBottom()
   })
+
+  createEffect(
+    on(
+      () => props.isActive,
+      (isActive) => {
+        if (!isActive) return
+
+        // Don't steal focus from other inputs (command palette, dialogs, selectors, etc.)
+        if (typeof document === "undefined") return
+        const activeEl = document.activeElement as HTMLElement | null
+        const activeIsInput =
+          activeEl?.tagName === "INPUT" ||
+          activeEl?.tagName === "TEXTAREA" ||
+          activeEl?.tagName === "SELECT" ||
+          Boolean(activeEl?.isContentEditable)
+        if (activeIsInput) return
+
+        const modalOpen = Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'))
+        if (modalOpen) return
+
+        // Defer until the session pane is visible and the textarea is mounted.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const textarea = rootRef?.querySelector<HTMLTextAreaElement>(".prompt-input")
+            if (!textarea) return
+            if (textarea.disabled) return
+
+            try {
+              textarea.focus({ preventScroll: true } as any)
+            } catch {
+              textarea.focus()
+            }
+          })
+        })
+      },
+    ),
+  )
   let quoteHandler: ((text: string, mode: "quote" | "code") => void) | null = null
  
   createEffect(() => {
@@ -217,9 +254,14 @@ export const SessionView: Component<SessionViewProps> = (props) => {
     }
 
     const restoredText = getUserMessageText(messageId)
+    const parentTitle = (session()?.title ?? "").trim() || t("sessionList.session.untitled")
 
     try {
       const forkedSession = await forkSession(props.instanceId, props.sessionId, { messageId })
+
+      renameSession(props.instanceId, forkedSession.id, `Fork: ${parentTitle}`).catch((error) => {
+        log.error("Failed to rename forked session", error)
+      })
 
       const parentToActivate = forkedSession.parentId ?? forkedSession.id
       setActiveParentSession(props.instanceId, parentToActivate)

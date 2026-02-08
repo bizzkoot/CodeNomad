@@ -1,4 +1,5 @@
 import { createSignal, Show, For, createEffect, createMemo, onCleanup } from "solid-js"
+import { Copy } from "lucide-solid"
 import { messageStoreBus } from "../stores/message-v2/bus"
 import { Markdown } from "./markdown"
 import { ToolCallDiffViewer } from "./diff-viewer"
@@ -7,6 +8,7 @@ import { useGlobalCache } from "../lib/hooks/use-global-cache"
 import { useConfig } from "../stores/preferences"
 import type { DiffViewMode } from "../stores/preferences"
 import { sendPermissionResponse } from "../stores/instances"
+import { copyToClipboard } from "../lib/clipboard"
 import { getPermissionDisplayTitle, getPermissionKind, getPermissionSessionId } from "../types/permission"
 import type { TextPart, RenderCache } from "../types/message"
 import { useI18n } from "../lib/i18n"
@@ -59,6 +61,11 @@ interface ToolCallProps {
   instanceId: string
   sessionId: string
   onContentRendered?: () => void
+  /**
+   * When true, tool call starts collapsed regardless of user preferences.
+   * Users can still expand/collapse manually.
+   */
+  forceCollapsed?: boolean
  }
 
 
@@ -285,6 +292,9 @@ export default function ToolCall(props: ToolCallProps) {
   const diagnosticsDefaultExpanded = createMemo(() => (preferences().diagnosticsExpansion || "expanded") === "expanded")
 
   const defaultExpandedForTool = createMemo(() => {
+    if (props.forceCollapsed) {
+      return false
+    }
     const prefExpanded = toolOutputDefaultExpanded()
     const toolName = toolCallMemo()?.tool || ""
     if (toolName === "read") {
@@ -388,12 +398,16 @@ export default function ToolCall(props: ToolCallProps) {
     requestAnimationFrame(() => {
       restoreScrollPosition(autoScroll())
       if (!expanded()) return
-      scheduleAnchorScroll()
+      scheduleAnchorScroll(true)
     })
   }
 
   const initializeScrollContainer = (element: HTMLDivElement | null | undefined) => {
-    scrollContainerRef = element || undefined
+    const next = element || undefined
+    if (next === scrollContainerRef) {
+      return
+    }
+    scrollContainerRef = next
     setScrollContainer(scrollContainerRef)
     if (scrollContainerRef) {
       restoreScrollPosition(autoScroll())
@@ -800,12 +814,29 @@ export default function ToolCall(props: ToolCallProps) {
     toolCall: toolCallMemo,
     toolState,
     toolName,
+    instanceId: props.instanceId,
+    sessionId: props.sessionId,
     t,
     messageVersion: messageVersionAccessor,
     partVersion: partVersionAccessor,
     renderMarkdown: renderMarkdownContent,
     renderAnsi: renderAnsiContent,
     renderDiff: renderDiffContent,
+    renderToolCall: (options) => {
+      if (!options?.toolCall) return null
+      return (
+        <ToolCall
+          toolCall={options.toolCall}
+          toolCallId={options.toolCall.id}
+          messageId={options.messageId}
+          messageVersion={options.messageVersion}
+          partVersion={options.partVersion}
+          instanceId={props.instanceId}
+          sessionId={options.sessionId}
+          forceCollapsed={options.forceCollapsed}
+        />
+      )
+    },
     scrollHelpers,
   }
 
@@ -822,7 +853,7 @@ export default function ToolCall(props: ToolCallProps) {
       return
     }
     previousPartVersion = version
-    scheduleAnchorScroll()
+    scheduleAnchorScroll(true)
   })
 
   createEffect(() => {
@@ -857,6 +888,19 @@ export default function ToolCall(props: ToolCallProps) {
     }
 
     return getToolName(currentTool)
+  }
+
+  const headerText = createMemo(() => {
+    // Keep this as a memo so copy always matches what's rendered.
+    return renderToolTitle()
+  })
+
+  const handleCopyHeader = async (event: MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const text = headerText()
+    if (!text) return
+    await copyToClipboard(text)
   }
 
   const renderToolBody = () => {
@@ -1007,16 +1051,32 @@ export default function ToolCall(props: ToolCallProps) {
       }}
       class={`tool-call ${combinedStatusClass()}`}
     >
-      <button
-        class="tool-call-header"
-        onClick={toggle}
-        aria-expanded={expanded()}
-        data-status-icon={statusIcon()}
-      >
-        <span class="tool-call-summary" data-tool-icon={getToolIcon(toolName())}>
-          {renderToolTitle()}
+      <div class="tool-call-header">
+        <button
+          type="button"
+          class="tool-call-header-toggle"
+          onClick={toggle}
+          aria-expanded={expanded()}
+        >
+          <span class="tool-call-summary" data-tool-icon={getToolIcon(toolName())}>
+            {headerText()}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          class="tool-call-header-copy"
+          onClick={handleCopyHeader}
+          aria-label={t("toolCall.header.copyAriaLabel")}
+          title={t("toolCall.header.copyTitle")}
+        >
+          <Copy class="w-3.5 h-3.5" />
+        </button>
+
+        <span class="tool-call-header-status" aria-hidden="true">
+          {statusIcon()}
         </span>
-      </button>
+      </div>
 
       {expanded() && (
         <div class="tool-call-details">

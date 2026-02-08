@@ -15,7 +15,6 @@ import { Accordion } from "@kobalte/core"
 import { ChevronDown, TerminalSquare, Trash2, XOctagon, FolderTree } from "lucide-solid"
 import AppBar from "@suid/material/AppBar"
 import Box from "@suid/material/Box"
-import Divider from "@suid/material/Divider"
 import Drawer from "@suid/material/Drawer"
 import IconButton from "@suid/material/IconButton"
 import Toolbar from "@suid/material/Toolbar"
@@ -102,9 +101,9 @@ interface InstanceShellProps {
   tabBarOffset: number
 }
 
-const DEFAULT_SESSION_SIDEBAR_WIDTH = 280
+const DEFAULT_SESSION_SIDEBAR_WIDTH = 340
 const MIN_SESSION_SIDEBAR_WIDTH = 220
-const MAX_SESSION_SIDEBAR_WIDTH = 360
+const MAX_SESSION_SIDEBAR_WIDTH = 400
 const RIGHT_DRAWER_WIDTH = 260
 const MIN_RIGHT_DRAWER_WIDTH = 200
 const MAX_RIGHT_DRAWER_WIDTH = 380
@@ -1112,7 +1111,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
             </Show>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 text-primary">
           <IconButton
             size="small"
             color="inherit"
@@ -1148,11 +1147,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
               void result.catch((error) => log.error("Failed to create session:", error))
             }
           }}
+          enableFilterBar
           showHeader={false}
           showFooter={false}
         />
 
-        <Divider />
+        <div class="session-sidebar-separator" />
         <Show when={activeSessionForInstance()}>
           {(activeSession) => (
             <>
@@ -1173,6 +1173,12 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 />
 
                 <ThinkingSelector instanceId={props.instance.id} currentModel={activeSession().model} />
+
+                <div class="session-sidebar-selector-hints" aria-hidden="true">
+                  <Kbd shortcut="cmd+shift+a" />
+                  <Kbd shortcut="cmd+shift+m" />
+                  <Kbd shortcut="cmd+shift+t" />
+                </div>
               </div>
             </>
           )}
@@ -1341,8 +1347,8 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
     return (
       <div class="flex flex-col h-full" ref={setRightDrawerContentEl}>
-        <div class="flex items-center justify-between px-4 py-2 border-b border-base">
-          <Typography variant="subtitle2" class="uppercase tracking-wide text-xs font-semibold">
+        <div class="flex items-center justify-between px-4 py-2 border-b border-base text-primary">
+          <Typography variant="subtitle2" class="uppercase tracking-wide text-xs font-semibold text-primary">
             {t("instanceShell.rightPanel.title")}
           </Typography>
           <div class="flex items-center gap-2">
@@ -1541,20 +1547,20 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 >
                   {leftAppBarButtonIcon()}
                 </IconButton>
-
-                <div class="inline-flex items-center gap-1 rounded-md border border-base px-1.5 py-0.5 text-[11px] text-primary flex-shrink-0">
-                  <span class="uppercase text-[9px] tracking-wide text-primary/70">
-                    {t("instanceShell.metrics.usedLabel")}
-                  </span>
-                  <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
+                <div class="flex flex-wrap items-center justify-center gap-2 pb-1">
+                  <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
+                    <span class="uppercase text-[10px] tracking-wide text-muted">
+                      {t("instanceShell.metrics.usedLabel")}
+                    </span>
+                    <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
+                  </div>
+                  <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
+                    <span class="uppercase text-[10px] tracking-wide text-muted">
+                      {t("instanceShell.metrics.availableLabel")}
+                    </span>
+                    <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
+                  </div>
                 </div>
-                <div class="inline-flex items-center gap-1 rounded-md border border-base px-1.5 py-0.5 text-[11px] text-primary flex-shrink-0">
-                  <span class="uppercase text-[9px] tracking-wide text-primary/70">
-                    {t("instanceShell.metrics.availableLabel")}
-                  </span>
-                  <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
-                </div>
-
                 <Show when={!showingInfoView()}>
                   <button
                     type="button"
@@ -1636,13 +1642,13 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
               <Show when={!showingInfoView()}>
                 <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                  <span class="uppercase text-[10px] tracking-wide text-primary/70">
+                  <span class="uppercase text-[10px] tracking-wide text-muted">
                     {t("instanceShell.metrics.usedLabel")}
                   </span>
                   <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
                 </div>
                 <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                  <span class="uppercase text-[10px] tracking-wide text-primary/70">
+                  <span class="uppercase text-[10px] tracking-wide text-muted">
                     {t("instanceShell.metrics.availableLabel")}
                   </span>
                   <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
