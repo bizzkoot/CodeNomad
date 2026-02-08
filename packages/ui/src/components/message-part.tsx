@@ -107,21 +107,16 @@ export default function MessagePart(props: MessagePartProps) {
       <Match when={partType() === "text"}>
         <Show when={!shouldHideTextPart() && partHasRenderableText(props.part)}>
           <div class={textContainerClass()}>
-            <Show
-              when={isAssistantMessage()}
-              fallback={<span class="text-primary">{plainTextContent()}</span>}
-            >
-              <Markdown
-                part={createTextPartForMarkdown()}
-                instanceId={props.instanceId}
-                sessionId={props.sessionId}
-                messageId={props.messageId}
-                partIndex={props.partIndex}
-                isDark={isDark()}
-                size={isAssistantMessage() ? "tight" : "base"}
-                onRendered={props.onRendered}
-              />
-            </Show>
+            <Markdown
+              part={createTextPartForMarkdown()}
+              instanceId={props.instanceId}
+              sessionId={props.sessionId}
+              messageId={props.messageId}
+              partIndex={props.partIndex}
+              isDark={isDark()}
+              size={isAssistantMessage() ? "tight" : "base"}
+              onRendered={props.onRendered}
+            />
           </div>
         </Show>
       </Match>
