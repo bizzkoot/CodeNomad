@@ -92,10 +92,22 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    chunkSizeWarningLimit: 600,
     rollupOptions: {
       input: {
         main: resolve(__dirname, "./src/renderer/index.html"),
         loading: resolve(__dirname, "./src/renderer/loading.html"),
+      },
+      output: {
+        manualChunks: {
+          // Core framework chunks - these change less frequently
+          "vendor-solid": ["solid-js", "solid-js/web", "solid-js/store"],
+          "vendor-ui": ["@kobalte/core", "@suid/material", "@suid/system", "@suid/icons-material"],
+          "vendor-utils": ["@opencode-ai/sdk", "marked", "dompurify"],
+          // Heavy feature chunks - loaded on demand
+          "vendor-diff": ["@git-diff-view/solid", "@git-diff-view/core"],
+          "vendor-highlight": ["shiki"],
+        },
       },
     },
   },

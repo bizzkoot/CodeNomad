@@ -2,7 +2,7 @@ import { createSignal, Show, For, createEffect, createMemo, onCleanup } from "so
 import { Copy } from "lucide-solid"
 import { messageStoreBus } from "../stores/message-v2/bus"
 import { Markdown } from "./markdown"
-import { ToolCallDiffViewer } from "./diff-viewer"
+import { LazyToolCallDiffViewer } from "./lazy-diff-viewer"
 import { useTheme } from "../lib/theme"
 import { useGlobalCache } from "../lib/hooks/use-global-cache"
 import { useConfig } from "../stores/preferences"
@@ -678,7 +678,7 @@ export default function ToolCall(props: ToolCallProps) {
             </button>
           </div>
         </div>
-        <ToolCallDiffViewer
+        <LazyToolCallDiffViewer
           diffText={payload.diffText}
           filePath={payload.filePath}
           theme={themeKey}

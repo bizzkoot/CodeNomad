@@ -14,7 +14,7 @@ const log = getLogger("session")
 
 disableCache()
 
-interface ToolCallDiffViewerProps {
+export interface ToolCallDiffViewerProps {
   diffText: string
   filePath?: string
   theme: "light" | "dark"
