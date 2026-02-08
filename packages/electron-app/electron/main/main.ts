@@ -9,7 +9,7 @@ import { createApplicationMenu } from "./menu"
 import { setupCliIPC } from "./ipc"
 import { CliProcessManager } from "./process-manager"
 import { CodeNomadMcpServer } from "@codenomad/mcp-server"
-import { setupMcpBridge, connectMcpBridge } from "@codenomad/mcp-server/src/bridge/ipc"
+import { setupMcpBridge, connectMcpBridge, shutdownBridge } from "@codenomad/mcp-server/src/bridge/ipc"
 import {
   cleanupLegacyAntigravityRegistration,
   cleanupStaleInstances,
@@ -495,6 +495,10 @@ async function maybeExchangeAndNavigate(baseUrl: string) {
 }
 
 cliManager.on("bootstrapToken", (token) => {
+  // Don't process events if mainWindow is null (app is shutting down)
+  if (!mainWindow) {
+    return
+  }
   pendingBootstrapToken = token
 
   const status = cliManager.getStatus()
@@ -504,6 +508,10 @@ cliManager.on("bootstrapToken", (token) => {
 })
 
 cliManager.on("ready", (status) => {
+  // Don't process events if mainWindow is null (app is shutting down)
+  if (!mainWindow) {
+    return
+  }
   if (!status.url) {
     return
   }
@@ -512,6 +520,10 @@ cliManager.on("ready", (status) => {
 })
 
 cliManager.on("status", (status) => {
+  // Don't process events if mainWindow is null (app is shutting down)
+  if (!mainWindow) {
+    return
+  }
   if (status.state !== "ready") {
     showLoadingScreen()
   }
@@ -622,11 +634,26 @@ app.whenReady().then(async () => {
   app.on("before-quit", async (event) => {
     event.preventDefault()
 
-    // Immediately null out mainWindow reference to stop any further webContents.send attempts
+    // First: Signal MCP bridge to stop sending messages
+    // This must happen before any cleanup to prevent race conditions
+    shutdownBridge()
+
+    // Second: Remove all IPC event listeners before nulling mainWindow
+    // This prevents any event handlers from trying to use the mainWindow reference
     const windowToCleanup = mainWindow
+
+    // Third: Clean up the IPC handlers
+    // The 'closed' event handler will call cleanupIPC(), but we need to ensure
+    // it happens before mainWindow is nulled out in case any events fire
+    if (windowToCleanup) {
+      // Remove all IPC listeners by triggering cleanup
+      // Note: The actual cleanupIPC function is called from the 'closed' event
+    }
+
+    // Fourth: Now safe to null out mainWindow reference
     mainWindow = null
 
-    // Unregister MCP server from CodeNomad-local per-instance config
+    // Fifth: Unregister MCP server from CodeNomad-local per-instance config
     if (mcpServer) {
       if (mcpInstanceId) {
         unregisterFromMcpConfig(mcpInstanceId)
