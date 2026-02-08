@@ -89,7 +89,14 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
     }
 
     const handleStageAll = async () => {
-        const paths = [...git.unstagedChanges(), ...git.untrackedChanges()].map((c) => c.path)
+        const paths = git.unstagedChanges().map((c) => c.path)
+        if (paths.length > 0) {
+            await stageFiles(props.workspaceId, paths)
+        }
+    }
+
+    const handleStageAllUntracked = async () => {
+        const paths = git.untrackedChanges().map((c) => c.path)
         if (paths.length > 0) {
             await stageFiles(props.workspaceId, paths)
         }
@@ -139,7 +146,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         }
     }
 
-    const renderDiffLine = (line: string, index: number) => {
+    const renderDiffLine = (line: string, _index: number) => {
         // Skip file metadata lines (diff --git, index, ---, +++)
         if (line.startsWith("diff --git") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++")) {
             return null
@@ -522,9 +529,24 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                             title="Toggle untracked files section"
                         >
                             <span>Untracked ({git.untrackedChanges().length})</span>
-                            <ChevronDown
-                                class={`h-3 w-3 transition-transform ${expandedSections().includes("untracked") ? "rotate-180" : ""}`}
-                            />
+                            <div class="flex items-center gap-1">
+                                <Show when={git.untrackedChanges().length > 0}>
+                                    <button
+                                        type="button"
+                                        class="p-0.5 hover:bg-surface-secondary rounded"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleStageAllUntracked()
+                                        }}
+                                        title="Stage All Untracked"
+                                    >
+                                        <Plus class="h-3 w-3" />
+                                    </button>
+                                </Show>
+                                <ChevronDown
+                                    class={`h-3 w-3 transition-transform ${expandedSections().includes("untracked") ? "rotate-180" : ""}`}
+                                />
+                            </div>
                         </button>
                         <Show when={expandedSections().includes("untracked")}>
                             <div class="px-1 pb-1">
