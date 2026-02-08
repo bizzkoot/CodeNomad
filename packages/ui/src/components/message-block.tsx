@@ -242,7 +242,6 @@ function MessageContentItem(props: MessageContentItemProps) {
   const showAgentMeta = createMemo(() => {
     const current = record()
     if (!current) return false
-    if (current.role !== "assistant") return false
 
     const currentParts = parts()
     if (!currentParts.some((part) => partHasRenderableText(part))) {
@@ -253,7 +252,7 @@ function MessageContentItem(props: MessageContentItemProps) {
     const startIndex = ids.indexOf(props.startPartId)
     if (startIndex === -1) return false
 
-    // Only show agent meta on the first content segment that contains renderable content.
+    // Only show agent/meta on the first content segment that contains renderable content.
     for (let idx = 0; idx < startIndex; idx++) {
       const partId = ids[idx]
       const part = current.parts[partId]?.data
