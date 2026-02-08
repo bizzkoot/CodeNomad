@@ -17,9 +17,9 @@ interface MessagePartProps {
   instanceId: string
   sessionId: string
   onRendered?: () => void
- }
- export default function MessagePart(props: MessagePartProps) {
+  }
 
+export default function MessagePart(props: MessagePartProps) {
   const { isDark } = useTheme()
   const { preferences } = useConfig()
   const partType = () => props.part?.type || ""
@@ -27,6 +27,14 @@ interface MessagePartProps {
   const isReasoningExpanded = () => isItemExpanded(reasoningId())
   const isAssistantMessage = () => props.messageType === "assistant"
   const textContainerClass = () => (isAssistantMessage() ? "message-text message-text-assistant" : "message-text")
+
+  const shouldHideTextPart = () => {
+    const part = props.part
+    if (!part || part.type !== "text") return false
+    // Keep optimistic user prompts visible; hide synthetic assistant text.
+    return Boolean((part as any).synthetic) && props.messageType !== "user"
+  }
+
 
   const plainTextContent = () => {
     const part = props.part
@@ -97,7 +105,7 @@ interface MessagePartProps {
   return (
     <Switch>
       <Match when={partType() === "text"}>
-        <Show when={!(props.part.type === "text" && props.part.synthetic) && partHasRenderableText(props.part)}>
+        <Show when={!shouldHideTextPart() && partHasRenderableText(props.part)}>
           <div class={textContainerClass()}>
             <Markdown
               part={createTextPartForMarkdown()}

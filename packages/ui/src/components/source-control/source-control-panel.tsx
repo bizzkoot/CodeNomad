@@ -1,5 +1,5 @@
 import { Component, Show, For, createSignal, createEffect, onMount, onCleanup } from "solid-js"
-import { ChevronDown, RefreshCw, GitBranch, Plus, Minus, Undo2, Check, UploadCloud, X } from "lucide-solid"
+import { ChevronDown, RefreshCw, GitBranch, Plus, Minus, Undo2, Check, UploadCloud, X, Sparkles } from "lucide-solid"
 import type { GitFileChange } from "../../../../server/src/api-types"
 import {
     useGitStore,
@@ -15,6 +15,10 @@ import {
 } from "../../stores/git"
 import { serverApi } from "../../lib/api-client"
 import { serverEvents } from "../../lib/server-events"
+import { createSession, deleteSession } from "../../stores/sessions"
+import { instances } from "../../stores/instances"
+import { getDefaultModel } from "../../stores/session-models"
+import { messageStoreBus } from "../../stores/message-v2/bus"
 
 interface SourceControlPanelProps {
     workspaceId: string
@@ -29,6 +33,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
     const [diffPath, setDiffPath] = createSignal("")
     const [isFileContent, setIsFileContent] = createSignal(false)
     const [showBranchPicker, setShowBranchPicker] = createSignal(false)
+    const [isGeneratingCommit, setIsGeneratingCommit] = createSignal(false)
 
     onMount(() => {
         refreshGit(props.workspaceId)
@@ -89,7 +94,14 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
     }
 
     const handleStageAll = async () => {
-        const paths = [...git.unstagedChanges(), ...git.untrackedChanges()].map((c) => c.path)
+        const paths = git.unstagedChanges().map((c) => c.path)
+        if (paths.length > 0) {
+            await stageFiles(props.workspaceId, paths)
+        }
+    }
+
+    const handleStageAllUntracked = async () => {
+        const paths = git.untrackedChanges().map((c) => c.path)
         if (paths.length > 0) {
             await stageFiles(props.workspaceId, paths)
         }
@@ -118,6 +130,141 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         await pushChanges(props.workspaceId, !hasUpstream)
     }
 
+    const handleGenerateCommitMessage = async () => {
+        if (git.stagedChanges().length === 0) return
+
+        setIsGeneratingCommit(true)
+        let tempSessionId: string | null = null
+
+        try {
+            // Get staged diff
+            const diffResponse = await serverApi.fetchGitDiff(props.workspaceId, undefined, true)
+            const diff = diffResponse.diff
+
+            if (!diff || diff.trim().length === 0) {
+                console.warn("No staged diff available")
+                return
+            }
+
+            // Create a temporary session for commit generation
+            const session = await createSession(props.workspaceId)
+            tempSessionId = session.id
+
+            // Get the default model
+            const defaultModel = await getDefaultModel(props.workspaceId)
+
+            // Build the prompt
+            const prompt = `Generate a Structured, Semantic and Clear Commit message based on the provided diff.
+Follow these structural rules strictly:
+
+1. Format: "<type>(<scope>): <summary>"
+2. Summary: Imperative mood ("add" not "added"), lowercase, no period, max 50 chars.
+3. Body: If the change is complex, include a blank line followed by a bulleted list:
+   - Use bullets (-) for distinct technical changes or side effects.
+   - Wrap body text at 72 characters.
+   - Focus on "what" and "why" rather than "how".
+4. Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert.
+
+IMPORTANT: Output ONLY the raw commit message text. Do NOT wrap it in markdown code blocks, do NOT add explanations, do NOT use backticks or any formatting. Just output the plain text commit message directly.
+
+Diff:
+${diff}`
+
+            // Get instance and send message
+            const instance = instances().get(props.workspaceId)
+            if (!instance || !instance.client) {
+                throw new Error("Instance not ready")
+            }
+
+            // Send the prompt
+            const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+            await instance.client.session.promptAsync({
+                sessionID: tempSessionId,
+                messageID: messageId,
+                parts: [{ id: `part_${Date.now()}`, type: "text", text: prompt }],
+                model: {
+                    providerID: defaultModel.providerId,
+                    modelID: defaultModel.modelId,
+                },
+            })
+
+            // Wait for assistant response with timeout
+            const commitMessage = await new Promise<string>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error("Timeout waiting for commit message generation"))
+                }, 30000)
+
+                const checkForResponse = () => {
+                    const store = messageStoreBus.getOrCreate(props.workspaceId)
+                    const messageIds = store.getSessionMessageIds(tempSessionId!)
+                    const messages = messageIds
+                        .map((id: string) => store.getMessage(id))
+                        .filter((m): m is NonNullable<typeof m> => m !== undefined)
+
+                    // Look for complete assistant message after our user message
+                    const assistantMessage = messages.find(
+                        (m: { role: string; status: string; createdAt: number }) =>
+                            m.role === "assistant" &&
+                            m.status === "complete" &&
+                            m.createdAt > Date.now() - 60000
+                    )
+
+                    if (assistantMessage && assistantMessage.partIds.length > 0) {
+                        // Collect ALL text parts (streaming responses may have multiple text parts)
+                        const textParts: string[] = []
+                        for (const partId of assistantMessage.partIds) {
+                            const partRecord = assistantMessage.parts[partId]
+                            if (partRecord?.data?.type === "text" && "text" in partRecord.data) {
+                                textParts.push(partRecord.data.text)
+                            }
+                        }
+                        
+                        // If we found any text parts, combine them
+                        if (textParts.length > 0) {
+                            clearTimeout(timeout)
+                            let fullText = textParts.join("").trim()
+                            
+                            // Clean up markdown formatting if present
+                            // Remove code blocks (```...```)
+                            fullText = fullText.replace(/^```[\w]*\n?/gm, "").replace(/\n?```$/gm, "")
+                            // Remove inline code backticks if the whole thing is wrapped
+                            if (fullText.startsWith("`") && fullText.endsWith("`")) {
+                                fullText = fullText.slice(1, -1)
+                            }
+                            // Final trim
+                            fullText = fullText.trim()
+                            
+                            resolve(fullText)
+                            return
+                        }
+                        // Message is complete but text parts haven't arrived yet
+                        // Continue polling - they may arrive in the next update
+                    }
+
+                    // Check again in 500ms
+                    setTimeout(checkForResponse, 500)
+                }
+
+                checkForResponse()
+            })
+
+            // Set the generated commit message
+            setCommitMessage(commitMessage)
+        } catch (error) {
+            console.error("Failed to generate commit message:", error)
+        } finally {
+            // Clean up temporary session
+            if (tempSessionId) {
+                try {
+                    await deleteSession(props.workspaceId, tempSessionId)
+                } catch (cleanupError) {
+                    console.warn("Failed to cleanup temporary session:", cleanupError)
+                }
+            }
+            setIsGeneratingCommit(false)
+        }
+    }
+
     const handleViewDiff = async (file: GitFileChange) => {
         try {
             // For untracked files, show full content instead of diff
@@ -139,7 +286,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         }
     }
 
-    const renderDiffLine = (line: string, index: number) => {
+    const renderDiffLine = (line: string, _index: number) => {
         // Skip file metadata lines (diff --git, index, ---, +++)
         if (line.startsWith("diff --git") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++")) {
             return null
@@ -381,13 +528,26 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
 
                 {/* Commit input */}
                 <div class="flex flex-col gap-1">
-                    <textarea
-                        class="w-full px-2 py-1 text-xs bg-surface-tertiary border border-base rounded resize-none"
-                        rows={2}
-                        placeholder="Commit message..."
-                        value={commitMessage()}
-                        onInput={(e) => setCommitMessage(e.currentTarget.value)}
-                    />
+                    <div class="relative">
+                        <textarea
+                            class="w-full px-2 py-1 text-xs bg-surface-tertiary border border-base rounded resize-none pr-8"
+                            rows={2}
+                            placeholder="Commit message..."
+                            value={commitMessage()}
+                            onInput={(e) => setCommitMessage(e.currentTarget.value)}
+                        />
+                        <button
+                            type="button"
+                            class="absolute right-1 top-1 p-1 hover:bg-surface-secondary rounded text-secondary hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={handleGenerateCommitMessage}
+                            disabled={git.stagedChanges().length === 0 || isGeneratingCommit() || git.loading()}
+                            title="Generate commit message with AI"
+                        >
+                            <Show when={!isGeneratingCommit()} fallback={<RefreshCw class="h-3 w-3 animate-spin" />}>
+                                <Sparkles class="h-3 w-3" />
+                            </Show>
+                        </button>
+                    </div>
                     <div class="flex items-center gap-1">
                         <button
                             type="button"
@@ -522,9 +682,24 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
                             title="Toggle untracked files section"
                         >
                             <span>Untracked ({git.untrackedChanges().length})</span>
-                            <ChevronDown
-                                class={`h-3 w-3 transition-transform ${expandedSections().includes("untracked") ? "rotate-180" : ""}`}
-                            />
+                            <div class="flex items-center gap-1">
+                                <Show when={git.untrackedChanges().length > 0}>
+                                    <button
+                                        type="button"
+                                        class="p-0.5 hover:bg-surface-secondary rounded"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleStageAllUntracked()
+                                        }}
+                                        title="Stage All Untracked"
+                                    >
+                                        <Plus class="h-3 w-3" />
+                                    </button>
+                                </Show>
+                                <ChevronDown
+                                    class={`h-3 w-3 transition-transform ${expandedSections().includes("untracked") ? "rotate-180" : ""}`}
+                                />
+                            </div>
                         </button>
                         <Show when={expandedSections().includes("untracked")}>
                             <div class="px-1 pb-1">

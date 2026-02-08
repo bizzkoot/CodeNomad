@@ -1,5 +1,25 @@
 import { Menu, BrowserWindow, MenuItemConstructorOptions } from "electron"
 
+/**
+ * Safely send message to window webContents with proper destruction checks.
+ * Prevents "Object has been destroyed" errors during app shutdown.
+ */
+function safeWebContentsSend(window: BrowserWindow, channel: string, ...args: unknown[]) {
+  if (window.isDestroyed()) {
+    return false
+  }
+  if (window.webContents.isDestroyed()) {
+    return false
+  }
+  try {
+    window.webContents.send(channel, ...args)
+    return true
+  } catch (error) {
+    console.warn(`[menu] Failed to send to ${channel}:`, error)
+    return false
+  }
+}
+
 export function createApplicationMenu(mainWindow: BrowserWindow) {
   const isMac = process.platform === "darwin"
 
@@ -27,7 +47,7 @@ export function createApplicationMenu(mainWindow: BrowserWindow) {
           label: "New Instance",
           accelerator: "CmdOrCtrl+N",
           click: () => {
-            mainWindow.webContents.send("menu:newInstance")
+            safeWebContentsSend(mainWindow, "menu:newInstance")
           },
         },
         { type: "separator" as const },

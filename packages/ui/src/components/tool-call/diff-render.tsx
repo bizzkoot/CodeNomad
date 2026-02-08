@@ -1,7 +1,7 @@
 import type { Accessor, JSXElement } from "solid-js"
 import type { RenderCache } from "../../types/message"
 import type { DiffViewMode } from "../../stores/preferences"
-import { ToolCallDiffViewer } from "../diff-viewer"
+import { LazyToolCallDiffViewer } from "../lazy-diff-viewer"
 import type { DiffPayload, DiffRenderOptions, ToolScrollHelpers } from "./types"
 import { getRelativePath } from "./utils"
 import { getCacheEntry } from "../../lib/global-cache"
@@ -26,6 +26,14 @@ export function createDiffContentRenderer(params: {
   handleScrollRendered: () => void
   onContentRendered?: () => void
 }) {
+  const registerTracked = (element: HTMLDivElement | null) => {
+    params.scrollHelpers.registerContainer(element)
+  }
+
+  const registerUntracked = (element: HTMLDivElement | null) => {
+    params.scrollHelpers.registerContainer(element, { disableTracking: true })
+  }
+
   function renderDiffContent(payload: DiffPayload, options?: DiffRenderOptions): JSXElement | null {
     const relativePath = payload.filePath ? getRelativePath(payload.filePath) : ""
     const toolbarLabel = options?.label || (relativePath
@@ -35,6 +43,8 @@ export function createDiffContentRenderer(params: {
     const cacheHandle = selectedVariant === "permission-diff" ? params.permissionDiffCache : params.diffCache
     const diffMode = () => (params.preferences().diffViewMode || "split") as DiffViewMode
     const themeKey = params.isDark() ? "dark" : "light"
+    const disableScrollTracking = Boolean(options?.disableScrollTracking)
+    const registerRef = disableScrollTracking ? registerUntracked : registerTracked
 
     const baseEntryParams = cacheHandle.params() as any
     const cacheEntryParams = (() => {
@@ -58,7 +68,7 @@ export function createDiffContentRenderer(params: {
     }
 
     const handleDiffRendered = () => {
-      if (!options?.disableScrollTracking) {
+      if (!disableScrollTracking) {
         params.handleScrollRendered()
       }
       params.onContentRendered?.()
@@ -67,8 +77,8 @@ export function createDiffContentRenderer(params: {
     return (
       <div
         class="message-text tool-call-markdown tool-call-markdown-large tool-call-diff-shell"
-        ref={(element) => params.scrollHelpers.registerContainer(element, { disableTracking: options?.disableScrollTracking })}
-        onScroll={options?.disableScrollTracking ? undefined : params.scrollHelpers.handleScroll}
+        ref={registerRef}
+        onScroll={disableScrollTracking ? undefined : params.scrollHelpers.handleScroll}
       >
         <div class="tool-call-diff-toolbar" role="group" aria-label={params.t("toolCall.diff.viewMode.ariaLabel")}>
           <span class="tool-call-diff-toolbar-label">{toolbarLabel}</span>
@@ -91,7 +101,7 @@ export function createDiffContentRenderer(params: {
             </button>
           </div>
         </div>
-        <ToolCallDiffViewer
+        <LazyToolCallDiffViewer
           diffText={payload.diffText}
           filePath={payload.filePath}
           theme={themeKey}
@@ -100,7 +110,7 @@ export function createDiffContentRenderer(params: {
           cacheEntryParams={cacheEntryParams as any}
           onRendered={handleDiffRendered}
         />
-        {params.scrollHelpers.renderSentinel({ disableTracking: options?.disableScrollTracking })}
+        {params.scrollHelpers.renderSentinel({ disableTracking: disableScrollTracking })}
       </div>
     )
   }

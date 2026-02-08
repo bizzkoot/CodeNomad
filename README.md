@@ -89,15 +89,16 @@ We've replaced the standard `question` tool with a native **Model Context Protoc
 
 This change is critical for users on metered plans (like GitHub Copilot), effectively "unlocking" unlimited user interactions without draining quotas.
 
-### 🔄 Upstream v0.9.2 Synced
+### 🔄 Upstream v0.9.5 Synced
 
 This fork stays synchronized with the core CodeNomad experience.
 
-| Category                   | New in v0.9.2                                                                        |
-| :------------------------- | :----------------------------------------------------------------------------------- |
-| **🌍 Internationalization** | Full UI support for **English, Spanish, French, Japanese, Russian, and Chinese**     |
-| **🧠 Model UX**             | **Pin favorite models**, toggle "thinking" models, and use inline selector shortcuts |
-| **🔧 Reliability**          | Enhanced shutdown safeguards and improved process management                         |
+| Category | New in v0.9.5 |
+| :-- | :-- |
+| **🎨 Themes & Appearance** | System/Light/Dark theme toggle, persisted theme preference, improved contrast & icon styling |
+| **🔎 Navigation & Messages** | Session sidebar search + bulk selection, message actions as icon buttons, delete message parts, copy tool-call header |
+| **🧠 UX & Quality** | PWA support with cache fixes, prompt focus on session activate, task steps from child sessions |
+| **🛠 Reliability** | Electron quit on last window close, stop server process tree on quit; server includes symlink dirs in listings |
 
 ## Requirements
 
@@ -121,7 +122,7 @@ This fork includes several major enhancements not available in the upstream repo
 > [!NOTE]
 > These features are not included in upstream and represent divergent functionality from the original CodeNomad repository.
 
-_Last updated: 2026-01-28_
+_Last updated: 2026-02-08_
 
 ## CI/CD on Forks
 

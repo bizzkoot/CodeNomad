@@ -211,6 +211,8 @@ export async function pushChanges(workspaceId: string, publish?: boolean): Promi
     try {
         await serverApi.pushChanges(workspaceId, publish)
         await fetchGitBranches(workspaceId)
+        // Wait for push to complete on remote before fetching status
+        setTimeout(() => fetchGitStatus(workspaceId), 2000)
         return true
     } catch (error) {
         store.error = error instanceof Error ? error.message : "Failed to push"

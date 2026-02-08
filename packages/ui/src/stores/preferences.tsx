@@ -1,4 +1,4 @@
-import { createContext, createMemo, createSignal, onMount, useContext } from "solid-js"
+import { createContext, createMemo, createSignal, createRoot, onMount, useContext } from "solid-js"
 import type { Accessor, ParentComponent } from "solid-js"
 import { storage, type ConfigData } from "../lib/storage"
 import {
@@ -193,14 +193,12 @@ function setModelThinkingSelection(model: { providerId: string; modelId: string 
 const [internalConfig, setInternalConfig] = createSignal<ConfigData>(buildFallbackConfig())
 const [isConfigLoaded, setIsConfigLoaded] = createSignal(false)
 
-import { createRoot } from "solid-js"
-
 const [config, preferences, recentFolders, opencodeBinaries, themePreference] = createRoot(() => {
   const config = createMemo<DeepReadonly<ConfigData>>(() => internalConfig())
   const preferences = createMemo<Preferences>(() => internalConfig().preferences)
   const recentFolders = createMemo<RecentFolder[]>(() => internalConfig().recentFolders ?? [])
   const opencodeBinaries = createMemo<OpenCodeBinary[]>(() => internalConfig().opencodeBinaries ?? [])
-  const themePreference = createMemo<ThemePreference>(() => internalConfig().theme ?? "dark")
+  const themePreference = createMemo<ThemePreference>(() => internalConfig().theme ?? "system")
   return [config, preferences, recentFolders, opencodeBinaries, themePreference]
 })
 let loadPromise: Promise<void> | null = null
@@ -210,7 +208,7 @@ function normalizeConfig(config?: ConfigData | null): ConfigData {
     preferences: normalizePreferences(config?.preferences),
     recentFolders: (config?.recentFolders ?? []).map((folder) => ({ ...folder })),
     opencodeBinaries: (config?.opencodeBinaries ?? []).map((binary) => ({ ...binary })),
-    theme: config?.theme ?? "dark",
+    theme: config?.theme ?? "system",
   }
 }
 
