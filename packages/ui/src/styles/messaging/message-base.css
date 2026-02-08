@@ -54,6 +54,12 @@
   transform: scale(0.95);
 }
 
+.message-action-button.active {
+  background-color: var(--text-primary);
+  color: var(--surface-base);
+  border-color: var(--text-primary);
+}
+
 .message-timestamp {
   @apply text-[11px] text-[var(--text-muted)];
 }

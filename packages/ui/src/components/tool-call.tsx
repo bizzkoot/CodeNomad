@@ -304,6 +304,7 @@ export default function ToolCall(props: ToolCallProps) {
   })
 
   const [userExpanded, setUserExpanded] = createSignal<boolean | null>(null)
+  const [copied, setCopied] = createSignal(false)
 
   // Listen for expansion requests from search system
   createEffect(() => {
@@ -900,7 +901,11 @@ export default function ToolCall(props: ToolCallProps) {
     event.stopPropagation()
     const text = headerText()
     if (!text) return
-    await copyToClipboard(text)
+    const success = await copyToClipboard(text)
+    if (success) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   const renderToolBody = () => {
@@ -1065,12 +1070,14 @@ export default function ToolCall(props: ToolCallProps) {
 
         <button
           type="button"
-          class="tool-call-header-copy"
+          class={`tool-call-header-copy${copied() ? " active" : ""}`}
           onClick={handleCopyHeader}
           aria-label={t("toolCall.header.copyAriaLabel")}
           title={t("toolCall.header.copyTitle")}
         >
-          <Copy class="w-3.5 h-3.5" />
+          <Show when={copied()} fallback={<Copy class="w-3.5 h-3.5" />}>
+            <span class="text-[10px] font-bold">{t("toolCall.header.copied")}</span>
+          </Show>
         </button>
 
         <span class="tool-call-header-status" aria-hidden="true">

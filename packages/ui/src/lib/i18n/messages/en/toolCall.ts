@@ -4,6 +4,7 @@ export const toolCallMessages = {
 
   "toolCall.header.copyTitle": "Copy tool call title",
   "toolCall.header.copyAriaLabel": "Copy tool call title",
+  "toolCall.header.copied": "Copied!",
 
   "toolCall.diff.label": "Diff",
   "toolCall.diff.label.withPath": "Diff · {path}",

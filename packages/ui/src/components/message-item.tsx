@@ -174,8 +174,10 @@ export default function MessageItem(props: MessageItemProps) {
     const content = getRawContent()
     if (!content) return
     const success = await copyToClipboard(content)
-    setCopied(success)
-    setTimeout(() => setCopied(false), 2000)
+    if (success) {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
   }
 
   const deletableTextPartId = () => {
@@ -317,12 +319,14 @@ export default function MessageItem(props: MessageItemProps) {
                 </button>
               </Show>
               <button
-                class="message-action-button"
+                class={`message-action-button${copied() ? " active" : ""}`}
                 onClick={handleCopy}
                 title={copyLabel()}
                 aria-label={copyLabel()}
               >
-                <Copy class="w-3.5 h-3.5" aria-hidden="true" />
+                <Show when={copied()} fallback={<Copy class="w-3.5 h-3.5" aria-hidden="true" />}>
+                  <span class="text-[10px] font-bold px-0.5">{t("messageItem.actions.copied")}</span>
+                </Show>
               </button>
               <Show when={deletableTextPartId()}>
                 {(partId) => (
@@ -342,12 +346,14 @@ export default function MessageItem(props: MessageItemProps) {
           <Show when={!isUser()}>
             <div class="message-action-group">
               <button
-                class="message-action-button"
+                class={`message-action-button${copied() ? " active" : ""}`}
                 onClick={handleCopy}
                 title={copyLabel()}
                 aria-label={copyLabel()}
               >
-                <Copy class="w-3.5 h-3.5" aria-hidden="true" />
+                <Show when={copied()} fallback={<Copy class="w-3.5 h-3.5" aria-hidden="true" />}>
+                  <span class="text-[10px] font-bold px-0.5">{t("messageItem.actions.copied")}</span>
+                </Show>
               </button>
 
               <Show when={deletableTextPartId()}>
