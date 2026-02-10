@@ -34,6 +34,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
     const [isFileContent, setIsFileContent] = createSignal(false)
     const [showBranchPicker, setShowBranchPicker] = createSignal(false)
     const [isGeneratingCommit, setIsGeneratingCommit] = createSignal(false)
+    let commitTextareaRef: HTMLTextAreaElement | undefined
 
     onMount(() => {
         refreshGit(props.workspaceId)
@@ -69,8 +70,39 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         }
     })
 
+    // Auto-resize commit message textarea based on content
+    createEffect(() => {
+        commitMessage() // Track changes
+        resizeTextarea()
+    })
+
     const handleRefresh = () => {
         refreshGit(props.workspaceId)
+    }
+
+    // Helper to resize textarea
+    const resizeTextarea = () => {
+        const textarea = commitTextareaRef
+        if (textarea) {
+            // Reset height to auto to correctly calculate scrollHeight
+            textarea.style.height = "auto"
+            textarea.style.overflowY = "hidden" // Prevent scrollbar flicker affecting width
+
+            // Calculate new height based on content
+            const scrollHeight = textarea.scrollHeight
+            const minHeight = commitMessage() ? 50 : 40
+            const maxHeight = 160
+            const borderAdjust = 2 // Account for border (1px top + 1px bottom)
+
+            // Clamp between min and max
+            const newHeight = Math.min(Math.max(scrollHeight + borderAdjust, minHeight), maxHeight)
+            textarea.style.height = `${newHeight}px`
+
+            // Show scrollbar only if content exceeds max height
+            if (scrollHeight + borderAdjust > maxHeight) {
+                textarea.style.overflowY = "auto"
+            }
+        }
     }
 
     const handleStage = async (path: string) => {
@@ -128,6 +160,71 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
         const hasUpstream = !!currentBranch?.upstream
         // If no upstream, we are publishing
         await pushChanges(props.workspaceId, !hasUpstream)
+    }
+
+    // Helper function to robustly extract text from part data
+    const extractTextFromPart = (part: any): string => {
+        if (!part || !part.data) return ""
+
+        const data = part.data
+        if (data.type !== "text") return ""
+
+        const text = data.text
+
+        // Handle simple string
+        if (typeof text === "string") return text
+
+        // Handle object structure with text, value, or nested content
+        if (text && typeof text === "object") {
+            const parts: string[] = []
+
+            if (typeof text.value === "string") parts.push(text.value)
+            if (typeof text.text === "string") parts.push(text.text)
+
+            if (Array.isArray(text.content)) {
+                const nestedTexts = text.content
+                    .map((item: unknown) => extractTextFromPart({ data: { type: "text", text: item } }))
+                    .filter((t: string) => t && t.trim().length > 0)
+                parts.push(nestedTexts.join("\n"))
+            }
+
+            return parts.filter((p) => p && p.trim().length > 0).join("\n")
+        }
+
+        return ""
+    }
+
+    // Helper function to clean commit message by removing markdown formatting
+    const cleanCommitMessage = (text: string): string => {
+        let cleaned = text.trim()
+
+        // Remove code blocks (```...```)
+        cleaned = cleaned.replace(/^```[\w]*\n?/gm, "").replace(/\n?```$/gm, "")
+
+        // Remove inline code backticks if the whole thing is wrapped
+        if (cleaned.startsWith("`") && cleaned.endsWith("`")) {
+            cleaned = cleaned.slice(1, -1)
+        }
+
+        return cleaned.trim()
+    }
+
+    // Helper function to check if session is idle (no streaming, no pending parts)
+    const isSessionIdle = (store: any, sessionId: string): boolean => {
+        const messageIds = store.getSessionMessageIds(sessionId)
+        const messages = messageIds
+            .map((id: string) => store.getMessage(id))
+            .filter((m: any) => m !== undefined)
+
+        // Check for any streaming messages
+        const hasStreaming = messages.some((m: { status: string }) => m.status === "streaming")
+        if (hasStreaming) return false
+
+        // Check for pending parts
+        const pendingParts = store.getPendingParts ? store.getPendingParts(sessionId) : []
+        if (pendingParts && pendingParts.length > 0) return false
+
+        return true
     }
 
     const handleGenerateCommitMessage = async () => {
@@ -194,8 +291,33 @@ ${diff}`
                     reject(new Error("Timeout waiting for commit message generation"))
                 }, 30000)
 
+                let idleDetectedTime: number | null = null
+                const IDLE_STABILIZATION_DELAY = 800 // Wait 800ms after idle detection before extraction
+
                 const checkForResponse = () => {
                     const store = messageStoreBus.getOrCreate(props.workspaceId)
+
+                    // Wait for session to be idle before extracting
+                    if (!isSessionIdle(store, tempSessionId!)) {
+                        idleDetectedTime = null // Reset if not idle
+                        setTimeout(checkForResponse, 500)
+                        return
+                    }
+
+                    // First time detecting idle state
+                    if (idleDetectedTime === null) {
+                        idleDetectedTime = Date.now()
+                        setTimeout(checkForResponse, 500)
+                        return
+                    }
+
+                    // Wait for stabilization period after idle detected
+                    const timeSinceIdle = Date.now() - idleDetectedTime
+                    if (timeSinceIdle < IDLE_STABILIZATION_DELAY) {
+                        setTimeout(checkForResponse, 500)
+                        return
+                    }
+
                     const messageIds = store.getSessionMessageIds(tempSessionId!)
                     const messages = messageIds
                         .map((id: string) => store.getMessage(id))
@@ -210,35 +332,40 @@ ${diff}`
                     )
 
                     if (assistantMessage && assistantMessage.partIds.length > 0) {
-                        // Collect ALL text parts (streaming responses may have multiple text parts)
+                        // Collect ALL text parts using robust extraction
                         const textParts: string[] = []
                         for (const partId of assistantMessage.partIds) {
                             const partRecord = assistantMessage.parts[partId]
-                            if (partRecord?.data?.type === "text" && "text" in partRecord.data) {
-                                textParts.push(partRecord.data.text)
+                            const extractedText = extractTextFromPart(partRecord)
+                            if (extractedText && extractedText.trim().length > 0) {
+                                textParts.push(extractedText)
                             }
                         }
-                        
+
                         // If we found any text parts, combine them
                         if (textParts.length > 0) {
-                            clearTimeout(timeout)
-                            let fullText = textParts.join("").trim()
-                            
-                            // Clean up markdown formatting if present
-                            // Remove code blocks (```...```)
-                            fullText = fullText.replace(/^```[\w]*\n?/gm, "").replace(/\n?```$/gm, "")
-                            // Remove inline code backticks if the whole thing is wrapped
-                            if (fullText.startsWith("`") && fullText.endsWith("`")) {
-                                fullText = fullText.slice(1, -1)
+                            const fullText = cleanCommitMessage(textParts.join("\n").trim())
+
+                            // Validate that the message looks complete
+                            // A complete message should have at least "type(scope): " format
+                            // Minimum reasonable length is around 15 characters
+                            const looksIncomplete = 
+                                fullText.length < 10 || 
+                                (fullText.includes("(") && !fullText.includes(")")) ||
+                                (fullText.includes("(") && !fullText.includes(":"))
+
+                            if (looksIncomplete) {
+                                console.warn("Extracted message looks incomplete, retrying:", fullText)
+                                // Reset idle detection and retry
+                                idleDetectedTime = null
+                                setTimeout(checkForResponse, 500)
+                                return
                             }
-                            // Final trim
-                            fullText = fullText.trim()
-                            
+
+                            clearTimeout(timeout)
                             resolve(fullText)
                             return
                         }
-                        // Message is complete but text parts haven't arrived yet
-                        // Continue polling - they may arrive in the next update
                     }
 
                     // Check again in 500ms
@@ -250,6 +377,10 @@ ${diff}`
 
             // Set the generated commit message
             setCommitMessage(commitMessage)
+
+            // Add delay to ensure message extraction is complete before cleanup
+            // Increased to 800ms to prevent race condition with message store finalization
+            await new Promise(resolve => setTimeout(resolve, 800))
         } catch (error) {
             console.error("Failed to generate commit message:", error)
         } finally {
@@ -384,7 +515,7 @@ ${diff}`
     const hasFolderContents = (folderPath: string): boolean => {
         const untracked = git.untrackedChanges()
         const folderPrefix = folderPath.endsWith("/") ? folderPath : `${folderPath}/`
-        
+
         return untracked.some((file) => {
             const filePath = file.path
             // Check if file path starts with folder prefix (is inside the folder)
@@ -530,23 +661,49 @@ ${diff}`
                 <div class="flex flex-col gap-1">
                     <div class="relative">
                         <textarea
+                            ref={commitTextareaRef}
                             class="w-full px-2 py-1 text-xs bg-surface-tertiary border border-base rounded resize-none pr-8"
-                            rows={2}
+                            style={{ "overflow-y": "hidden", "line-height": "1.5" }}
+                            rows={1}
                             placeholder="Commit message..."
                             value={commitMessage()}
-                            onInput={(e) => setCommitMessage(e.currentTarget.value)}
+                            onInput={(e) => {
+                                setCommitMessage(e.currentTarget.value)
+                                resizeTextarea()
+                            }}
+                            onKeyDown={(e) => {
+                                if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+                                    e.preventDefault()
+                                    e.currentTarget.select()
+                                }
+                            }}
                         />
-                        <button
-                            type="button"
-                            class="absolute right-1 top-1 p-1 hover:bg-surface-secondary rounded text-secondary hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            onClick={handleGenerateCommitMessage}
-                            disabled={git.stagedChanges().length === 0 || isGeneratingCommit() || git.loading()}
-                            title="Generate commit message with AI"
-                        >
-                            <Show when={!isGeneratingCommit()} fallback={<RefreshCw class="h-3 w-3 animate-spin" />}>
-                                <Sparkles class="h-3 w-3" />
+                        <div class="absolute right-1 top-1 flex flex-col gap-1">
+                            <button
+                                type="button"
+                                class="p-1 hover:bg-surface-secondary rounded text-secondary hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={handleGenerateCommitMessage}
+                                disabled={git.stagedChanges().length === 0 || isGeneratingCommit() || git.loading()}
+                                title="Generate commit message with AI"
+                            >
+                                <Show when={!isGeneratingCommit()} fallback={<RefreshCw class="h-3 w-3 animate-spin" />}>
+                                    <Sparkles class="h-3 w-3" />
+                                </Show>
+                            </button>
+                            <Show when={commitMessage()}>
+                                <button
+                                    type="button"
+                                    class="p-1 hover:bg-surface-secondary rounded text-secondary hover:text-primary transition-colors"
+                                    onClick={() => {
+                                        setCommitMessage("")
+                                        resizeTextarea()
+                                    }}
+                                    title="Clear commit message"
+                                >
+                                    <X class="h-3 w-3" />
+                                </button>
                             </Show>
-                        </button>
+                        </div>
                     </div>
                     <div class="flex items-center gap-1">
                         <button
