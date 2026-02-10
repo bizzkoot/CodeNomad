@@ -10,7 +10,9 @@ const cliRoot = path.resolve(__dirname, "..")
 const sourceDir = path.resolve(cliRoot, "../opencode-config")
 const targetDir = path.resolve(cliRoot, "dist/opencode-config")
 const nodeModulesDir = path.resolve(sourceDir, "node_modules")
+const pluginDistDir = path.resolve(nodeModulesDir, "@opencode-ai/plugin/dist")
 const selfLinkDir = path.resolve(nodeModulesDir, "@codenomad", "opencode-config")
+const bunLockFile = path.resolve(sourceDir, "bun.lock")
 const npmExecPath = process.env.npm_execpath
 const npmNodeExecPath = process.env.npm_node_execpath
 
@@ -19,7 +21,19 @@ if (!existsSync(sourceDir)) {
   process.exit(1)
 }
 
-if (!existsSync(nodeModulesDir)) {
+// Remove bun.lock file if it exists, as it can interfere with npm installation
+rmSync(bunLockFile, { force: true })
+
+// Check if we need to install (node_modules doesn't exist OR plugin dist is missing)
+const needsInstall = !existsSync(nodeModulesDir) || !existsSync(pluginDistDir)
+
+if (needsInstall) {
+  // Clean up node_modules if it exists but is corrupted
+  if (existsSync(nodeModulesDir) && !existsSync(pluginDistDir)) {
+    console.log(`[copy-opencode-config] Cleaning corrupted node_modules in ${sourceDir}`)
+    rmSync(nodeModulesDir, { recursive: true, force: true })
+  }
+
   console.log(`[copy-opencode-config] Installing opencode-config dependencies in ${sourceDir}`)
 
   const npmArgs = [
@@ -30,7 +44,7 @@ if (!existsSync(nodeModulesDir)) {
     "--ignore-scripts",
     "--fund=false",
     "--audit=false",
-    "--package-lock=false",
+    "--package-lock=true",
     "--workspaces=false",
   ]
 
@@ -48,6 +62,16 @@ if (!existsSync(nodeModulesDir)) {
     console.error("[copy-opencode-config] Failed to install opencode-config dependencies")
     process.exit(result.status ?? 1)
   }
+
+  // Verify the plugin dist folder was created
+  if (!existsSync(pluginDistDir)) {
+    console.error("[copy-opencode-config] ERROR: @opencode-ai/plugin/dist folder not created after npm install")
+    console.error("[copy-opencode-config] This may indicate a network issue or corrupted npm cache")
+    console.error("[copy-opencode-config] Try: npm cache clean --force")
+    process.exit(1)
+  }
+
+  console.log(`[copy-opencode-config] Successfully installed @opencode-ai/plugin with dist folder`)
 }
 
 // npm can create a self-referential link for scoped packages on Windows.

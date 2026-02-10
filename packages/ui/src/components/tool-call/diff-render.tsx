@@ -1,7 +1,7 @@
 import type { Accessor, JSXElement } from "solid-js"
 import type { RenderCache } from "../../types/message"
 import type { DiffViewMode } from "../../stores/preferences"
-import { LazyToolCallDiffViewer } from "../lazy-diff-viewer"
+import { ToolCallDiffViewer } from "../diff-viewer"
 import type { DiffPayload, DiffRenderOptions, ToolScrollHelpers } from "./types"
 import { getRelativePath } from "./utils"
 import { getCacheEntry } from "../../lib/global-cache"
@@ -101,7 +101,7 @@ export function createDiffContentRenderer(params: {
             </button>
           </div>
         </div>
-        <LazyToolCallDiffViewer
+        <ToolCallDiffViewer
           diffText={payload.diffText}
           filePath={payload.filePath}
           theme={themeKey}

@@ -54,11 +54,15 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Preserve server-side auth redirects (e.g., /login) instead of serving cached index.html.
         navigateFallback: null,
+        // Only precache static assets (avoid caching HTML documents / routes).
+        globPatterns: ["**/*.{js,css,png,jpg,jpeg,svg,webp,ico,woff,woff2,ttf,eot,json,webmanifest}"],
+        globIgnores: ["**/*.html"],
         // Only cache static UI assets; never cache API traffic.
         runtimeCaching: [
           {
             urlPattern: ({ url, request }) => {
               if (url.pathname.startsWith("/api/")) return false
+              if (request.destination === "document") return false
               return ["script", "style", "image", "font"].includes(request.destination)
             },
             handler: "CacheFirst",
@@ -80,34 +84,21 @@ export default defineConfig({
       "@": resolve(__dirname, "./src"),
     },
   },
-
+  optimizeDeps: {
+    exclude: ["lucide-solid"],
+  },
   ssr: {
     noExternal: ["lucide-solid"],
   },
   server: {
     port: 3000,
   },
-  esbuild: {
-    drop: ["console", "debugger"],
-  },
   build: {
     outDir: "dist",
-    chunkSizeWarningLimit: 600,
     rollupOptions: {
       input: {
         main: resolve(__dirname, "./src/renderer/index.html"),
         loading: resolve(__dirname, "./src/renderer/loading.html"),
-      },
-      output: {
-        manualChunks: {
-          // Core framework chunks - these change less frequently
-          "vendor-solid": ["solid-js", "solid-js/web", "solid-js/store"],
-          "vendor-ui": ["@kobalte/core", "@suid/material", "@suid/system", "@suid/icons-material"],
-          "vendor-utils": ["@opencode-ai/sdk", "marked", "dompurify"],
-          // Heavy feature chunks - loaded on demand
-          "vendor-diff": ["@git-diff-view/solid", "@git-diff-view/core"],
-          "vendor-highlight": ["shiki"],
-        },
       },
     },
   },
