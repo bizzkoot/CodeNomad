@@ -90,7 +90,7 @@ const SourceControlPanel: Component<SourceControlPanelProps> = (props) => {
 
             // Calculate new height based on content
             const scrollHeight = textarea.scrollHeight
-            const minHeight = 40
+            const minHeight = commitMessage() ? 50 : 40
             const maxHeight = 160
             const borderAdjust = 2 // Account for border (1px top + 1px bottom)
 
@@ -671,18 +671,39 @@ ${diff}`
                                 setCommitMessage(e.currentTarget.value)
                                 resizeTextarea()
                             }}
+                            onKeyDown={(e) => {
+                                if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+                                    e.preventDefault()
+                                    e.currentTarget.select()
+                                }
+                            }}
                         />
-                        <button
-                            type="button"
-                            class="absolute right-1 top-1 p-1 hover:bg-surface-secondary rounded text-secondary hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            onClick={handleGenerateCommitMessage}
-                            disabled={git.stagedChanges().length === 0 || isGeneratingCommit() || git.loading()}
-                            title="Generate commit message with AI"
-                        >
-                            <Show when={!isGeneratingCommit()} fallback={<RefreshCw class="h-3 w-3 animate-spin" />}>
-                                <Sparkles class="h-3 w-3" />
+                        <div class="absolute right-1 top-1 flex flex-col gap-1">
+                            <button
+                                type="button"
+                                class="p-1 hover:bg-surface-secondary rounded text-secondary hover:text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={handleGenerateCommitMessage}
+                                disabled={git.stagedChanges().length === 0 || isGeneratingCommit() || git.loading()}
+                                title="Generate commit message with AI"
+                            >
+                                <Show when={!isGeneratingCommit()} fallback={<RefreshCw class="h-3 w-3 animate-spin" />}>
+                                    <Sparkles class="h-3 w-3" />
+                                </Show>
+                            </button>
+                            <Show when={commitMessage()}>
+                                <button
+                                    type="button"
+                                    class="p-1 hover:bg-surface-secondary rounded text-secondary hover:text-primary transition-colors"
+                                    onClick={() => {
+                                        setCommitMessage("")
+                                        resizeTextarea()
+                                    }}
+                                    title="Clear commit message"
+                                >
+                                    <X class="h-3 w-3" />
+                                </button>
                             </Show>
-                        </button>
+                        </div>
                     </div>
                     <div class="flex items-center gap-1">
                         <button
