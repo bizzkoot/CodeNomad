@@ -9,6 +9,7 @@ import type {
   EventLspUpdated,
 
   EventSessionCompacted,
+  EventSessionDiff,
   EventSessionError,
   EventSessionIdle,
   EventSessionUpdated,
@@ -59,12 +60,15 @@ type SSEEvent =
   | MessagePartRemovedEvent
   | EventSessionUpdated
   | EventSessionCompacted
+  | EventSessionDiff
   | EventSessionError
   | EventSessionIdle
+  | EventSessionStatus
   | { type: "permission.updated" | "permission.asked"; properties?: any }
   | { type: "permission.replied"; properties?: any }
   | { type: "question.asked"; properties?: any }
-  | { type: "question.replied" | "question.rejected"; properties?: any }
+  | { type: "question.replied"; properties?: any }
+  | { type: "question.rejected"; properties?: any }
   | EventLspUpdated
   | TuiToastEvent
   | BackgroundProcessUpdatedEvent
@@ -139,19 +143,15 @@ class SSEManager {
       case "session.status":
         this.onSessionStatus?.(instanceId, event as EventSessionStatus)
         break
+      case "session.diff":
+        this.onSessionDiff?.(instanceId, event as EventSessionDiff)
+        break
       case "permission.updated":
       case "permission.asked":
         this.onPermissionUpdated?.(instanceId, event as any)
         break
       case "permission.replied":
         this.onPermissionReplied?.(instanceId, event as any)
-        break
-      case "question.asked":
-        this.onQuestionAsked?.(instanceId, event as any)
-        break
-      case "question.replied":
-      case "question.rejected":
-        this.onQuestionAnswered?.(instanceId, event as any)
         break
       case "lsp.updated":
         this.onLspUpdated?.(instanceId, event as EventLspUpdated)
@@ -161,6 +161,15 @@ class SSEManager {
         break
       case "background.process.removed":
         this.onBackgroundProcessRemoved?.(instanceId, event as BackgroundProcessRemovedEvent)
+        break
+      case "question.asked":
+        this.onQuestionAsked?.(instanceId, event as any)
+        break
+      case "question.replied":
+        this.onQuestionReplied?.(instanceId, event as any)
+        break
+      case "question.rejected":
+        this.onQuestionRejected?.(instanceId, event as any)
         break
       default:
         log.warn("Unknown SSE event type", { type: event.type })
@@ -185,13 +194,15 @@ class SSEManager {
   onTuiToast?: (instanceId: string, event: TuiToastEvent) => void
   onSessionIdle?: (instanceId: string, event: EventSessionIdle) => void
   onSessionStatus?: (instanceId: string, event: EventSessionStatus) => void
+  onSessionDiff?: (instanceId: string, event: EventSessionDiff) => void
   onPermissionUpdated?: (instanceId: string, event: any) => void
   onPermissionReplied?: (instanceId: string, event: any) => void
-  onQuestionAsked?: (instanceId: string, event: any) => void
-  onQuestionAnswered?: (instanceId: string, event: any) => void
   onLspUpdated?: (instanceId: string, event: EventLspUpdated) => void
   onBackgroundProcessUpdated?: (instanceId: string, event: BackgroundProcessUpdatedEvent) => void
   onBackgroundProcessRemoved?: (instanceId: string, event: BackgroundProcessRemovedEvent) => void
+  onQuestionAsked?: (instanceId: string, event: any) => void
+  onQuestionReplied?: (instanceId: string, event: any) => void
+  onQuestionRejected?: (instanceId: string, event: any) => void
   onConnectionLost?: (instanceId: string, reason: string) => void | Promise<void>
 
   getStatus(instanceId: string): ConnectionStatus | null {

@@ -87,7 +87,8 @@ export function createAnsiContentRenderer(params: {
     }
 
     return (
-      <div class={messageClass} ref={params.scrollHelpers.registerContainer} onScroll={params.scrollHelpers.handleScroll}>
+      <div class={messageClass} ref={(element) => params.scrollHelpers.registerContainer(element)} onScroll={params.scrollHelpers.handleScroll}>
+        {/* eslint-disable-next-line solid/no-innerhtml -- HTML from ANSI renderer */}
         <pre class="tool-call-content tool-call-ansi" innerHTML={nextCache.html} />
         {params.scrollHelpers.renderSentinel()}
       </div>

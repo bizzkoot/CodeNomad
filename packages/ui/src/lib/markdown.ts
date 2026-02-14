@@ -2,6 +2,7 @@ import { marked } from "marked"
 import { createHighlighter, type Highlighter, bundledLanguages } from "shiki/bundle/full"
 import { getLogger } from "./logger"
 import { tGlobal } from "./i18n"
+import DOMPurify from "dompurify"
 
 const log = getLogger("actions")
 
@@ -98,6 +99,35 @@ async function getOrCreateHighlighter() {
   highlighter = await highlighterPromise
   highlighterPromise = null
   return highlighter
+}
+
+function addDiffClasses(html: string, originalCode: string): string {
+  const lines = originalCode.split("\n")
+  const hasDiffContent = lines.some((line) => line.startsWith("+") || line.startsWith("-"))
+
+  if (!hasDiffContent) {
+    return html
+  }
+
+  let lineIndex = 0
+  return html.replace(/<span class="line">/g, () => {
+    const line = lines[lineIndex]
+    lineIndex++
+
+    if (!line) {
+      return '<span class="line">'
+    }
+
+    if (line.startsWith("+")) {
+      return '<span class="line diff-added">'
+    }
+
+    if (line.startsWith("-")) {
+      return '<span class="line diff-removed">'
+    }
+
+    return '<span class="line">'
+  })
 }
 
 function normalizeLanguageToken(token: string): string {
@@ -300,8 +330,9 @@ function setupRenderer(isDark: boolean) {
            lang: langKey,
            theme: currentTheme === "dark" ? "github-dark" : "github-light-high-contrast",
          })
-        return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}${html}</div>`
-      } catch {
+         const processedHtml = addDiffClasses(html, decodedCode)
+         return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}${processedHtml}</div>`
+       } catch {
         // Fall through to plain code if highlighting fails
       }
     }
@@ -360,7 +391,30 @@ export async function renderMarkdown(
 
   try {
     // Proceed to parse immediately - highlighting will be available on next render
-    return marked.parse(decoded) as Promise<string>
+    const html = await marked.parse(decoded)
+    // Sanitize HTML to prevent XSS attacks
+    // Allow common markdown elements while blocking scripts and dangerous attributes
+    return DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: [
+        'p', 'br', 'strong', 'em', 'u', 's', 'a', 'code', 'pre',
+        'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'ul', 'ol', 'li', 'blockquote', 'hr',
+        'table', 'thead', 'tbody', 'tr', 'th', 'td',
+        'div', 'span', 'button', 'svg', 'rect', 'path', 'line', 'circle', 'mark'
+      ],
+      ALLOWED_ATTR: [
+        'href', 'target', 'rel', 'title', 'class', 'data-code',
+        'data-language', 'type', 'width', 'height', 'viewBox', 'fill',
+        'stroke', 'stroke-width', 'rx', 'ry', 'd', 'x', 'y', 'cx', 'cy',
+        'data-search-match', 'data-search-message-id', 'data-search-part-index',
+        'data-search-start', 'data-search-end', 'data-search-occurrence'
+      ],
+      ALLOW_DATA_ATTR: false,
+      FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form', 'input'],
+      FORBID_ATTR: ['onclick', 'onload', 'onerror', 'onmouseover', 'onfocus', 'onblur'],
+      SANITIZE_DOM: true,
+      KEEP_CONTENT: true
+    })
   } finally {
     highlightSuppressed = previousSuppressed
   }

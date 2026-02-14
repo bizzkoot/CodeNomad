@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcess } from "child_process"
+import { spawn, type ChildProcess } from "child_process"
 import { app } from "electron"
 import { createRequire } from "module"
 import { EventEmitter } from "events"
@@ -29,6 +29,7 @@ export interface CliLogEntry {
 
 interface StartOptions {
   dev: boolean
+  mcpPort?: number
 }
 
 interface CliEntryResolution {
@@ -82,7 +83,6 @@ export class CliProcessManager extends EventEmitter {
   private stdoutBuffer = ""
   private stderrBuffer = ""
   private bootstrapToken: string | null = null
-  private requestedStop = false
 
   async start(options: StartOptions): Promise<CliStatus> {
     if (this.child) {
@@ -92,7 +92,6 @@ export class CliProcessManager extends EventEmitter {
     this.stdoutBuffer = ""
     this.stderrBuffer = ""
     this.bootstrapToken = null
-    this.requestedStop = false
     this.updateStatus({ state: "starting", port: undefined, pid: undefined, url: undefined, error: undefined })
 
     const cliEntry = this.resolveCliEntry(options)
@@ -106,18 +105,40 @@ export class CliProcessManager extends EventEmitter {
 
     const env = supportsUserShell() ? getUserShellEnv() : { ...process.env }
     env.ELECTRON_RUN_AS_NODE = "1"
+    if (!options.dev) {
+      env.CODENOMAD_PACKAGED = "1"
+    }
+
+    // Inject MCP configuration if port is provided
+    if (options.mcpPort) {
+      const mcpConfig = {
+        mcp: {
+          "codenomad": {
+            type: "remote",
+            url: `http://127.0.0.1:${options.mcpPort}`,
+            enabled: true
+          }
+        },
+        permission: {
+          question: "deny"
+        },
+        tools: {
+          question: false
+        }
+      }
+      env.OPENCODE_CONFIG_CONTENT = JSON.stringify(mcpConfig)
+      console.info(`[cli] injected MCP config for port ${options.mcpPort}`)
+    }
 
     const spawnDetails = supportsUserShell()
       ? buildUserShellCommand(`ELECTRON_RUN_AS_NODE=1 exec ${this.buildCommand(cliEntry, args)}`)
       : this.buildDirectSpawn(cliEntry, args)
 
-    const detached = process.platform !== "win32"
     const child = spawn(spawnDetails.command, spawnDetails.args, {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"],
       env,
       shell: false,
-      detached,
     })
 
     console.info(`[cli] spawn command: ${spawnDetails.command} ${spawnDetails.args.join(" ")}`)
@@ -179,89 +200,12 @@ export class CliProcessManager extends EventEmitter {
       return
     }
 
-    this.requestedStop = true
-
-    const pid = child.pid
-    if (!pid) {
-      this.child = undefined
-      this.updateStatus({ state: "stopped" })
-      return
-    }
-
-    const isAlreadyExited = () => child.exitCode !== null || child.signalCode !== null
-
-    const tryKillPosixGroup = (signal: NodeJS.Signals) => {
-      try {
-        // Negative PID targets the process group (POSIX).
-        process.kill(-pid, signal)
-        return true
-      } catch (error) {
-        const err = error as NodeJS.ErrnoException
-        if (err?.code === "ESRCH") {
-          return true
-        }
-        return false
-      }
-    }
-
-    const tryKillSinglePid = (signal: NodeJS.Signals) => {
-      try {
-        process.kill(pid, signal)
-        return true
-      } catch (error) {
-        const err = error as NodeJS.ErrnoException
-        if (err?.code === "ESRCH") {
-          return true
-        }
-        return false
-      }
-    }
-
-    const tryTaskkill = (force: boolean) => {
-      const args = ["/PID", String(pid), "/T"]
-      if (force) {
-        args.push("/F")
-      }
-
-      try {
-        const result = spawnSync("taskkill", args, { encoding: "utf8" })
-        const exitCode = result.status
-        if (exitCode === 0) {
-          return true
-        }
-
-        // If the PID is already gone, treat it as success.
-        const stderr = (result.stderr ?? "").toString().toLowerCase()
-        const stdout = (result.stdout ?? "").toString().toLowerCase()
-        const combined = `${stdout}\n${stderr}`
-        if (combined.includes("not found") || combined.includes("no running instance")) {
-          return true
-        }
-        return false
-      } catch {
-        return false
-      }
-    }
-
-    const sendStopSignal = (signal: NodeJS.Signals) => {
-      if (process.platform === "win32") {
-        tryTaskkill(signal === "SIGKILL")
-        return
-      }
-
-      // Prefer process-group signaling so wrapper launchers (shell/tsx) don't outlive Electron.
-      const groupOk = tryKillPosixGroup(signal)
-      if (!groupOk) {
-        tryKillSinglePid(signal)
-      }
-    }
-
     return new Promise((resolve) => {
       const killTimeout = setTimeout(() => {
         console.warn(
           `[cli] stop timed out after 30000ms; sending SIGKILL (pid=${child.pid ?? "unknown"})`,
         )
-        sendStopSignal("SIGKILL")
+        child.kill("SIGKILL")
       }, 30000)
 
       child.on("exit", () => {
@@ -272,15 +216,7 @@ export class CliProcessManager extends EventEmitter {
         resolve()
       })
 
-      if (isAlreadyExited()) {
-        clearTimeout(killTimeout)
-        this.child = undefined
-        this.updateStatus({ state: "stopped" })
-        resolve()
-        return
-      }
-
-      sendStopSignal("SIGTERM")
+      child.kill("SIGTERM")
     })
   }
 
@@ -294,16 +230,7 @@ export class CliProcessManager extends EventEmitter {
 
   private handleTimeout() {
     if (this.child) {
-      const pid = this.child.pid
-      if (pid && process.platform !== "win32") {
-        try {
-          process.kill(-pid, "SIGKILL")
-        } catch {
-          this.child.kill("SIGKILL")
-        }
-      } else {
-        this.child.kill("SIGKILL")
-      }
+      this.child.kill("SIGKILL")
       this.child = undefined
     }
     this.updateStatus({ state: "error", error: "CLI did not start in time" })
@@ -363,7 +290,17 @@ export class CliProcessManager extends EventEmitter {
       return parseInt(readyMatch[1], 10)
     }
 
+    const localUrlMatch = line.match(/Local Connection URL\s*:\s*https?:\/\/[^:]+:(\d{2,5})/i)
+    if (localUrlMatch) {
+      return parseInt(localUrlMatch[1], 10)
+    }
+
     if (line.toLowerCase().includes("http server listening")) {
+      const keyValueMatch = line.match(/port\s*[=:]\s*(\d{2,5})/i)
+      if (keyValueMatch) {
+        return parseInt(keyValueMatch[1], 10)
+      }
+
       const httpMatch = line.match(/:(\d{2,5})(?!.*:\d)/)
       if (httpMatch) {
         return parseInt(httpMatch[1], 10)
@@ -387,10 +324,21 @@ export class CliProcessManager extends EventEmitter {
   }
 
   private buildCliArgs(options: StartOptions, host: string): string[] {
-    const args = ["serve", "--host", host, "--port", "0", "--generate-token"]
+    const args = [
+      "--host",
+      host,
+      "--http",
+      "true",
+      "--https",
+      "false",
+      "--http-port",
+      "0",
+      "--generate-token",
+    ]
 
     if (options.dev) {
-      args.push("--ui-dev-server", "http://localhost:3000", "--log-level", "debug")
+      const devUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL || "http://localhost:3000"
+      args.push("--ui-dev-server", devUrl, "--log-level", "debug")
     }
 
     return args
@@ -423,11 +371,11 @@ export class CliProcessManager extends EventEmitter {
       const devEntry = this.resolveDevEntry()
       return { entry: devEntry, runner: "tsx", runnerPath: tsxPath }
     }
- 
+
     const distEntry = this.resolveProdEntry()
     return { entry: distEntry, runner: "node" }
   }
- 
+
   private resolveTsx(): string | null {
     const candidates: Array<string | (() => string)> = [
       () => nodeRequire.resolve("tsx/cli"),
@@ -442,7 +390,7 @@ export class CliProcessManager extends EventEmitter {
       path.resolve(app.getAppPath(), "..", "node_modules", "tsx", "dist", "cli.mjs"),
       path.resolve(app.getAppPath(), "..", "node_modules", "tsx", "dist", "cli.cjs"),
     ]
- 
+
     for (const candidate of candidates) {
       try {
         const resolved = typeof candidate === "function" ? candidate() : candidate
@@ -453,10 +401,10 @@ export class CliProcessManager extends EventEmitter {
         continue
       }
     }
- 
+
     return null
   }
- 
+
   private resolveDevEntry(): string {
     const entry = path.resolve(process.cwd(), "..", "server", "src", "index.ts")
     if (!existsSync(entry)) {
@@ -464,16 +412,33 @@ export class CliProcessManager extends EventEmitter {
     }
     return entry
   }
- 
+
   private resolveProdEntry(): string {
+    // 1. Try node_modules resolution (development or linked)
     try {
       const entry = nodeRequire.resolve("@neuralnomads/codenomad/dist/bin.js")
       if (existsSync(entry)) {
         return entry
       }
     } catch {
-      // fall through to error below
+      // fall through
     }
-    throw new Error("Unable to locate CodeNomad CLI build (dist/bin.js). Run npm run build --workspace @neuralnomads/codenomad.")
+
+    // 2. Try packaged resources (production)
+    const resourcesPath = process.resourcesPath ?? app.getAppPath()
+
+    // Check for boot.js (wrapper for _node_modules fix)
+    const bootEntry = path.join(resourcesPath, "cli", "boot.js")
+    if (existsSync(bootEntry)) {
+      return bootEntry
+    }
+
+    // Check for bin.js (direct)
+    const cliEntry = path.join(resourcesPath, "cli", "dist", "bin.js")
+    if (existsSync(cliEntry)) {
+      return cliEntry
+    }
+
+    throw new Error(`Unable to locate CodeNomad CLI build. Checked: \n- node_modules\n- ${bootEntry}\n- ${cliEntry}`)
   }
 }

@@ -13,10 +13,10 @@ const log = getLogger("actions")
 type DeepReadonly<T> = T extends (...args: any[]) => unknown
   ? T
   : T extends Array<infer U>
-    ? ReadonlyArray<DeepReadonly<U>>
-    : T extends object
-      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
-      : T
+  ? ReadonlyArray<DeepReadonly<U>>
+  : T extends object
+  ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+  : T
 
 export interface ModelPreference {
   providerId: string
@@ -33,9 +33,11 @@ export type ExpansionPreference = "expanded" | "collapsed"
 export type ListeningMode = "local" | "all"
 
 export interface Preferences {
+  [key: string]: unknown
   showThinkingBlocks: boolean
   thinkingBlocksExpansion: ExpansionPreference
   showTimelineTools: boolean
+  promptSubmitOnEnter: boolean
   lastUsedBinary?: string
   locale?: string
   environmentVariables: Record<string, string>
@@ -48,6 +50,11 @@ export interface Preferences {
   showUsageMetrics: boolean
   autoCleanupBlankSessions: boolean
   listeningMode: ListeningMode
+  askUserTimeout: number
+  osNotificationsEnabled: boolean
+  osNotificationsAllowWhenVisible: boolean
+  notifyOnNeedsInput: boolean
+  notifyOnIdle: boolean
 }
 
 
@@ -73,6 +80,7 @@ const defaultPreferences: Preferences = {
   showThinkingBlocks: false,
   thinkingBlocksExpansion: "expanded",
   showTimelineTools: true,
+  promptSubmitOnEnter: false,
   environmentVariables: {},
   modelRecents: [],
   modelFavorites: [],
@@ -83,6 +91,11 @@ const defaultPreferences: Preferences = {
   showUsageMetrics: true,
   autoCleanupBlankSessions: true,
   listeningMode: "local",
+  askUserTimeout: 300000,
+  osNotificationsEnabled: false,
+  osNotificationsAllowWhenVisible: false,
+  notifyOnNeedsInput: true,
+  notifyOnIdle: true,
 }
 
 
@@ -120,6 +133,7 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
     showThinkingBlocks: sanitized.showThinkingBlocks ?? defaultPreferences.showThinkingBlocks,
     thinkingBlocksExpansion: sanitized.thinkingBlocksExpansion ?? defaultPreferences.thinkingBlocksExpansion,
     showTimelineTools: sanitized.showTimelineTools ?? defaultPreferences.showTimelineTools,
+    promptSubmitOnEnter: sanitized.promptSubmitOnEnter ?? defaultPreferences.promptSubmitOnEnter,
     lastUsedBinary: sanitized.lastUsedBinary ?? defaultPreferences.lastUsedBinary,
     locale: sanitized.locale ?? defaultPreferences.locale,
     environmentVariables,
@@ -132,6 +146,12 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
     showUsageMetrics: sanitized.showUsageMetrics ?? defaultPreferences.showUsageMetrics,
     autoCleanupBlankSessions: sanitized.autoCleanupBlankSessions ?? defaultPreferences.autoCleanupBlankSessions,
     listeningMode: sanitized.listeningMode ?? defaultPreferences.listeningMode,
+    askUserTimeout: sanitized.askUserTimeout ?? defaultPreferences.askUserTimeout,
+    osNotificationsEnabled: sanitized.osNotificationsEnabled ?? defaultPreferences.osNotificationsEnabled,
+    osNotificationsAllowWhenVisible:
+      sanitized.osNotificationsAllowWhenVisible ?? defaultPreferences.osNotificationsAllowWhenVisible,
+    notifyOnNeedsInput: sanitized.notifyOnNeedsInput ?? defaultPreferences.notifyOnNeedsInput,
+    notifyOnIdle: sanitized.notifyOnIdle ?? defaultPreferences.notifyOnIdle,
   }
 }
 
@@ -188,13 +208,18 @@ function setModelThinkingSelection(model: { providerId: string; modelId: string 
 }
 
 const [internalConfig, setInternalConfig] = createSignal<ConfigData>(buildFallbackConfig())
-
-const config = createMemo<DeepReadonly<ConfigData>>(() => internalConfig())
 const [isConfigLoaded, setIsConfigLoaded] = createSignal(false)
-const preferences = createMemo<Preferences>(() => internalConfig().preferences)
-const recentFolders = createMemo<RecentFolder[]>(() => internalConfig().recentFolders ?? [])
-const opencodeBinaries = createMemo<OpenCodeBinary[]>(() => internalConfig().opencodeBinaries ?? [])
-const themePreference = createMemo<ThemePreference>(() => internalConfig().theme ?? "system")
+
+import { createRoot } from "solid-js"
+
+const [config, preferences, recentFolders, opencodeBinaries, themePreference] = createRoot(() => {
+  const config = createMemo<DeepReadonly<ConfigData>>(() => internalConfig())
+  const preferences = createMemo<Preferences>(() => internalConfig().preferences)
+  const recentFolders = createMemo<RecentFolder[]>(() => internalConfig().recentFolders ?? [])
+  const opencodeBinaries = createMemo<OpenCodeBinary[]>(() => internalConfig().opencodeBinaries ?? [])
+  const themePreference = createMemo<ThemePreference>(() => internalConfig().theme ?? "dark")
+  return [config, preferences, recentFolders, opencodeBinaries, themePreference]
+})
 let loadPromise: Promise<void> | null = null
 
 function normalizeConfig(config?: ConfigData | null): ConfigData {
@@ -202,7 +227,7 @@ function normalizeConfig(config?: ConfigData | null): ConfigData {
     preferences: normalizePreferences(config?.preferences),
     recentFolders: (config?.recentFolders ?? []).map((folder) => ({ ...folder })),
     opencodeBinaries: (config?.opencodeBinaries ?? []).map((binary) => ({ ...binary })),
-    theme: config?.theme ?? "system",
+    theme: config?.theme ?? "dark",
   }
 }
 
@@ -373,8 +398,16 @@ function toggleShowThinkingBlocks(): void {
   updatePreferences({ showThinkingBlocks: !preferences().showThinkingBlocks })
 }
 
+function setAskUserTimeout(timeout: number): void {
+  updatePreferences({ askUserTimeout: timeout })
+}
+
 function toggleShowTimelineTools(): void {
   updatePreferences({ showTimelineTools: !preferences().showTimelineTools })
+}
+
+function togglePromptSubmitOnEnter(): void {
+  updatePreferences({ promptSubmitOnEnter: !preferences().promptSubmitOnEnter })
 }
 
 function toggleUsageMetrics(): void {
@@ -440,7 +473,7 @@ function addEnvironmentVariable(key: string, value: string): void {
 
 function removeEnvironmentVariable(key: string): void {
   const current = preferences().environmentVariables || {}
-  const { [key]: removed, ...rest } = current
+  const { [key]: _removed, ...rest } = current
   updateEnvironmentVariables(rest)
 }
 
@@ -488,6 +521,7 @@ interface ConfigContextValue {
   updateConfig: typeof updateConfig
   toggleShowThinkingBlocks: typeof toggleShowThinkingBlocks
   toggleShowTimelineTools: typeof toggleShowTimelineTools
+  togglePromptSubmitOnEnter: typeof togglePromptSubmitOnEnter
   toggleUsageMetrics: typeof toggleUsageMetrics
   toggleAutoCleanupBlankSessions: typeof toggleAutoCleanupBlankSessions
 
@@ -509,6 +543,7 @@ interface ConfigContextValue {
   addRecentModelPreference: typeof addRecentModelPreference
   setAgentModelPreference: typeof setAgentModelPreference
   getAgentModelPreference: typeof getAgentModelPreference
+  setAskUserTimeout: typeof setAskUserTimeout
 }
 
 const ConfigContext = createContext<ConfigContextValue>()
@@ -524,9 +559,11 @@ const configContextValue: ConfigContextValue = {
   updateConfig,
   toggleShowThinkingBlocks,
   toggleShowTimelineTools,
+  togglePromptSubmitOnEnter,
   toggleUsageMetrics,
   toggleAutoCleanupBlankSessions,
   setDiffViewMode,
+
   setToolOutputExpansion,
   setDiagnosticsExpansion,
   setThinkingBlocksExpansion,
@@ -544,6 +581,7 @@ const configContextValue: ConfigContextValue = {
   addRecentModelPreference,
   setAgentModelPreference,
   getAgentModelPreference,
+  setAskUserTimeout,
 }
 
 const ConfigProvider: ParentComponent = (props) => {
@@ -583,6 +621,7 @@ export {
   updatePreferences,
   toggleShowThinkingBlocks,
   toggleShowTimelineTools,
+  togglePromptSubmitOnEnter,
   toggleAutoCleanupBlankSessions,
   toggleUsageMetrics,
   recentFolders,
@@ -610,5 +649,5 @@ export {
   themePreference,
   setThemePreference,
   recordWorkspaceLaunch,
- }
- 
+  setAskUserTimeout,
+}

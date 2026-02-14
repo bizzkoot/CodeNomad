@@ -4,6 +4,7 @@ import { ThemeProvider } from "./lib/theme"
 import { ConfigProvider } from "./stores/preferences"
 import { InstanceConfigProvider } from "./stores/instance-config"
 import { runtimeEnv } from "./lib/runtime-env"
+import { preloadAllNotifications } from "./stores/failed-notifications"
 import { I18nProvider } from "./lib/i18n"
 import { storage } from "./lib/storage"
 import "./index.css"
@@ -20,6 +21,15 @@ const mount = root
 if (typeof document !== "undefined") {
   document.documentElement.dataset.runtimeHost = runtimeEnv.host
   document.documentElement.dataset.runtimePlatform = runtimeEnv.platform
+
+  // Preload failed notifications from localStorage BEFORE app renders
+  if (import.meta.env.DEV) {
+    console.log("[Main.tsx] Calling preloadAllNotifications()...")
+  }
+  preloadAllNotifications()
+  if (import.meta.env.DEV) {
+    console.log("[Main.tsx] preloadAllNotifications() call completed")
+  }
 }
 
 async function bootstrap() {

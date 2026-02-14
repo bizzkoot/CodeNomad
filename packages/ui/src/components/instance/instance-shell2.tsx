@@ -12,15 +12,15 @@ import {
 } from "solid-js"
 import type { ToolState } from "@opencode-ai/sdk"
 import { Accordion } from "@kobalte/core"
-import { ChevronDown, TerminalSquare, Trash2, XOctagon } from "lucide-solid"
+import { ChevronDown, TerminalSquare, Trash2, XOctagon, FolderTree } from "lucide-solid"
 import AppBar from "@suid/material/AppBar"
 import Box from "@suid/material/Box"
+import Divider from "@suid/material/Divider"
 import Drawer from "@suid/material/Drawer"
 import IconButton from "@suid/material/IconButton"
 import Toolbar from "@suid/material/Toolbar"
 import Typography from "@suid/material/Typography"
 import useMediaQuery from "@suid/material/useMediaQuery"
-import CloseIcon from "@suid/icons-material/Close"
 import MenuIcon from "@suid/icons-material/Menu"
 import MenuOpenIcon from "@suid/icons-material/MenuOpen"
 import PushPinIcon from "@suid/icons-material/PushPin"
@@ -30,6 +30,7 @@ import type { Instance } from "../../types/instance"
 import type { Command } from "../../lib/commands"
 import type { BackgroundProcess } from "../../../../server/src/api-types"
 import type { Session } from "../../types/session"
+import { SECTION_EXPANSION_EVENT, type SectionExpansionRequest } from "../../lib/section-expansion"
 import {
   activeParentSessionId,
   activeSessionId as activeSessionMap,
@@ -45,6 +46,7 @@ import { messageStoreBus } from "../../stores/message-v2/bus"
 import { clearSessionRenderCache } from "../message-block"
 
 import { isOpen as isCommandPaletteOpen, hideCommandPalette, showCommandPalette } from "../../stores/command-palette"
+import { openSearch } from "../../stores/search-store"
 import SessionList from "../session-list"
 import KeyboardHint from "../keyboard-hint"
 import Kbd from "../kbd"
@@ -55,23 +57,34 @@ import AgentSelector from "../agent-selector"
 import ModelSelector from "../model-selector"
 import ThinkingSelector from "../thinking-selector"
 import CommandPalette from "../command-palette"
+import FolderTreeBrowser from "../folder-tree-browser"
 import PermissionNotificationBanner from "../permission-notification-banner"
 import PermissionApprovalModal from "../permission-approval-modal"
+import QuestionNotificationBanner from "../question-notification-banner"
+import FailedNotificationBanner from "../failed-notification-banner"
+import FailedNotificationPanel from "../failed-notification-panel"
+import { AskQuestionWizard } from "../askquestion-wizard"
 import { TodoListView } from "../tool-call/renderers/todo"
 import ContextUsagePanel from "../session/context-usage-panel"
 import SessionView from "../session/session-view"
 import { formatTokenTotal } from "../../lib/formatters"
 import { sseManager } from "../../lib/sse-manager"
+import "../../styles/components/failed-notification.css"
 import { getLogger } from "../../lib/logger"
 import { serverApi } from "../../lib/api-client"
 import { getBackgroundProcesses, loadBackgroundProcesses } from "../../stores/background-processes"
 import { BackgroundProcessOutputDialog } from "../background-process-output-dialog"
 import { useI18n } from "../../lib/i18n"
+import SourceControlPanel from "../source-control/source-control-panel"
 import {
   SESSION_SIDEBAR_EVENT,
   type SessionSidebarRequestAction,
   type SessionSidebarRequestDetail,
 } from "../../lib/session-sidebar-events"
+import { getPendingQuestion, removeQuestionFromQueue } from "../../stores/questions"
+import type { QuestionAnswer } from "../../types/question"
+import { sendMcpAnswer, sendMcpCancel, initMcpBridge, cleanupMcpBridge, clearProcessedQuestion, isMcpBridgeInitialized } from "../../lib/mcp-bridge"
+import { requestData } from "../../lib/opencode-api"
 
 const log = getLogger("session")
 
@@ -87,9 +100,9 @@ interface InstanceShellProps {
   tabBarOffset: number
 }
 
-const DEFAULT_SESSION_SIDEBAR_WIDTH = 340
+const DEFAULT_SESSION_SIDEBAR_WIDTH = 280
 const MIN_SESSION_SIDEBAR_WIDTH = 220
-const MAX_SESSION_SIDEBAR_WIDTH = 400
+const MAX_SESSION_SIDEBAR_WIDTH = 360
 const RIGHT_DRAWER_WIDTH = 260
 const MIN_RIGHT_DRAWER_WIDTH = 200
 const MAX_RIGHT_DRAWER_WIDTH = 380
@@ -142,6 +155,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   const [resizeStartX, setResizeStartX] = createSignal(0)
   const [resizeStartWidth, setResizeStartWidth] = createSignal(0)
   const [rightPanelExpandedItems, setRightPanelExpandedItems] = createSignal<string[]>([
+    "source-control",
     "plan",
     "background-processes",
     "mcp",
@@ -150,9 +164,26 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
   ])
   const [selectedBackgroundProcess, setSelectedBackgroundProcess] = createSignal<BackgroundProcess | null>(null)
   const [showBackgroundOutput, setShowBackgroundOutput] = createSignal(false)
+  const [folderTreeBrowserOpen, setFolderTreeBrowserOpen] = createSignal(false)
   const [permissionModalOpen, setPermissionModalOpen] = createSignal(false)
+  const [questionWizardOpen, setQuestionWizardOpen] = createSignal(false)
+  const [questionWizardMinimized, setQuestionWizardMinimized] = createSignal(false)
+  const [failedPanelOpen, setFailedPanelOpen] = createSignal(false)
 
   const messageStore = createMemo(() => messageStoreBus.getOrCreate(props.instance.id))
+
+  // Reactive memo to track pending questions - properly triggers Show component updates
+  const pendingQuestion = createMemo(() => {
+    const result = getPendingQuestion(props.instance.id)
+    if (import.meta.env.DEV) {
+      console.log('[Instance Shell] pendingQuestion memo computed:', { 
+        instanceId: props.instance.id, 
+        pendingId: result?.id ?? null,
+        hasResult: !!result 
+      })
+    }
+    return result
+  })
 
   const desktopQuery = useMediaQuery("(min-width: 1280px)")
 
@@ -208,6 +239,169 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         break
     }
   })
+
+  // Auto-open question wizard when a pending question appears (unless minimized)
+  // Uses pendingQuestion() memo for proper SolidJS reactivity
+  createEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[Instance Shell] createEffect TRIGGERED (reactive update)')
+    }
+    const pending = pendingQuestion()
+    if (import.meta.env.DEV) {
+      console.log('[Instance Shell] createEffect check:', {
+        instanceId: props.instance.id,
+        pendingQuestionId: pending?.id ?? null,
+        minimized: questionWizardMinimized(),
+        willOpen: !!(pending && !questionWizardMinimized())
+      })
+    }
+    if (pending && !questionWizardMinimized()) {
+      // Auto-open only if user hasn't minimized
+      if (import.meta.env.DEV) {
+        console.log('[Instance Shell] Opening question wizard for:', pending.id)
+      }
+      setQuestionWizardOpen(true)
+      // Note: render confirmation is sent from AskQuestionWizard's onMount
+      // to ensure it's only sent when the wizard is actually visible
+    } else if (!pending) {
+      // Reset states when no pending questions
+      if (import.meta.env.DEV) {
+        console.log('[Instance Shell] No pending question, closing wizard')
+      }
+      setQuestionWizardOpen(false)
+      setQuestionWizardMinimized(false)
+    }
+  })
+
+  // Question wizard handlers - defined at component level for proper binding
+  const handleQuestionSubmit = async (answers: QuestionAnswer[]) => {
+    const question = getPendingQuestion(props.instance.id)
+    if (!question || !props.instance.client) {
+      return
+    }
+
+    if (import.meta.env.DEV) {
+      console.log('[✅ ANSWER SUBMIT] Question answer submitted:', {
+        questionId: question.id,
+        source: question.source || 'NOT_SET',
+        instanceId: props.instance.id,
+        hasAnswers: answers.length > 0,
+        timestamp: new Date().toISOString()
+      })
+    }
+
+    // Route by source: MCP or OpenCode
+    if (question.source === 'mcp') {
+      if (import.meta.env.DEV) {
+        console.log('[✅ ROUTING] Using MCP path (zero-cost IPC) for question:', question.id)
+      }
+      // MCP questions: send via IPC bridge
+      try {
+        sendMcpAnswer(question.id, answers)
+        removeQuestionFromQueue(props.instance.id, question.id)
+        clearProcessedQuestion(question.id) // Clear from deduplication set
+        setQuestionWizardOpen(false)
+        if (import.meta.env.DEV) {
+          console.log('[✅ MCP SUCCESS] Answer sent via MCP IPC, no premium request')
+        }
+      } catch (error) {
+        console.error("Failed to submit MCP question answer", error)
+      }
+
+    } else {
+      if (import.meta.env.DEV) {
+        console.log('[❌ ROUTING] Using OpenCode SDK path (PREMIUM REQUEST) for question:', question.id)
+        console.log('[❌ WARNING] This will consume 1 premium LLM request!')
+      }
+      // OpenCode questions: use existing API
+      try {
+        // Map answers to SDK format: array of string arrays
+        const sdkAnswers = answers.map(answer => {
+          const custom = answer.customText?.trim()
+          if (custom) return [custom]
+          return answer.values
+        })
+
+        await requestData(
+          props.instance.client.question.reply({
+            requestID: question.id,
+            answers: sdkAnswers
+          }),
+          "question.reply"
+        )
+
+        setQuestionWizardOpen(false)
+        if (import.meta.env.DEV) {
+          console.log('[❌ OPENCODE COMPLETED] Answer sent via OpenCode SDK (premium request used)')
+        }
+      } catch (error) {
+        console.error("Failed to submit question answers", error)
+      }
+    }
+  }
+
+
+  const handleQuestionCancel = async () => {
+    const question = getPendingQuestion(props.instance.id)
+    if (!question) {
+      setQuestionWizardOpen(false)
+      return
+    }
+
+    if (import.meta.env.DEV) {
+      console.log('[🚫 CANCEL] Question cancelled:', {
+        questionId: question.id,
+        source: question.source || 'NOT_SET',
+        instanceId: props.instance.id
+      })
+    }
+
+    // Route by source: MCP or OpenCode
+    if (question.source === 'mcp') {
+      if (import.meta.env.DEV) {
+        console.log('[🚫 ROUTING] Using MCP cancel path (zero-cost) for question:', question.id)
+      }
+      // MCP questions: send via IPC bridge
+      try {
+        sendMcpCancel(question.id)
+        removeQuestionFromQueue(props.instance.id, question.id)
+        clearProcessedQuestion(question.id) // Clear from deduplication set
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to cancel MCP question", error)
+      }
+
+    } else {
+      if (import.meta.env.DEV) {
+        console.log('[🚫 ROUTING] Using OpenCode SDK cancel path for question:', question.id)
+      }
+      // OpenCode questions: use existing API
+      if (!props.instance.client) {
+        setQuestionWizardOpen(false)
+        return
+      }
+
+      try {
+        await requestData(
+          props.instance.client.question.reject({
+            requestID: question.id
+          }),
+          "question.reject"
+        )
+
+        setQuestionWizardOpen(false)
+      } catch (error) {
+        console.error("Failed to reject question", error)
+        setQuestionWizardOpen(false)
+      }
+    }
+  }
+
+  const handleQuestionMinimize = () => {
+    setQuestionWizardMinimized(true)
+    setQuestionWizardOpen(false)
+    // Question remains in queue, notification banner will show
+  }
 
   const measureDrawerHost = () => {
     if (typeof window === "undefined") return
@@ -293,7 +487,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     return activeSessionMap().get(props.instance.id) || null
   })
 
-  const parentSessionIdForInstance = createMemo(() => {
+  const _parentSessionIdForInstance = createMemo(() => {
     return activeParentSessionId().get(props.instance.id) || null
   })
 
@@ -369,6 +563,11 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
   const handleCommandPaletteClick = () => {
     showCommandPalette(props.instance.id)
+  }
+
+  const _openCurrentSessionSearch = () => {
+    const currentSessionId = activeSessionIdForInstance()
+    openSearch(props.instance.id, currentSessionId || undefined)
   }
 
   const openBackgroundOutput = (process: BackgroundProcess) => {
@@ -509,6 +708,43 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     }
     window.addEventListener("keydown", handleEscape, true)
     onCleanup(() => window.removeEventListener("keydown", handleEscape, true))
+  })
+
+  // Initialize MCP bridge for this instance
+  onMount(() => {
+    if (import.meta.env.DEV) {
+      console.log('[Instance Shell] onMount fired - checking window...')
+      console.log('[Instance Shell] window type:', typeof window)
+      console.log('[Instance Shell] window exists:', typeof window !== 'undefined')
+    }
+    if (typeof window === "undefined") {
+      if (import.meta.env.DEV) {
+        console.log('[Instance Shell] window is undefined, skipping MCP bridge init')
+      }
+      return
+    }
+    try {
+      if (!isMcpBridgeInitialized(props.instance.id)) {
+        if (import.meta.env.DEV) {
+          console.log(`[Instance Shell] Initializing MCP bridge for instance: ${props.instance.id}`)
+        }
+        initMcpBridge(props.instance.id)
+      }
+    } catch (error) {
+      console.error("[Instance Shell] Failed to initialize MCP bridge:", error)
+    }
+
+    // Cleanup MCP bridge when instance unmounts
+    onCleanup(() => {
+      if (import.meta.env.DEV) {
+        console.log(`[Instance Shell] Cleaning up MCP bridge for instance: ${props.instance.id}`)
+      }
+      try {
+        cleanupMcpBridge(props.instance.id)
+      } catch (error) {
+        console.error("[Instance Shell] Failed to cleanup MCP bridge:", error)
+      }
+    })
   })
 
   const handleSessionSelect = (sessionId: string) => {
@@ -874,7 +1110,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
             </Show>
           </div>
         </div>
-        <div class="flex items-center gap-2 text-primary">
+        <div class="flex items-center gap-2">
           <IconButton
             size="small"
             color="inherit"
@@ -910,12 +1146,11 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
               void result.catch((error) => log.error("Failed to create session:", error))
             }
           }}
-          enableFilterBar
           showHeader={false}
           showFooter={false}
         />
 
-        <div class="session-sidebar-separator" />
+        <Divider />
         <Show when={activeSessionForInstance()}>
           {(activeSession) => (
             <>
@@ -936,12 +1171,6 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 />
 
                 <ThinkingSelector instanceId={props.instance.id} currentModel={activeSession().model} />
-
-                <div class="session-sidebar-selector-hints" aria-hidden="true">
-                  <Kbd shortcut="cmd+shift+a" />
-                  <Kbd shortcut="cmd+shift+m" />
-                  <Kbd shortcut="cmd+shift+t" />
-                </div>
               </div>
             </>
           )}
@@ -1026,6 +1255,11 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
     const sections = [
       {
+        id: "source-control",
+        label: "Source Control",
+        render: () => <SourceControlPanel workspaceId={props.instance.id} />,
+      },
+      {
         id: "plan",
         labelKey: "instanceShell.rightPanel.sections.plan",
         render: renderPlanSectionContent,
@@ -1073,22 +1307,40 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
       },
     ]
 
-    createEffect(() => {
-      const currentExpanded = new Set(rightPanelExpandedItems())
-      if (sections.every((section) => currentExpanded.has(section.id))) return
-      setRightPanelExpandedItems(sections.map((section) => section.id))
-    })
+    // Accordion state is managed by user interaction via handleAccordionChange
+    // No need to force all sections to be expanded
 
     const handleAccordionChange = (values: string[]) => {
       setRightPanelExpandedItems(values)
     }
 
+    // Listen for sidebar accordion expansion requests from search system
+    createEffect(() => {
+      if (typeof window === "undefined") return
+
+      const handler = (event: Event) => {
+        const detail = (event as CustomEvent<SectionExpansionRequest>).detail
+        if (
+          detail.action === "expand-sidebar-accordion" &&
+          detail.instanceId === props.instance.id
+        ) {
+          const sectionId = detail.sectionId
+          if (sectionId && !rightPanelExpandedItems().includes(sectionId)) {
+            setRightPanelExpandedItems((prev) => [...prev, sectionId])
+          }
+        }
+      }
+
+      window.addEventListener(SECTION_EXPANSION_EVENT, handler)
+      onCleanup(() => window.removeEventListener(SECTION_EXPANSION_EVENT, handler))
+    })
+
     const isSectionExpanded = (id: string) => rightPanelExpandedItems().includes(id)
 
     return (
       <div class="flex flex-col h-full" ref={setRightDrawerContentEl}>
-        <div class="flex items-center justify-between px-4 py-2 border-b border-base text-primary">
-          <Typography variant="subtitle2" class="uppercase tracking-wide text-xs font-semibold text-primary">
+        <div class="flex items-center justify-between px-4 py-2 border-b border-base">
+          <Typography variant="subtitle2" class="uppercase tracking-wide text-xs font-semibold">
             {t("instanceShell.rightPanel.title")}
           </Typography>
           <div class="flex items-center gap-2">
@@ -1120,7 +1372,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
                 >
                   <Accordion.Header>
                     <Accordion.Trigger class="w-full flex items-center justify-between gap-3 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide">
-                      <span>{t(section.labelKey)}</span>
+                        <span>{section.labelKey ? t(section.labelKey) : section.label}</span>
                       <ChevronDown
                         class={`h-4 w-4 transition-transform duration-150 ${isSectionExpanded(section.id) ? "rotate-180" : ""}`}
                       />
@@ -1274,74 +1526,96 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
           <Show
             when={!isPhoneLayout()}
             fallback={
-              <div class="flex flex-col w-full gap-1.5">
-                <div class="flex flex-wrap items-center justify-between gap-2 w-full">
-                  <IconButton
-                    ref={setLeftToggleButtonEl}
-                    color="inherit"
-                    onClick={handleLeftAppBarButtonClick}
-                    aria-label={leftAppBarButtonLabel()}
-                    size="small"
-                    aria-expanded={leftDrawerState() !== "floating-closed"}
-                    disabled={leftDrawerState() === "pinned"}
-                  >
-                    {leftAppBarButtonIcon()}
-                  </IconButton>
+              <div class="flex items-center gap-1.5 w-full">
+                <IconButton
+                  ref={setLeftToggleButtonEl}
+                  color="inherit"
+                  onClick={handleLeftAppBarButtonClick}
+                  aria-label={leftAppBarButtonLabel()}
+                  size="small"
+                  aria-expanded={leftDrawerState() !== "floating-closed"}
+                  disabled={leftDrawerState() === "pinned"}
+                  class="flex-shrink-0"
+                >
+                  {leftAppBarButtonIcon()}
+                </IconButton>
 
-                  <div class="flex flex-wrap items-center gap-1 justify-center">
-                    <PermissionNotificationBanner
-                      instanceId={props.instance.id}
-                      onClick={() => setPermissionModalOpen(true)}
-                    />
-                    <button
-                      type="button"
-                      class="connection-status-button px-2 py-0.5 text-xs"
-                      onClick={handleCommandPaletteClick}
-                      aria-label={t("instanceShell.commandPalette.openAriaLabel")}
-                      style={{ flex: "0 0 auto", width: "auto" }}
-                    >
-                      {t("instanceShell.commandPalette.button")}
-                    </button>
-                    <span class="connection-status-shortcut-hint">
-                      <Kbd shortcut="cmd+shift+p" />
-                    </span>
-                    <span
-                      class={`status-indicator ${connectionStatusClass()}`}
-                      aria-label={t("instanceShell.connection.ariaLabel", { status: connectionStatusLabel() })}
-                    >
-                      <span class="status-dot" />
-                    </span>
-
-
-                  </div>
-
-                  <IconButton
-                    ref={setRightToggleButtonEl}
-                    color="inherit"
-                    onClick={handleRightAppBarButtonClick}
-                    aria-label={rightAppBarButtonLabel()}
-                    size="small"
-                    aria-expanded={rightDrawerState() !== "floating-closed"}
-                    disabled={rightDrawerState() === "pinned"}
-                  >
-                    {rightAppBarButtonIcon()}
-                  </IconButton>
+                <div class="inline-flex items-center gap-1 rounded-md border border-base px-1.5 py-0.5 text-[11px] text-primary flex-shrink-0">
+                  <span class="uppercase text-[9px] tracking-wide text-primary/70">
+                    {t("instanceShell.metrics.usedLabel")}
+                  </span>
+                  <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
+                </div>
+                <div class="inline-flex items-center gap-1 rounded-md border border-base px-1.5 py-0.5 text-[11px] text-primary flex-shrink-0">
+                  <span class="uppercase text-[9px] tracking-wide text-primary/70">
+                    {t("instanceShell.metrics.availableLabel")}
+                  </span>
+                  <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
                 </div>
 
-                <div class="flex flex-wrap items-center justify-center gap-2 pb-1">
-                  <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                    <span class="uppercase text-[10px] tracking-wide text-muted">
-                      {t("instanceShell.metrics.usedLabel")}
-                    </span>
-                    <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
-                  </div>
-                  <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                    <span class="uppercase text-[10px] tracking-wide text-muted">
-                      {t("instanceShell.metrics.availableLabel")}
-                    </span>
-                    <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
-                  </div>
-                </div>
+                <Show when={!showingInfoView()}>
+                  <button
+                    type="button"
+                    class="phone-icon-button"
+                    onClick={() => setFolderTreeBrowserOpen(true)}
+                    aria-label="Browse workspace files"
+                    title="Files"
+                  >
+                    <FolderTree size={16} />
+                  </button>
+                </Show>
+
+                <PermissionNotificationBanner
+                  instanceId={props.instance.id}
+                  onClick={() => setPermissionModalOpen(true)}
+                />
+
+                <Show when={questionWizardMinimized() && getPendingQuestion(props.instance.id)}>
+                  <QuestionNotificationBanner
+                    instanceId={props.instance.id}
+                    onClick={() => {
+                      setQuestionWizardMinimized(false)
+                      setQuestionWizardOpen(true)
+                    }}
+                  />
+                </Show>
+
+                <FailedNotificationBanner
+                  folderPath={props.instance.folder}
+                  onClick={() => setFailedPanelOpen(true)}
+                />
+
+                <button
+                  type="button"
+                  class="connection-status-button px-2 py-0.5 text-xs whitespace-nowrap flex-shrink-1 min-w-0"
+                  onClick={handleCommandPaletteClick}
+                  aria-label={t("instanceShell.commandPalette.openAriaLabel")}
+                >
+                  {t("instanceShell.commandPalette.button")}
+                </button>
+                <span class="connection-status-shortcut-hint flex-shrink-0">
+                  <Kbd shortcut="cmd+shift+p" />
+                </span>
+
+                <span
+                  class={`status-indicator ${connectionStatusClass()} flex-shrink-0`}
+                  aria-label={t("instanceShell.connection.ariaLabel", { status: connectionStatusLabel() })}
+                >
+                  <span class="status-dot" />
+                </span>
+
+                <IconButton
+                  ref={setRightToggleButtonEl}
+                  color="inherit"
+                  onClick={handleRightAppBarButtonClick}
+                  aria-label={rightAppBarButtonLabel()}
+                  size="small"
+                  aria-expanded={rightDrawerState() !== "floating-closed"}
+                  disabled={rightDrawerState() === "pinned"}
+                  class="flex-shrink-0"
+                >
+                  {rightAppBarButtonIcon()}
+                </IconButton>
               </div>
             }
           >
@@ -1360,13 +1634,13 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
               <Show when={!showingInfoView()}>
                 <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                  <span class="uppercase text-[10px] tracking-wide text-muted">
+                  <span class="uppercase text-[10px] tracking-wide text-primary/70">
                     {t("instanceShell.metrics.usedLabel")}
                   </span>
                   <span class="font-semibold text-primary">{formattedUsedTokens()}</span>
                 </div>
                 <div class="inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary">
-                  <span class="uppercase text-[10px] tracking-wide text-muted">
+                  <span class="uppercase text-[10px] tracking-wide text-primary/70">
                     {t("instanceShell.metrics.availableLabel")}
                   </span>
                   <span class="font-semibold text-primary">{formattedAvailableTokens()}</span>
@@ -1376,10 +1650,38 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
 
 
             <div class="session-toolbar-center flex-1 flex items-center justify-center gap-2 min-w-[160px]">
-              <PermissionNotificationBanner
-                instanceId={props.instance.id}
-                onClick={() => setPermissionModalOpen(true)}
-              />
+              <Show when={!showingInfoView()}>
+                <button
+                  type="button"
+                  class="connection-status-button p-1.5 flex items-center justify-center"
+                  onClick={() => setFolderTreeBrowserOpen(true)}
+                  aria-label="Browse workspace files"
+                  title="Files"
+                  style={{ flex: "0 0 auto", width: "32px", height: "32px" }}
+                >
+                  <FolderTree size={16} />
+                </button>
+              </Show>
+
+              <div style={{ flex: "0 0 auto", display: "flex", "align-items": "center", gap: "8px" }}>
+                <PermissionNotificationBanner
+                  instanceId={props.instance.id}
+                  onClick={() => setPermissionModalOpen(true)}
+                />
+                <Show when={questionWizardMinimized() && getPendingQuestion(props.instance.id)}>
+                  <QuestionNotificationBanner
+                    instanceId={props.instance.id}
+                    onClick={() => {
+                      setQuestionWizardMinimized(false)
+                      setQuestionWizardOpen(true)
+                    }}
+                  />
+                </Show>
+                <FailedNotificationBanner
+                  folderPath={props.instance.folder}
+                  onClick={() => setFailedPanelOpen(true)}
+                />
+              </div>
               <button
                 type="button"
                 class="connection-status-button px-2 py-0.5 text-xs"
@@ -1517,11 +1819,62 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
         onClose={closeBackgroundOutput}
       />
 
+      <FolderTreeBrowser
+        isOpen={folderTreeBrowserOpen()}
+        workspaceId={props.instance.id}
+        workspaceName={props.instance.folder}
+        onClose={() => setFolderTreeBrowserOpen(false)}
+      />
+
       <PermissionApprovalModal
         instanceId={props.instance.id}
         isOpen={permissionModalOpen()}
         onClose={() => setPermissionModalOpen(false)}
       />
+
+      <FailedNotificationPanel
+        folderPath={props.instance.folder}
+        isOpen={failedPanelOpen()}
+        onClose={() => setFailedPanelOpen(false)}
+      />
+
+      <Show when={questionWizardOpen() && pendingQuestion()}>
+        {(pending) => {
+          // Map questions to wizard format (like shuvcode does)
+          const mappedQuestions = () => pending().questions.map((question, index) => ({
+            id: `${pending().id}-${index}`,
+            question: question.question,
+            header: question.header,
+            options: question.options.map((option) => ({
+              label: option.label,
+              description: option.description,
+            })),
+            // Default to single-select (like shuvcode)
+            multiple: question.multiple ?? false,
+          }))
+
+          return (
+            <div
+              class="askquestion-wizard-overlay"
+              onClick={(e) => {
+                // Minimize if clicking the backdrop (not the content)
+                if (e.target === e.currentTarget) {
+                  handleQuestionMinimize()
+                }
+              }}
+            >
+              <AskQuestionWizard
+                questions={mappedQuestions()}
+                onSubmit={handleQuestionSubmit}
+                onCancel={handleQuestionCancel}
+                onMinimize={handleQuestionMinimize}
+                requestId={pending().id}
+                source={pending().source}
+              />
+            </div>
+          )
+        }}
+      </Show>
     </>
   )
 }

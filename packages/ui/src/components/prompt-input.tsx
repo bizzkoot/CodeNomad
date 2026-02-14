@@ -1,7 +1,8 @@
-import { createSignal, Show, onMount, For, onCleanup, createEffect, on, untrack } from "solid-js"
+import { createSignal, Show, onMount, onCleanup, createEffect, on, untrack, createMemo } from "solid-js"
 import { ArrowBigUp, ArrowBigDown } from "lucide-solid"
 import UnifiedPicker from "./unified-picker"
 import ExpandButton from "./expand-button"
+import { isElectronHost } from "../lib/runtime-env"
 import { addToHistory, getHistory } from "../stores/message-history"
 import { getAttachments, addAttachment, clearAttachments, removeAttachment } from "../stores/attachments"
 import { resolvePastedPlaceholders } from "../lib/prompt-placeholders"
@@ -16,6 +17,7 @@ import { getCommands } from "../stores/commands"
 import { showAlertDialog } from "../stores/alerts"
 import { useI18n } from "../lib/i18n"
 import { getLogger } from "../lib/logger"
+import type { PromptInputApi } from "./prompt-input/types"
 const log = getLogger("actions")
 
 
@@ -30,6 +32,7 @@ interface PromptInputProps {
   isSessionBusy?: boolean
   onAbortSession?: () => Promise<void>
   registerQuoteHandler?: (handler: (text: string, mode: "quote" | "code") => void) => void | (() => void)
+  registerPromptInputApi?: (api: PromptInputApi) => void | (() => void)
 }
 
 export default function PromptInput(props: PromptInputProps) {
@@ -49,13 +52,84 @@ export default function PromptInput(props: PromptInputProps) {
   const [pasteCount, setPasteCount] = createSignal(0)
   const [imageCount, setImageCount] = createSignal(0)
   const [mode, setMode] = createSignal<"normal" | "shell">("normal")
-  const [expandState, setExpandState] = createSignal<"normal" | "expanded">("normal")
+  const [expandState, setExpandState] = createSignal<"normal" | "fifty" | "eighty" | "expanded">("normal")
   const SELECTION_INSERT_MAX_LENGTH = 2000
   let textareaRef: HTMLTextAreaElement | undefined
+  let containerRef: HTMLDivElement | undefined
+
+  // Check if we're in Electron (desktop app with 3-state support)
+  const isDesktopApp = isElectronHost()
+
+  // Fixed line height for web/mobile expanded state (15 lines as suggested)
+  const EXPANDED_LINES = 15
+  const LINE_HEIGHT = 24
+  const FIXED_EXPANDED_HEIGHT = EXPANDED_LINES * LINE_HEIGHT // 360px
+
+  const calculateExpandedHeight = () => {
+    if (!containerRef) {
+      return 0
+    }
+
+    const root = containerRef.closest(".session-view")
+    if (!root) {
+      return 0
+    }
+    const rootRect = root.getBoundingClientRect()
+
+    // Reserve minimum space for message section
+    // Use larger reserve for landscape orientation (less vertical space)
+    const isLandscape = typeof window !== "undefined" && window.innerWidth > window.innerHeight
+    const MIN_MESSAGE_SPACE = isLandscape ? 150 : 200
+    const availableForInput = rootRect.height - MIN_MESSAGE_SPACE
+
+    return availableForInput
+  }
+
+  const expandedHeight = createMemo(() => {
+    const state = expandState()
+    if (state === "normal") return "auto"
+
+    const availableHeight = calculateExpandedHeight()
+
+    if (isDesktopApp) {
+      // Electron: Use percentage-based heights (50% / 80%)
+      if (state === "fifty") {
+        return `${availableHeight * 0.5}px`
+      }
+      // state === "eighty"
+      return `${availableHeight * 0.8}px`
+    } else {
+      // Web/Mobile: Use fixed height, but cap at available space
+      // This prevents overflow in landscape or small screens
+      const maxHeight = Math.min(FIXED_EXPANDED_HEIGHT, availableHeight * 0.6)
+      return `${Math.max(maxHeight, 150)}px` // Minimum 150px to be useful
+    }
+  })
+
+  // Responsive placeholder text - shorter on mobile to avoid overlap with expand button
+  const [isMobileWidth, setIsMobileWidth] = createSignal(false)
+
+  const updateMobileWidth = () => {
+    if (typeof window !== "undefined") {
+      setIsMobileWidth(window.innerWidth <= 640)
+    }
+  }
+
+  onMount(() => {
+    updateMobileWidth()
+    window.addEventListener("resize", updateMobileWidth)
+    onCleanup(() => {
+      window.removeEventListener("resize", updateMobileWidth)
+    })
+  })
 
   const getPlaceholder = () => {
     if (mode() === "shell") {
       return t("promptInput.placeholder.shell")
+    }
+    // Use shorter placeholder on mobile to prevent overlap with expand button
+    if (isMobileWidth()) {
+      return "Type message, @file, @agent..."
     }
     return t("promptInput.placeholder.default")
   }
@@ -164,7 +238,7 @@ export default function PromptInput(props: PromptInputProps) {
     )
   )
 
-  function handleRemoveAttachment(attachmentId: string) {
+  function _handleRemoveAttachment(attachmentId: string) {
     const currentAttachments = attachments()
     const attachment = currentAttachments.find((a) => a.id === attachmentId)
 
@@ -200,7 +274,7 @@ export default function PromptInput(props: PromptInputProps) {
     }
   }
 
-  function handleExpandTextAttachment(attachment: Attachment) {
+  function _handleExpandTextAttachment(attachment: Attachment) {
     if (attachment.source.type !== "text") return
 
     const textarea = textareaRef
@@ -573,6 +647,9 @@ export default function PromptInput(props: PromptInputProps) {
     const currentAttachments = attachments()
     if (props.disabled || (!text && currentAttachments.length === 0)) return
 
+    // Auto-collapse on send
+    setExpandState("normal")
+
     const isShellMode = mode() === "shell"
 
     // Slash command routing (match OpenCode TUI): only run if the command exists.
@@ -713,7 +790,7 @@ export default function PromptInput(props: PromptInputProps) {
     void props.onAbortSession()
   }
 
-  function handleExpandToggle(nextState: "normal" | "expanded") {
+  function handleExpandToggle(nextState: "normal" | "fifty" | "eighty" | "expanded") {
     setExpandState(nextState)
     // Keep focus on textarea
     textareaRef?.focus()
@@ -1021,7 +1098,7 @@ export default function PromptInput(props: PromptInputProps) {
     const blockquote = lines.map((line) => `> ${line}`).join("\n")
     if (!blockquote) return
 
-    insertBlockContent(`${blockquote}\n`)
+    insertBlockContent(`${blockquote}\n\n`)
   }
 
   function insertCodeSelection(rawText: string) {
@@ -1036,6 +1113,44 @@ export default function PromptInput(props: PromptInputProps) {
     const block = "```\n" + trimmed + "\n```\n\n"
     insertBlockContent(block)
   }
+
+  createEffect(() => {
+    if (!props.registerPromptInputApi) return
+
+    const api: PromptInputApi = {
+      insertSelection: (text, mode) => {
+        if (mode === "code") {
+          insertCodeSelection(text)
+          return
+        }
+        insertQuotedSelection(text)
+      },
+      expandTextAttachment: (attachmentId) => {
+        const attachment = attachments().find((item) => item.id === attachmentId)
+        if (!attachment || attachment.source.type !== "text") return
+        _handleExpandTextAttachment(attachment)
+      },
+      removeAttachment: (attachmentId) => {
+        _handleRemoveAttachment(attachmentId)
+      },
+      setPromptText: (text, opts) => {
+        setPrompt(text)
+        if (opts?.focus ?? true) {
+          textareaRef?.focus()
+        }
+      },
+      focus: () => {
+        textareaRef?.focus()
+      },
+    }
+
+    const cleanup = props.registerPromptInputApi(api)
+    onCleanup(() => {
+      if (typeof cleanup === "function") {
+        cleanup()
+      }
+    })
+  })
 
   const canStop = () => Boolean(props.isSessionBusy && props.onAbortSession)
 
@@ -1063,6 +1178,7 @@ export default function PromptInput(props: PromptInputProps) {
   return (
     <div class="prompt-input-container">
       <div
+        ref={containerRef}
         class={`prompt-input-wrapper relative ${isDragging() ? "border-2" : ""}`}
         style={
           isDragging()
@@ -1089,12 +1205,18 @@ export default function PromptInput(props: PromptInputProps) {
         </Show>
 
         <div class="flex flex-1 flex-col">
-          <div class={`prompt-input-field-container ${expandState() === "expanded" ? "is-expanded" : ""}`}>
-
-            <div class={`prompt-input-field ${expandState() === "expanded" ? "is-expanded" : ""}`}>
+          {/* Attachment display removed - now handled by session-view.tsx to avoid duplication */}
+          <div
+            class="prompt-input-field-container"
+            style={{
+              "height": expandedHeight(),
+              "transition": "height 0.25s ease",
+            }}
+          >
+            <div class="prompt-input-field">
               <textarea
                 ref={textareaRef}
-                class={`prompt-input ${mode() === "shell" ? "shell-mode" : ""} ${expandState() === "expanded" ? "is-expanded" : ""}`}
+                class={`prompt-input ${mode() === "shell" ? "shell-mode" : ""}`}
                 placeholder={getPlaceholder()}
                 value={prompt()}
                 onInput={handleInput}
@@ -1103,18 +1225,18 @@ export default function PromptInput(props: PromptInputProps) {
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
                 disabled={props.disabled}
-                rows={expandState() === "expanded" ? 15 : 4}
+                rows={4}
+                style={{
+                  "padding-top": attachments().length > 0 ? "8px" : "0",
+                  "overflow-y": expandState() !== "normal" ? "auto" : "visible",
+                }}
                 spellcheck={false}
                 autocorrect="off"
                 autoCapitalize="off"
                 autocomplete="off"
               />
-              <div class="prompt-nav-buttons">
-                <ExpandButton
-                  expandState={expandState}
-                  onToggleExpand={handleExpandToggle}
-                />
-                <Show when={hasHistory()}>
+              <Show when={hasHistory()}>
+                <div class="prompt-history-top">
                   <button
                     type="button"
                     class="prompt-history-button"
@@ -1124,6 +1246,8 @@ export default function PromptInput(props: PromptInputProps) {
                   >
                     <ArrowBigUp class="h-5 w-5" aria-hidden="true" />
                   </button>
+                </div>
+                <div class="prompt-history-bottom">
                   <button
                     type="button"
                     class="prompt-history-button"
@@ -1133,7 +1257,13 @@ export default function PromptInput(props: PromptInputProps) {
                   >
                     <ArrowBigDown class="h-5 w-5" aria-hidden="true" />
                   </button>
-                </Show>
+                </div>
+              </Show>
+              <div class="prompt-expand-top">
+                <ExpandButton
+                  expandState={expandState}
+                  onToggleExpand={handleExpandToggle}
+                />
               </div>
               <Show when={shouldShowOverlay()}>
                 <div class={`prompt-input-overlay ${mode() === "shell" ? "shell-mode" : ""}`}>

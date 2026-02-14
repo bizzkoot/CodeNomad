@@ -1,7 +1,7 @@
 import { Show, createMemo, type Component } from "solid-js"
 import { ShieldAlert } from "lucide-solid"
 import { useI18n } from "../lib/i18n"
-import { getPermissionQueueLength, getQuestionQueueLength } from "../stores/instances"
+import { getPermissionQueueLength } from "../stores/instances"
 
 interface PermissionNotificationBannerProps {
   instanceId: string
@@ -11,8 +11,7 @@ interface PermissionNotificationBannerProps {
 const PermissionNotificationBanner: Component<PermissionNotificationBannerProps> = (props) => {
   const { t } = useI18n()
   const permissionCount = createMemo(() => getPermissionQueueLength(props.instanceId))
-  const questionCount = createMemo(() => getQuestionQueueLength(props.instanceId))
-  const queueLength = createMemo(() => permissionCount() + questionCount())
+  const queueLength = permissionCount
   const hasRequests = createMemo(() => queueLength() > 0)
   const label = createMemo(() => {
     const total = queueLength()
@@ -28,14 +27,6 @@ const PermissionNotificationBanner: Component<PermissionNotificationBannerProps>
         permissionCount() === 1
           ? t("permissionBanner.detail.permission.one", { count: permissionCount() })
           : t("permissionBanner.detail.permission.other", { count: permissionCount() }),
-      )
-    }
-
-    if (questionCount() > 0) {
-      parts.push(
-        questionCount() === 1
-          ? t("permissionBanner.detail.question.one", { count: questionCount() })
-          : t("permissionBanner.detail.question.other", { count: questionCount() }),
       )
     }
 

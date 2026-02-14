@@ -153,12 +153,13 @@ export function BackgroundProcessOutputDialog(props: BackgroundProcessOutputDial
                       {output()}
                     </pre>
                   }
-                >
-                  <pre
-                    class="text-xs whitespace-pre-wrap break-all text-primary bg-surface-secondary border border-base rounded-md p-4 font-mono"
-                    innerHTML={outputHtml()}
-                  />
-                </Show>
+                  >
+                <pre
+                  class="text-xs whitespace-pre-wrap break-all text-primary bg-surface-secondary border border-base rounded-md p-4 font-mono"
+                  /* eslint-disable-next-line solid/no-innerhtml -- HTML from ANSI renderer */
+                  innerHTML={outputHtml()}
+                />
+              </Show>
               </Show>
             </div>
           </Dialog.Content>

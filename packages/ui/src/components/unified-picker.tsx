@@ -98,16 +98,17 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
   const [allFiles, setAllFiles] = createSignal<FileItem[]>([])
   const [isInitialized, setIsInitialized] = createSignal(false)
   const [cachedWorkspaceId, setCachedWorkspaceId] = createSignal<string | null>(null)
- 
+
   let containerRef: HTMLDivElement | undefined
   let scrollContainerRef: HTMLDivElement | undefined
   let lastWorkspaceId: string | null = null
   let lastQuery = ""
+  let lastCommandQuery = ""
   let inflightWorkspaceId: string | null = null
   let inflightSnapshotPromise: Promise<FileItem[]> | null = null
   let activeRequestId = 0
   let queryDebounceTimer: ReturnType<typeof setTimeout> | null = null
- 
+
   function resetScrollPosition() {
     setTimeout(() => {
       if (scrollContainerRef) {
@@ -115,18 +116,18 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
       }
     }, 0)
   }
- 
+
   function applyFileResults(nextFiles: FileItem[]) {
     setFiles(nextFiles)
     setSelectedIndex(0)
     resetScrollPosition()
   }
- 
+
   async function fetchWorkspaceSnapshot(workspaceId: string): Promise<FileItem[]> {
     if (inflightWorkspaceId === workspaceId && inflightSnapshotPromise) {
       return inflightSnapshotPromise
     }
- 
+
     inflightWorkspaceId = workspaceId
     inflightSnapshotPromise = serverApi
       .listWorkspaceFiles(workspaceId)
@@ -148,18 +149,18 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
           inflightSnapshotPromise = null
         }
       })
- 
+
     return inflightSnapshotPromise
   }
- 
+
   async function ensureWorkspaceSnapshot(workspaceId: string) {
     if (cachedWorkspaceId() === workspaceId && allFiles().length > 0) {
       return allFiles()
     }
- 
+
     return fetchWorkspaceSnapshot(workspaceId)
   }
- 
+
   async function loadFilesForQuery(rawQuery: string, workspaceId: string) {
     const normalizedQuery = normalizeQuery(rawQuery)
     const requestId = ++activeRequestId
@@ -228,11 +229,11 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
     return props.open && workspaceId === props.workspaceId && requestId === activeRequestId
   }
 
- 
+
   function shouldFinalizeRequest(requestId: number, workspaceId: string) {
     return workspaceId === props.workspaceId && requestId === activeRequestId
   }
- 
+
   function resetPickerState() {
     clearQueryDebounce()
     setFiles([])
@@ -243,6 +244,7 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
     setLoadingState("idle")
     lastWorkspaceId = null
     lastQuery = ""
+    lastCommandQuery = ""
     activeRequestId = 0
   }
 
@@ -273,8 +275,6 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
     }
   })
 
-
-
   createEffect(() => {
     if (!props.open) return
     if (mode() !== "mention") return
@@ -282,10 +282,10 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
     const query = props.searchQuery.toLowerCase()
     const filtered = query
       ? props.agents.filter(
-          (agent) =>
-            agent.name.toLowerCase().includes(query) ||
-            (agent.description && agent.description.toLowerCase().includes(query)),
-        )
+        (agent) =>
+          agent.name.toLowerCase().includes(query) ||
+          (agent.description && agent.description.toLowerCase().includes(query)),
+      )
       : props.agents
 
     setFilteredAgents(filtered)
@@ -301,6 +301,37 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
       const descMatch = (cmd.description ?? "").toLowerCase().includes(q)
       return nameMatch || descMatch
     })
+  })
+
+  createEffect(() => {
+    if (!props.open) return
+    if (mode() !== "command") return
+
+    const query = props.searchQuery
+    const count = filteredCommands().length
+
+    if (query !== lastCommandQuery) {
+      lastCommandQuery = query
+      setSelectedIndex(0)
+      resetScrollPosition()
+      return
+    }
+
+    if (count <= 0) {
+      if (selectedIndex() !== 0) {
+        setSelectedIndex(0)
+      }
+      return
+    }
+
+    const current = selectedIndex()
+    if (current < 0) {
+      setSelectedIndex(0)
+      return
+    }
+    if (current >= count) {
+      setSelectedIndex(count - 1)
+    }
   })
 
   const allItems = (): PickerItem[] => {
@@ -335,20 +366,24 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
 
     if (e.key === "ArrowDown") {
       e.preventDefault()
+      e.stopPropagation()
       setSelectedIndex((prev) => Math.min(prev + 1, items.length - 1))
       scrollToSelected()
     } else if (e.key === "ArrowUp") {
       e.preventDefault()
+      e.stopPropagation()
       setSelectedIndex((prev) => Math.max(prev - 1, 0))
       scrollToSelected()
     } else if (e.key === "Enter" || e.key === "Tab") {
       e.preventDefault()
+      e.stopPropagation()
       const selected = items[selectedIndex()]
       if (selected) {
         handleSelect(selected)
       }
     } else if (e.key === "Escape") {
       e.preventDefault()
+      e.stopPropagation()
       props.onClose()
     }
   }
@@ -375,7 +410,7 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
     }
     return ""
   }
- 
+
   return (
 
     <Show when={props.open}>
@@ -402,12 +437,12 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
           <Show when={mode() === "command" && commandCount() > 0}>
             <div class="dropdown-section-header">{t("unifiedPicker.sections.commands")}</div>
             <For each={filteredCommands()}>
-              {(command) => {
-                const itemIndex = allItems().findIndex((item) => item.type === "command" && item.command.name === command.name)
+              {(command, index) => {
+                const isSelected = () => index() === selectedIndex()
                 return (
                   <div
-                    class={`dropdown-item ${itemIndex === selectedIndex() ? "dropdown-item-highlight" : ""}`}
-                    data-picker-selected={itemIndex === selectedIndex()}
+                    class={`dropdown-item ${isSelected() ? "dropdown-item-highlight" : ""}`}
+                    data-picker-selected={isSelected()}
                     onClick={() => handleSelect({ type: "command", command })}
                   >
                     <div class="flex items-start gap-2">
@@ -440,9 +475,8 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
                 )
                 return (
                   <div
-                    class={`dropdown-item ${
-                      itemIndex === selectedIndex() ? "dropdown-item-highlight" : ""
-                    }`}
+                    class={`dropdown-item ${itemIndex === selectedIndex() ? "dropdown-item-highlight" : ""
+                      }`}
                     data-picker-selected={itemIndex === selectedIndex()}
                     onClick={() => handleSelect({ type: "agent", agent })}
                   >
@@ -496,9 +530,8 @@ const UnifiedPicker: Component<UnifiedPickerProps> = (props) => {
                 const isFolder = file.isDirectory
                 return (
                   <div
-                    class={`dropdown-item py-1.5 ${
-                      itemIndex === selectedIndex() ? "dropdown-item-highlight" : ""
-                    }`}
+                    class={`dropdown-item py-1.5 ${itemIndex === selectedIndex() ? "dropdown-item-highlight" : ""
+                      }`}
                     data-picker-selected={itemIndex === selectedIndex()}
                     onClick={() => handleSelect({ type: "file", file })}
                   >

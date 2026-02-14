@@ -6,11 +6,12 @@ import { useI18n } from "../../lib/i18n"
 interface ContextUsagePanelProps {
   instanceId: string
   sessionId: string
+  class?: string
 }
 
 const chipClass = "inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary"
-const chipLabelClass = "uppercase text-[10px] tracking-wide text-muted"
-const headingClass = "text-xs font-semibold text-muted uppercase tracking-wide"
+const chipLabelClass = "uppercase text-[10px] tracking-wide text-primary/70"
+const headingClass = "text-xs font-semibold text-primary/70 uppercase tracking-wide"
 
 const ContextUsagePanel: Component<ContextUsagePanelProps> = (props) => {
   const { t } = useI18n()
@@ -33,7 +34,7 @@ const ContextUsagePanel: Component<ContextUsagePanelProps> = (props) => {
   const outputTokens = createMemo(() => info().outputTokens ?? 0)
   const actualUsageTokens = createMemo(() => info().actualUsageTokens ?? 0)
   const availableTokens = createMemo(() => info().contextAvailableTokens)
-  const outputLimit = createMemo(() => info().modelOutputLimit ?? 0)
+  const _outputLimit = createMemo(() => info().modelOutputLimit ?? 0)
   const costValue = createMemo(() => {
     const value = info().isSubscriptionModel ? 0 : info().cost
     return value > 0 ? value : 0
@@ -48,8 +49,8 @@ const ContextUsagePanel: Component<ContextUsagePanelProps> = (props) => {
   const costDisplay = createMemo(() => `$${costValue().toFixed(2)}`)
 
   return (
-    <div class="session-context-panel border-r border-base border-b px-3 py-3 space-y-3">
-      <div class="flex flex-wrap items-center gap-2 text-xs text-primary">
+    <div class={`session-context-panel border-r border-base border-b px-3 py-3 space-y-3 ${props.class ?? ""}`.trim()}>
+      <div class="flex flex-wrap items-center gap-2 text-xs text-primary/90">
         <div class={headingClass}>{t("contextUsagePanel.headings.tokens")}</div>
         <div class={chipClass}>
           <span class={chipLabelClass}>{t("contextUsagePanel.labels.input")}</span>
@@ -65,7 +66,7 @@ const ContextUsagePanel: Component<ContextUsagePanelProps> = (props) => {
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 text-xs text-primary">
+      <div class="flex flex-wrap items-center gap-2 text-xs text-primary/90">
         <div class={headingClass}>{t("contextUsagePanel.headings.context")}</div>
         <div class={chipClass}>
           <span class={chipLabelClass}>{t("contextUsagePanel.labels.used")}</span>

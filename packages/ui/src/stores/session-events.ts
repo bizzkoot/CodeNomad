@@ -7,6 +7,7 @@ import type {
 } from "../types/message"
 import type {
   EventSessionCompacted,
+  EventSessionDiff,
   EventSessionError,
   EventSessionIdle,
   EventSessionUpdated,
@@ -18,17 +19,8 @@ import { getLogger } from "../lib/logger"
 import { requestData } from "../lib/opencode-api"
 import { getPermissionId, getPermissionKind, getRequestIdFromPermissionReply } from "../types/permission"
 import type { PermissionReplyEventPropertiesLike, PermissionRequestLike } from "../types/permission"
-import { getQuestionId, getRequestIdFromQuestionReply } from "../types/question"
-import type { QuestionRequest } from "../types/question"
-import type { EventQuestionReplied, EventQuestionRejected } from "@opencode-ai/sdk/v2"
 import { showToastNotification, ToastVariant } from "../lib/notifications"
-import {
-  instances,
-  addPermissionToQueue,
-  removePermissionFromQueue,
-  addQuestionToQueue,
-  removeQuestionFromQueue,
-} from "./instances"
+import { instances, addPermissionToQueue, removePermissionFromQueue, getPermissionQueue, handlePermissionFailure } from "./instances"
 import { showAlertDialog } from "./alerts"
 import { createClientSession, mapSdkSessionStatus, type Session, type SessionStatus } from "../types/session"
 import { sessions, setSessions, syncInstanceSessionIndicator, withSession } from "./session-state"
@@ -37,18 +29,18 @@ import { updateSessionInfo } from "./message-v2/session-info"
 import { tGlobal } from "../lib/i18n"
 
 import { loadMessages } from "./session-api"
+import { renameSession } from "./session-actions"
+import { getQuestionQueue, handleQuestionFailure } from "./questions"
 import {
   applyPartUpdateV2,
   replaceMessageIdV2,
-  reconcilePendingQuestionsV2,
   upsertMessageInfoV2,
   upsertPermissionV2,
-  upsertQuestionV2,
   removeMessagePartV2,
   removeMessageV2,
   removePermissionV2,
-  removeQuestionV2,
   setSessionRevertV2,
+  ensureSessionMetadataV2,
 } from "./message-v2/bridge"
 import { messageStoreBus } from "./message-v2/bus"
 import type { InstanceMessageStore } from "./message-v2/instance-store"
@@ -115,7 +107,6 @@ async function fetchSessionInfo(instanceId: string, sessionId: string): Promise<
         model: existing?.model ?? fetched.model,
         status: existing?.status === "compacting" ? "compacting" : fetched.status,
         pendingPermission: existing?.pendingPermission ?? fetched.pendingPermission,
-        pendingQuestion: existing?.pendingQuestion ?? false,
       }
       instanceSessions.set(sessionId, merged)
       next.set(instanceId, instanceSessions)
@@ -181,18 +172,16 @@ function findPendingMessageId(
 }
 
 function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | MessagePartUpdatedEvent): void {
-  const instanceSessions = sessions().get(instanceId)
-
   if (event.type === "message.part.updated") {
     const rawPart = event.properties?.part
     if (!rawPart) return
- 
+
     const part = normalizeMessagePart(rawPart)
     const messageInfo = (event as any)?.properties?.message as MessageInfo | undefined
- 
+
     const fallbackSessionId = typeof messageInfo?.sessionID === "string" ? messageInfo.sessionID : undefined
     const fallbackMessageId = typeof messageInfo?.id === "string" ? messageInfo.id : undefined
- 
+
     const sessionId = typeof part.sessionID === "string" ? part.sessionID : fallbackSessionId
     const messageId = typeof part.messageID === "string" ? part.messageID : fallbackMessageId
     if (!sessionId || !messageId) return
@@ -229,13 +218,8 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
     if (messageInfo) {
       upsertMessageInfoV2(instanceId, messageInfo, { status: "streaming" })
     }
- 
-    applyPartUpdateV2(instanceId, { ...part, sessionID: sessionId, messageID: messageId })
 
-    if (part.type === "tool" && part.tool === "question") {
-      // Questions can arrive before their tool part exists; re-link now.
-      reconcilePendingQuestionsV2(instanceId, sessionId)
-    }
+    applyPartUpdateV2(instanceId, { ...part, sessionID: sessionId, messageID: messageId })
 
     updateSessionInfo(instanceId, sessionId)
   } else if (event.type === "message.updated") {
@@ -246,20 +230,8 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
     const messageId = typeof info.id === "string" ? info.id : undefined
     if (!sessionId || !messageId) return
 
-    const timeInfo = (info.time ?? {}) as { created?: number; updated?: number; completed?: number }
-    const nextUpdated =
-      typeof timeInfo.completed === "number" && timeInfo.completed > 0
-        ? timeInfo.completed
-        : typeof timeInfo.updated === "number" && timeInfo.updated > 0
-          ? timeInfo.updated
-          : typeof timeInfo.created === "number" && timeInfo.created > 0
-            ? timeInfo.created
-            : Date.now()
-
     withSession(instanceId, sessionId, (session) => {
-      const currentUpdated = session.time?.updated ?? 0
-      if (nextUpdated <= currentUpdated) return false
-      session.time = { ...(session.time ?? {}), updated: nextUpdated }
+      session.time = { ...(session.time ?? {}), updated: Date.now() }
     })
 
     const store = messageStoreBus.getOrCreate(instanceId)
@@ -293,6 +265,34 @@ function handleMessageUpdate(instanceId: string, event: MessageUpdateEvent | Mes
     upsertMessageInfoV2(instanceId, info, { status, bumpRevision: true })
 
     updateSessionInfo(instanceId, sessionId)
+
+    // Auto-rename session using first user message (Zero-cost)
+    if (role === "assistant" && status === "complete") {
+      const session = sessions().get(instanceId)?.get(sessionId)
+      if (session && session.title.startsWith("New session - ")) {
+        const store = messageStoreBus.getOrCreate(instanceId)
+        const messageIds = store.getSessionMessageIds(sessionId)
+        const firstUserMsgId = messageIds.find(id => store.getMessage(id)?.role === "user")
+        
+        if (firstUserMsgId) {
+          const firstMsg = store.getMessage(firstUserMsgId)
+          if (firstMsg && firstMsg.parts) {
+            const textPart = Object.values(firstMsg.parts).find((p) => p.data.type === "text")
+            
+            if (textPart && textPart.data.type === "text" && typeof textPart.data.text === "string") {
+               let newTitle = textPart.data.text.slice(0, 50).trim()
+               if (textPart.data.text.length > 50) newTitle += "..."
+               
+               if (newTitle) {
+                 renameSession(instanceId, sessionId, newTitle).catch((err) => {
+                   log.error("Failed to auto-rename session", err)
+                 })
+               }
+            }
+          }
+        }
+      }
+    }
   }
 }
 
@@ -321,9 +321,9 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
       time: info.time
         ? { ...info.time }
         : {
-            created: Date.now(),
-            updated: Date.now(),
-          },
+          created: Date.now(),
+          updated: Date.now(),
+        },
     } as Session
 
     let updatedInstanceSessions: Map<string, Session> | undefined
@@ -339,6 +339,7 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
 
     syncInstanceSessionIndicator(instanceId, updatedInstanceSessions)
     setSessionRevertV2(instanceId, info.id, info.revert ?? null)
+    ensureSessionMetadataV2(instanceId, newSession)
 
     log.info(`[SSE] New session created: ${info.id}`, newSession)
   } else {
@@ -353,11 +354,11 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
       time: mergedTime,
       revert: info.revert
         ? {
-            messageID: info.revert.messageID,
-            partID: info.revert.partID,
-            snapshot: info.revert.snapshot,
-            diff: info.revert.diff,
-          }
+          messageID: info.revert.messageID,
+          partID: info.revert.partID,
+          snapshot: info.revert.snapshot,
+          diff: info.revert.diff,
+        }
         : existingSession.revert,
     }
 
@@ -374,6 +375,7 @@ function handleSessionUpdate(instanceId: string, event: EventSessionUpdated): vo
 
     syncInstanceSessionIndicator(instanceId, updatedInstanceSessions)
     setSessionRevertV2(instanceId, info.id, info.revert ?? null)
+    ensureSessionMetadataV2(instanceId, updatedSession)
   }
 }
 
@@ -383,6 +385,29 @@ function handleSessionIdle(instanceId: string, event: EventSessionIdle): void {
 
   ensureSessionStatus(instanceId, sessionId, "idle")
   log.info(`[SSE] Session idle: ${sessionId}`)
+
+  // Get instance folder path for persistent storage
+  const instance = instances().get(instanceId)
+  const folderPath = instance?.folder ?? ""
+
+  // When session goes idle, any pending questions that weren't answered = timed out
+  // Move them to failed notifications
+  const pendingQuestions = getQuestionQueue(instanceId)
+  if (pendingQuestions.length > 0) {
+    log.info(`[SSE] Session idle with ${pendingQuestions.length} pending questions, moving to failed notifications`)
+    pendingQuestions.forEach((q) => {
+      handleQuestionFailure(instanceId, q.id, "timeout", folderPath)
+    })
+  }
+
+  // Also cleanup pending permissions
+  const pendingPermissions = getPermissionQueue(instanceId)
+  if (pendingPermissions.length > 0) {
+    log.info(`[SSE] Session idle with ${pendingPermissions.length} pending permissions, moving to failed notifications`)
+    pendingPermissions.forEach((p) => {
+      handlePermissionFailure(instanceId, p.id, "timeout", folderPath)
+    })
+  }
 }
 
 function handleSessionStatus(instanceId: string, event: EventSessionStatus): void {
@@ -424,6 +449,24 @@ function handleSessionCompacted(instanceId: string, event: EventSessionCompacted
     variant: "info",
     duration: 10000,
   })
+}
+
+function handleSessionDiff(instanceId: string, event: EventSessionDiff): void {
+  const sessionId = event.properties?.sessionID
+  if (!sessionId) return
+
+  const nextDiff = (event.properties as { diff?: unknown } | undefined)?.diff
+  if (!Array.isArray(nextDiff)) return
+
+  withSession(instanceId, sessionId, (session) => {
+    session.diff = nextDiff as any
+    session.time = {
+      ...(session.time ?? {}),
+      updated: Date.now(),
+    }
+  })
+
+  log.info(`[SSE] Session diff updated: ${sessionId}`)
 }
 
 function handleSessionError(_instanceId: string, event: EventSessionError): void {
@@ -500,37 +543,14 @@ function handlePermissionReplied(instanceId: string, event: { type: string; prop
   removePermissionV2(instanceId, requestId)
 }
 
-function handleQuestionAsked(instanceId: string, event: { type: string; properties?: QuestionRequest } | any): void {
-  const request = event?.properties as QuestionRequest | undefined
-  if (!request) return
-
-  log.info(`[SSE] Question asked: ${getQuestionId(request)}`)
-  addQuestionToQueue(instanceId, request)
-  upsertQuestionV2(instanceId, request)
-}
-
-function handleQuestionAnswered(
-  instanceId: string,
-  event: { type: string; properties?: EventQuestionReplied["properties"] | EventQuestionRejected["properties"] } | any,
-): void {
-  const properties = event?.properties as EventQuestionReplied["properties"] | EventQuestionRejected["properties"] | undefined
-  const requestId = getRequestIdFromQuestionReply(properties)
-  if (!requestId) return
-
-  log.info(`[SSE] Question answered: ${requestId}`)
-  removeQuestionFromQueue(instanceId, requestId)
-  removeQuestionV2(instanceId, requestId)
-}
-
 export {
   handleMessagePartRemoved,
   handleMessageRemoved,
   handleMessageUpdate,
   handlePermissionReplied,
   handlePermissionUpdated,
-  handleQuestionAsked,
-  handleQuestionAnswered,
   handleSessionCompacted,
+  handleSessionDiff,
   handleSessionError,
   handleSessionIdle,
   handleSessionStatus,

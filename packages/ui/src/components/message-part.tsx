@@ -4,36 +4,30 @@ import { isItemExpanded, toggleItemExpanded } from "../stores/tool-call-state"
 import { Markdown } from "./markdown"
 import { useTheme } from "../lib/theme"
 import { useConfig } from "../stores/preferences"
-import { partHasRenderableText, SDKPart, TextPart, ClientPart } from "../types/message"
+import { partHasRenderableText, TextPart, ClientPart } from "../types/message"
 
 type ToolCallPart = Extract<ClientPart, { type: "tool" }>
 
 interface MessagePartProps {
   part: ClientPart
   messageType?: "user" | "assistant"
+  messageId: string
+  partIndex: number
   instanceId: string
   sessionId: string
   onRendered?: () => void
  }
-  export default function MessagePart(props: MessagePartProps) {
+ export default function MessagePart(props: MessagePartProps) {
 
   const { isDark } = useTheme()
-  const { preferences } = useConfig()
+  const _preferences = useConfig()
   const partType = () => props.part?.type || ""
   const reasoningId = () => `reasoning-${props.part?.id || ""}`
-  const isReasoningExpanded = () => isItemExpanded(reasoningId())
+  const _isReasoningExpanded = () => isItemExpanded(reasoningId())
   const isAssistantMessage = () => props.messageType === "assistant"
   const textContainerClass = () => (isAssistantMessage() ? "message-text message-text-assistant" : "message-text")
 
-  const shouldHideTextPart = () => {
-    const part = props.part
-    if (!part || part.type !== "text") return false
-    // Keep optimistic user prompts visible; hide synthetic assistant text.
-    return Boolean((part as any).synthetic) && props.messageType !== "user"
-  }
-
-
-  const plainTextContent = () => {
+  const _plainTextContent = () => {
     const part = props.part
 
     if ((part.type === "text" || part.type === "reasoning") && typeof part.text === "string") {
@@ -62,7 +56,7 @@ interface MessagePartProps {
     return false
   }
 
-  const hasReasoningContent = () => {
+  const _hasReasoningContent = () => {
     if (props.part?.type !== "reasoning") {
       return false
     }
@@ -94,7 +88,7 @@ interface MessagePartProps {
     }
   }
 
-  function handleReasoningClick(e: Event) {
+  function _handleReasoningClick(e: Event) {
     e.preventDefault()
     toggleItemExpanded(reasoningId())
   }
@@ -102,23 +96,19 @@ interface MessagePartProps {
   return (
     <Switch>
       <Match when={partType() === "text"}>
-        <Show when={!shouldHideTextPart() && partHasRenderableText(props.part)}>
+        <Show when={!(props.part.type === "text" && props.part.synthetic) && partHasRenderableText(props.part)}>
           <div class={textContainerClass()}>
-                <Show
-                 when={isAssistantMessage()}
-                 fallback={<span class="text-primary">{plainTextContent()}</span>}
-               >
-                 <Markdown
-                   part={createTextPartForMarkdown()}
-                   instanceId={props.instanceId}
-                   sessionId={props.sessionId}
-                   isDark={isDark()}
-                 size={isAssistantMessage() ? "tight" : "base"}
-                 onRendered={props.onRendered}
-               />
-              </Show>
-
-           </div>
+            <Markdown
+              part={createTextPartForMarkdown()}
+              instanceId={props.instanceId}
+              sessionId={props.sessionId}
+              messageId={props.messageId}
+              partIndex={props.partIndex}
+              isDark={isDark()}
+              size={isAssistantMessage() ? "tight" : "base"}
+              onRendered={props.onRendered}
+            />
+          </div>
         </Show>
       </Match>
 

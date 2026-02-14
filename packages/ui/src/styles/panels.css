@@ -3,6 +3,7 @@
 @import "./panels/modal.css";
 @import "./panels/panel-shell.css";
 @import "./panels/session-layout.css";
+@import "./panels/right-panel.css";
 
 
 .tab-bar-instance {
@@ -32,11 +33,13 @@
 .tab-active {
   background-color: var(--tab-active-bg);
   color: var(--tab-active-text);
+  border-bottom: 2px solid var(--accent-primary);
 }
 
 .tab-inactive {
   background-color: var(--tab-inactive-bg);
   color: var(--tab-inactive-text);
+  border-bottom: 2px solid var(--tab-active-bg);
 }
 
 .tab-inactive:hover {
@@ -243,6 +246,29 @@
   padding: 0.125rem 0.5rem;
   border-radius: 9999px;
   border: 1px solid transparent;
+}
+
+/* Session list worktree pill */
+.status-indicator.worktree-indicator {
+  /* Match session title in selected state. */
+  color: var(--text-primary);
+  /* Use inactive session title color as the tint source. */
+  background-color: color-mix(in oklab, var(--text-secondary) 18%, transparent);
+  border-color: color-mix(in oklab, var(--text-secondary) 28%, transparent);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.session-item-active .status-indicator.worktree-indicator {
+  background-color: color-mix(in oklab, var(--text-primary) 14%, transparent);
+  border-color: color-mix(in oklab, var(--text-primary) 22%, transparent);
+}
+
+.status-indicator.worktree-indicator .worktree-indicator-label {
+  white-space: nowrap;
+  max-width: 10rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Empty state */

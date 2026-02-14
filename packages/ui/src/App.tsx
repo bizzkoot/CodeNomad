@@ -19,6 +19,7 @@ import { getLogger } from "./lib/logger"
 import { initReleaseNotifications } from "./stores/releases"
 import { runtimeEnv } from "./lib/runtime-env"
 import { useI18n } from "./lib/i18n"
+import { setWakeLockDesired } from "./lib/native/wake-lock"
 import {
   hasInstances,
   isSelectingFolder,
@@ -48,6 +49,8 @@ import {
   updateSessionModel,
 } from "./stores/sessions"
 
+import { getInstanceSessionIndicatorStatus } from "./stores/session-status"
+
 const log = getLogger("actions")
 
 const App: Component = () => {
@@ -60,6 +63,7 @@ const App: Component = () => {
     toggleShowTimelineTools,
     toggleAutoCleanupBlankSessions,
     toggleUsageMetrics,
+    togglePromptSubmitOnEnter,
     setDiffViewMode,
     setToolOutputExpansion,
     setDiagnosticsExpansion,
@@ -88,6 +92,26 @@ const App: Component = () => {
 
   createEffect(() => {
     initReleaseNotifications()
+  })
+
+  const shouldHoldWakeLock = createMemo(() => {
+    const map = instances()
+    for (const id of map.keys()) {
+      const status = getInstanceSessionIndicatorStatus(id)
+      if (status !== "idle") {
+        return true
+      }
+    }
+    return false
+  })
+
+  createEffect(() => {
+    const hold = shouldHoldWakeLock()
+    void setWakeLockDesired(hold)
+  })
+
+  onCleanup(() => {
+    void setWakeLockDesired(false)
   })
 
   createEffect(() => {
@@ -271,6 +295,7 @@ const App: Component = () => {
     toggleShowThinkingBlocks,
     toggleShowTimelineTools,
     toggleUsageMetrics,
+    togglePromptSubmitOnEnter,
     setDiffViewMode,
     setToolOutputExpansion,
     setDiagnosticsExpansion,
@@ -329,32 +354,34 @@ const App: Component = () => {
       <Dialog open={Boolean(launchError())} modal>
         <Dialog.Portal>
           <Dialog.Overlay class="modal-overlay" />
-          <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <Dialog.Content class="modal-surface w-full max-w-md p-6 flex flex-col gap-6">
-              <div>
-                <Dialog.Title class="text-xl font-semibold text-primary">{t("app.launchError.title")}</Dialog.Title>
-                <Dialog.Description class="text-sm text-secondary mt-2 break-words">
-                  {t("app.launchError.description")}
-                </Dialog.Description>
-              </div>
+           <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+             <Dialog.Content class="modal-surface w-full max-w-3xl p-6 flex flex-col gap-6 max-h-[80vh] min-h-0 overflow-hidden">
+               <div>
+                 <Dialog.Title class="text-xl font-semibold text-primary">{t("app.launchError.title")}</Dialog.Title>
+                 <Dialog.Description class="text-sm text-secondary mt-2 break-words">
+                   {t("app.launchError.description")}
+                 </Dialog.Description>
+               </div>
 
-              <div class="rounded-lg border border-base bg-surface-secondary p-4">
-                <p class="text-xs font-medium text-muted uppercase tracking-wide mb-1">{t("app.launchError.binaryPathLabel")}</p>
-                <p class="text-sm font-mono text-primary break-all">{launchErrorPath()}</p>
-              </div>
+               <div class={`flex flex-col gap-4 ${launchErrorMessage() ? "flex-1 min-h-0" : ""}`}>
+                 <div class="rounded-lg border border-base bg-surface-secondary p-4 flex-shrink-0">
+                   <p class="text-xs font-medium text-muted uppercase tracking-wide mb-1">{t("app.launchError.binaryPathLabel")}</p>
+                   <p class="text-sm font-mono text-primary break-all">{launchErrorPath()}</p>
+                 </div>
+ 
+                 <Show when={launchErrorMessage()}>
+                   <div class="rounded-lg border border-base bg-surface-secondary p-4 flex flex-col gap-2 flex-1 min-h-0">
+                     <p class="text-xs font-medium text-muted uppercase tracking-wide">{t("app.launchError.errorOutputLabel")}</p>
+                     <pre class="text-sm font-mono text-primary whitespace-pre-wrap break-words overflow-auto flex-1 min-h-0">{launchErrorMessage()}</pre>
+                   </div>
+                 </Show>
+               </div>
 
-              <Show when={launchErrorMessage()}>
-                <div class="rounded-lg border border-base bg-surface-secondary p-4">
-                  <p class="text-xs font-medium text-muted uppercase tracking-wide mb-1">{t("app.launchError.errorOutputLabel")}</p>
-                  <pre class="text-sm font-mono text-primary whitespace-pre-wrap break-words max-h-48 overflow-y-auto">{launchErrorMessage()}</pre>
-                </div>
-              </Show>
-
-              <div class="flex justify-end gap-2">
-                <Show when={launchError()?.missingBinary}>
-                  <button
-                    type="button"
-                    class="selector-button selector-button-secondary"
+               <div class="flex justify-end gap-2">
+                 <Show when={launchError()?.missingBinary}>
+                   <button
+                     type="button"
+                     class="selector-button selector-button-secondary"
                     onClick={handleLaunchErrorAdvanced}
                   >
                     {t("app.launchError.openAdvancedSettings")}

@@ -1,4 +1,4 @@
-@import "github-markdown-css/github-markdown-dark.css";
+@import "github-markdown-css/github-markdown-light.css" layer(github-markdown-base);
 
 @layer components {
   .markdown-body {
@@ -108,15 +108,115 @@
     background: transparent;
   }
 
-  .markdown-body pre {
+  .markdown-body pre:not(.shiki) {
     font-family: var(--font-family-mono);
     font-size: var(--font-size-sm);
     line-height: var(--line-height-normal);
     background-color: var(--surface-code);
+    color: var(--text-primary);
     border: 1px solid var(--border-base);
     border-radius: 8px;
     padding: 0.75rem;
     margin: 1rem 0;
+  }
+
+  .markdown-body pre:not(.shiki) code,
+  .markdown-code-block pre:not(.shiki) code {
+    color: var(--text-primary);
+  }
+
+  /* Shiki github-dark theme has dark text (for light backgrounds). Override in dark mode. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .markdown-body .shiki,
+    :root:not([data-theme]) .markdown-body .shiki code {
+      color: var(--code-text-primary, #e2e8f0) !important;
+    }
+
+    :root:not([data-theme]) .markdown-body .shiki .line,
+    :root:not([data-theme]) .markdown-body .shiki .line span {
+      color: inherit !important;
+    }
+  }
+
+  [data-theme="dark"] .markdown-body .shiki,
+  [data-theme="dark"] .markdown-body .shiki code {
+    color: var(--code-text-primary, #e2e8f0) !important;
+  }
+
+  [data-theme="dark"] .markdown-body .shiki .line,
+  [data-theme="dark"] .markdown-body .shiki .line span {
+    color: inherit !important;
+  }
+
+  /* Diff highlighting for Shiki code blocks (+ additions, - deletions) using JS-added classes */
+  .markdown-body .shiki .line {
+    position: relative;
+  }
+
+  /* Light mode */
+  .markdown-body .shiki .line.diff-added {
+    background-color: rgba(22, 163, 74, 0.08);
+  }
+
+  .markdown-body .shiki .line.diff-removed {
+    background-color: rgba(220, 38, 38, 0.08);
+  }
+
+  .markdown-body .shiki .line.diff-added span:first-child {
+    color: var(--status-success, #16a34a) !important;
+    font-weight: 600;
+  }
+
+  .markdown-body .shiki .line.diff-removed span:first-child {
+    color: var(--status-error, #dc2626) !important;
+    font-weight: 600;
+  }
+
+  .markdown-body .shiki .line.diff-added span:first-child ~ * {
+    color: var(--status-success, #16a34a) !important;
+  }
+
+  .markdown-body .shiki .line.diff-removed span:first-child ~ * {
+    color: var(--status-error, #dc2626) !important;
+  }
+
+  /* Dark mode */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-added {
+      background-color: rgba(74, 222, 128, 0.12);
+    }
+
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-removed {
+      background-color: rgba(248, 113, 113, 0.12);
+    }
+
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-added span:first-child,
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-added span:first-child ~ * {
+      color: var(--status-success, #4ade80) !important;
+    }
+
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-removed span:first-child,
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-removed span:first-child ~ * {
+      color: var(--status-error, #f87171) !important;
+    }
+  }
+
+  [data-theme="dark"] .markdown-body .shiki .line.diff-added {
+    background-color: rgba(74, 222, 128, 0.12);
+  }
+
+  [data-theme="dark"] .markdown-body .shiki .line.diff-removed {
+    background-color: rgba(248, 113, 113, 0.12);
+  }
+
+  [data-theme="dark"] .markdown-body .shiki .line.diff-added span:first-child,
+  [data-theme="dark"] .markdown-body .shiki .line.diff-added span:first-child ~ * {
+    color: var(--status-success, #4ade80) !important;
+  }
+
+  [data-theme="dark"] .markdown-body .shiki .line.diff-removed span:first-child,
+  [data-theme="dark"] .markdown-body .shiki .line.diff-removed span:first-child ~ * {
+    color: var(--status-error, #f87171) !important;
   }
 
   .markdown-body blockquote {
@@ -151,16 +251,6 @@
     width: 100%;
     margin: 1rem 0;
     background-color: transparent;
-    display: block;
-    padding-right: 0.75rem;
-  }
-
-  .markdown-body thead,
-  .markdown-body tbody,
-  .markdown-body tfoot {
-    width: 100%;
-    display: table;
-    table-layout: fixed;
   }
 
   .markdown-body th,
@@ -168,10 +258,20 @@
     border: 1px solid var(--border-base);
     padding: 0.5rem 0.75rem;
     text-align: left;
+    color: var(--text-primary);
+    background-color: transparent;
   }
 
   .markdown-body th {
     background-color: var(--surface-secondary);
+  }
+
+  .markdown-body tbody > tr:nth-child(odd) > td {
+    background-color: var(--markdown-table-row-odd);
+  }
+
+  .markdown-body tbody > tr:nth-child(even) > td {
+    background-color: var(--markdown-table-row-even);
   }
 
   .markdown-code-block {

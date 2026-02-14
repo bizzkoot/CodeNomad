@@ -1,10 +1,5 @@
-import type {
-  Session as SDKSession,
-  Agent as SDKAgent,
-  Provider as SDKProvider,
-  Model as SDKModel,
-} from "@opencode-ai/sdk"
 import type { SessionStatus as SDKSessionStatus } from "@opencode-ai/sdk/v2/client"
+import type { FileDiff } from "@opencode-ai/sdk/v2/client"
 
 // Export SDK types for external use
 export type { 
@@ -39,6 +34,7 @@ export interface Session
   pendingPermission?: boolean // Indicates if session is waiting on user permission
   pendingQuestion?: boolean // Indicates if session is waiting on user input
   status: SessionStatus // Single source of truth for session status
+  diff?: FileDiff[] // Session-level file diffs (hydrated via session.diff)
 }
 
 // Adapter function to convert SDK Session to client Session

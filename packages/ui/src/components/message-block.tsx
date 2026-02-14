@@ -1,5 +1,5 @@
-import { For, Match, Show, Switch, createEffect, createMemo, createSignal, untrack } from "solid-js"
-import { ExternalLink, FoldVertical, Trash2 } from "lucide-solid"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { FoldVertical } from "lucide-solid"
 import MessageItem from "./message-item"
 import ToolCall from "./tool-call"
 import type { InstanceMessageStore } from "../stores/message-v2/instance-store"
@@ -11,14 +11,14 @@ import { messageStoreBus } from "../stores/message-v2/bus"
 import { formatTokenTotal } from "../lib/formatters"
 import { sessions, setActiveParentSession, setActiveSession } from "../stores/sessions"
 import { setActiveInstanceId } from "../stores/instances"
-import { showAlertDialog } from "../stores/alerts"
-import { deleteMessagePart } from "../stores/session-actions"
 import { useI18n } from "../lib/i18n"
+import { SECTION_EXPANSION_EVENT, type SectionExpansionRequest } from "../lib/section-expansion"
 
 const TOOL_ICON = "🔧"
 const USER_BORDER_COLOR = "var(--message-user-border)"
 const ASSISTANT_BORDER_COLOR = "var(--message-assistant-border)"
 const TOOL_BORDER_COLOR = "var(--message-tool-border)"
+const QUESTION_BORDER_COLOR = "var(--message-question-border)"
 
 type ToolCallPart = Extract<ClientPart, { type: "tool" }>
 
@@ -174,256 +174,21 @@ messageStoreBus.onInstanceDestroyed(clearInstanceCaches)
 interface ContentDisplayItem {
   type: "content"
   key: string
-  messageId: string
-  startPartId: string
+  record: MessageRecord
+  parts: ClientPart[]
+  messageInfo?: MessageInfo
+  isQueued: boolean
+  showAgentMeta?: boolean
 }
 
 interface ToolDisplayItem {
   type: "tool"
   key: string
+  toolPart: ToolCallPart
+  messageInfo?: MessageInfo
   messageId: string
-  partId: string
-}
-
-interface MessageContentItemProps {
-  instanceId: string
-  sessionId: string
-  store: () => InstanceMessageStore
-  messageId: string
-  startPartId: string
-  messageIndex: number
-  lastAssistantIndex: () => number
-  onRevert?: (messageId: string) => void
-  onFork?: (messageId?: string) => void
-  onContentRendered?: () => void
-}
-
-function MessageContentItem(props: MessageContentItemProps) {
-  const record = createMemo(() => props.store().getMessage(props.messageId))
-  const messageInfo = createMemo(() => props.store().getMessageInfo(props.messageId))
-
-  const isQueued = createMemo(() => {
-    const current = record()
-    if (!current) return false
-    if (current.role !== "user") return false
-    const lastAssistant = props.lastAssistantIndex()
-    return lastAssistant === -1 || props.messageIndex > lastAssistant
-  })
-
-  const parts = createMemo<ClientPart[]>(() => {
-    const current = record()
-    if (!current) return []
-    const ids = current.partIds
-    const startIndex = ids.indexOf(props.startPartId)
-    if (startIndex === -1) return []
-
-    const resolved: ClientPart[] = []
-    for (let idx = startIndex; idx < ids.length; idx++) {
-      const partId = ids[idx]
-      const part = current.parts[partId]?.data
-      if (!part) continue
-      if (
-        part.type === "tool" ||
-        part.type === "reasoning" ||
-        part.type === "compaction" ||
-        part.type === "step-start" ||
-        part.type === "step-finish"
-      ) {
-        break
-      }
-      resolved.push(part)
-    }
-
-    return resolved
-  })
-
-  const showAgentMeta = createMemo(() => {
-    const current = record()
-    if (!current) return false
-    if (current.role !== "assistant") return false
-
-    const currentParts = parts()
-    if (!currentParts.some((part) => partHasRenderableText(part))) {
-      return false
-    }
-
-    const ids = current.partIds
-    const startIndex = ids.indexOf(props.startPartId)
-    if (startIndex === -1) return false
-
-    // Only show agent meta on the first content segment that contains renderable content.
-    for (let idx = 0; idx < startIndex; idx++) {
-      const partId = ids[idx]
-      const part = current.parts[partId]?.data
-      if (!part) continue
-      if (
-        part.type === "tool" ||
-        part.type === "reasoning" ||
-        part.type === "compaction" ||
-        part.type === "step-start" ||
-        part.type === "step-finish"
-      ) {
-        continue
-      }
-      if (partHasRenderableText(part)) {
-        return false
-      }
-    }
-
-    return true
-  })
-
-  return (
-    <Show when={record()}>
-      {(resolvedRecord) => (
-        <MessageItem
-          record={resolvedRecord()}
-          messageInfo={messageInfo()}
-          parts={parts()}
-          instanceId={props.instanceId}
-          sessionId={props.sessionId}
-          isQueued={isQueued()}
-          showAgentMeta={showAgentMeta()}
-          onRevert={props.onRevert}
-          onFork={props.onFork}
-          onContentRendered={props.onContentRendered}
-        />
-      )}
-    </Show>
-  )
-}
-
-interface ToolCallItemProps {
-  instanceId: string
-  sessionId: string
-  store: () => InstanceMessageStore
-  messageId: string
-  partId: string
-  onContentRendered?: () => void
-}
-
-function ToolCallItem(props: ToolCallItemProps) {
-  const { t } = useI18n()
-  const [deleting, setDeleting] = createSignal(false)
-
-  const record = createMemo(() => props.store().getMessage(props.messageId))
-  const messageInfo = createMemo(() => props.store().getMessageInfo(props.messageId))
-  const partEntry = createMemo(() => record()?.parts?.[props.partId])
-
-  const toolPart = createMemo(() => {
-    const part = partEntry()?.data as ClientPart | undefined
-    if (!part || part.type !== "tool") return undefined
-    return part as ToolCallPart
-  })
-
-  const toolState = createMemo(() => toolPart()?.state as ToolState | undefined)
-  const toolName = createMemo(() => toolPart()?.tool || "")
-  const messageVersion = createMemo(() => record()?.revision ?? 0)
-  const partVersion = createMemo(() => partEntry()?.revision ?? 0)
-
-  const deleteDisabled = createMemo(() => {
-    if (deleting()) return true
-    // Avoid deleting while a tool is actively running to prevent confusing UI states.
-    if (isToolStateRunning(toolState())) return true
-    // Avoid deleting permission prompts from here; those are interactive.
-    return Boolean(toolPart()?.pendingPermission)
-  })
-
-  const taskSessionId = createMemo(() => {
-    const state = toolState()
-    if (!state) return ""
-    if (!(isToolStateRunning(state) || isToolStateCompleted(state) || isToolStateError(state))) {
-      return ""
-    }
-    return extractTaskSessionId(state)
-  })
-
-  const taskLocation = createMemo(() => {
-    const id = taskSessionId()
-    if (!id) return null
-    return findTaskSessionLocation(id, props.instanceId)
-  })
-
-  const handleGoToTaskSession = (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
-    const location = taskLocation()
-    if (!location) return
-    navigateToTaskSession(location)
-  }
-
-  const handleDeleteToolPart = async (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
-
-    if (deleteDisabled()) return
-
-    setDeleting(true)
-    try {
-      await deleteMessagePart(props.instanceId, props.sessionId, props.messageId, props.partId)
-    } catch (error) {
-      showAlertDialog(t("messageBlock.tool.deletePart.failed.message"), {
-        title: t("messageBlock.tool.deletePart.failed.title"),
-        detail: error instanceof Error ? error.message : String(error),
-        variant: "error",
-      })
-    } finally {
-      setDeleting(false)
-    }
-  }
-
-  return (
-    <Show when={toolPart()}>
-      {(resolvedToolPart) => (
-        <>
-          <div class="tool-call-header-label">
-            <div class="tool-call-header-meta">
-              <span class="tool-call-icon">{TOOL_ICON}</span>
-              <span>{t("messageBlock.tool.header")}</span>
-              <span class="tool-name">{toolName() || t("messageBlock.tool.unknown")}</span>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <Show when={taskSessionId()}>
-                <button
-                  class="tool-call-header-button"
-                  type="button"
-                  disabled={!taskLocation()}
-                  onClick={handleGoToTaskSession}
-                  title={t("messageBlock.tool.goToSession.label")}
-                  aria-label={t("messageBlock.tool.goToSession.label")}
-                >
-                  <ExternalLink class="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
-              </Show>
-
-              <button
-                class="tool-call-header-button"
-                type="button"
-                disabled={deleteDisabled()}
-                onClick={handleDeleteToolPart}
-                title={deleting() ? t("messageBlock.tool.deletePart.deleting") : t("messageBlock.tool.deletePart.label")}
-                aria-label={deleting() ? t("messageBlock.tool.deletePart.deleting") : t("messageBlock.tool.deletePart.label")}
-              >
-                <Trash2 class="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
-
-          <ToolCall
-            toolCall={resolvedToolPart()}
-            toolCallId={props.partId}
-            messageId={props.messageId}
-            messageVersion={messageVersion()}
-            partVersion={partVersion()}
-            instanceId={props.instanceId}
-            sessionId={props.sessionId}
-            onContentRendered={props.onContentRendered}
-          />
-        </>
-      )}
-    </Show>
-  )
+  messageVersion: number
+  partVersion: number
 }
 
 interface StepDisplayItem {
@@ -441,8 +206,6 @@ type ReasoningDisplayItem = {
   messageInfo?: MessageInfo
   showAgentMeta?: boolean
   defaultExpanded: boolean
-  messageId: string
-  partId: string
 }
 
 type CompactionDisplayItem = {
@@ -451,8 +214,6 @@ type CompactionDisplayItem = {
   part: ClientPart
   messageInfo?: MessageInfo
   accentColor?: string
-  messageId: string
-  partId: string
 }
 
 type MessageBlockItem = ContentDisplayItem | ToolDisplayItem | StepDisplayItem | ReasoningDisplayItem | CompactionDisplayItem
@@ -513,35 +274,41 @@ export default function MessageBlock(props: MessageBlockProps) {
     const items: MessageBlockItem[] = []
     const blockContentKeys: string[] = []
     const blockToolKeys: string[] = []
+    let segmentIndex = 0
     let pendingParts: ClientPart[] = []
-    let agentMetaAttached = current.role !== "assistant"
+    let agentMetaAttached = false
     const defaultAccentColor = current.role === "user" ? USER_BORDER_COLOR : ASSISTANT_BORDER_COLOR
     let lastAccentColor = defaultAccentColor
 
     const flushContent = () => {
       if (pendingParts.length === 0) return
-      const startPartId = typeof (pendingParts[0] as any)?.id === "string" ? ((pendingParts[0] as any).id as string) : ""
-      if (!startPartId) {
-        pendingParts = []
-        return
-      }
-
-      if (!agentMetaAttached && pendingParts.some((part) => partHasRenderableText(part))) {
-        agentMetaAttached = true
-      }
-
-      const segmentKey = `${current.id}:content:${startPartId}`
+      const segmentKey = `${current.id}:segment:${segmentIndex}`
+      segmentIndex += 1
+      const shouldShowAgentMeta =
+        !agentMetaAttached &&
+        pendingParts.some((part) => partHasRenderableText(part))
       let cached = sessionCache.messageItems.get(segmentKey)
       if (!cached) {
         cached = {
           type: "content",
           key: segmentKey,
-          messageId: current.id,
-          startPartId,
+          record: current,
+          parts: pendingParts.slice(),
+          messageInfo: info,
+          isQueued,
+          showAgentMeta: shouldShowAgentMeta,
         }
         sessionCache.messageItems.set(segmentKey, cached)
+      } else {
+        cached.record = current
+        cached.parts = pendingParts.slice()
+        cached.messageInfo = info
+        cached.isQueued = isQueued
+        cached.showAgentMeta = shouldShowAgentMeta
       }
-
+      if (shouldShowAgentMeta) {
+        agentMetaAttached = true
+      }
       items.push(cached)
       blockContentKeys.push(segmentKey)
       lastAccentColor = defaultAccentColor
@@ -551,37 +318,42 @@ export default function MessageBlock(props: MessageBlockProps) {
     orderedParts.forEach((part, partIndex) => {
       if (part.type === "tool") {
         flushContent()
-        const partId = part.id
-        if (!partId) {
-          // Tool parts are required to have ids; if one slips through, skip rendering
-          // to avoid unstable keys and accidental remount cascades.
-          return
-        }
-        const key = `${current.id}:${partId}`
+        const partVersion = typeof (part as any).revision === "number" ? (part as any).revision : 0
+        const messageVersion = current.revision
+        const key = `${current.id}:${part.id ?? partIndex}`
         let toolItem = sessionCache.toolItems.get(key)
         if (!toolItem) {
           toolItem = {
             type: "tool",
             key,
+            toolPart: part as ToolCallPart,
+            messageInfo: info,
             messageId: current.id,
-            partId,
+            messageVersion,
+            partVersion,
           }
           sessionCache.toolItems.set(key, toolItem)
         } else {
           toolItem.key = key
+          toolItem.toolPart = part as ToolCallPart
+          toolItem.messageInfo = info
           toolItem.messageId = current.id
-          toolItem.partId = partId
+          toolItem.messageVersion = messageVersion
+          toolItem.partVersion = partVersion
         }
         items.push(toolItem)
         blockToolKeys.push(key)
-        lastAccentColor = TOOL_BORDER_COLOR
+
+        // Use purple border for question tools, regular tool border for others
+        const toolName = (part as ToolCallPart).tool
+        const isQuestionTool = toolName === 'ask_user' || toolName === 'question' || toolName === 'codenomad_ask_user'
+        lastAccentColor = isQuestionTool ? QUESTION_BORDER_COLOR : TOOL_BORDER_COLOR
         return
       }
 
       if (part.type === "compaction") {
         flushContent()
-        const partId = part.id ?? ""
-        const key = `${current.id}:${partId || partIndex}:compaction`
+        const key = `${current.id}:${part.id ?? partIndex}:compaction`
         const isAuto = Boolean((part as any)?.auto)
         items.push({
           type: "compaction",
@@ -589,8 +361,6 @@ export default function MessageBlock(props: MessageBlockProps) {
           part,
           messageInfo: info,
           accentColor: isAuto ? "var(--session-status-compacting-fg)" : USER_BORDER_COLOR,
-          messageId: current.id,
-          partId,
         })
         lastAccentColor = isAuto ? "var(--session-status-compacting-fg)" : USER_BORDER_COLOR
         return
@@ -615,9 +385,8 @@ export default function MessageBlock(props: MessageBlockProps) {
       if (part.type === "reasoning") {
         flushContent()
         if (props.showThinking() && reasoningHasRenderableContent(part)) {
-          const partId = part.id ?? ""
-          const key = `${current.id}:${partId || partIndex}:reasoning`
-          const showAgentMeta = current.role === "assistant" && !agentMetaAttached
+          const key = `${current.id}:${part.id ?? partIndex}:reasoning`
+          const showAgentMeta = !agentMetaAttached
           if (showAgentMeta) {
             agentMetaAttached = true
           }
@@ -628,8 +397,6 @@ export default function MessageBlock(props: MessageBlockProps) {
             messageInfo: info,
             showAgentMeta,
             defaultExpanded: props.thinkingDefaultExpanded(),
-            messageId: current.id,
-            partId,
           })
           lastAccentColor = ASSISTANT_BORDER_COLOR
         }
@@ -665,21 +432,21 @@ export default function MessageBlock(props: MessageBlockProps) {
   })
 
   return (
-    <Show when={block()}>
+    <Show when={block()} keyed>
       {(resolvedBlock) => (
-        <div class="message-stream-block" data-message-id={resolvedBlock().record.id}>
-          <For each={resolvedBlock().items}>
+        <div class="message-stream-block" data-message-id={resolvedBlock.record.id}>
+          <For each={resolvedBlock.items}>
             {(item) => (
               <Switch>
                 <Match when={item.type === "content"}>
-                  <MessageContentItem
+                  <MessageItem
+                    record={(item as ContentDisplayItem).record}
+                    messageInfo={(item as ContentDisplayItem).messageInfo}
+                    parts={(item as ContentDisplayItem).parts}
                     instanceId={props.instanceId}
                     sessionId={props.sessionId}
-                    store={props.store}
-                    messageId={(item as ContentDisplayItem).messageId}
-                    startPartId={(item as ContentDisplayItem).startPartId}
-                    messageIndex={props.messageIndex}
-                    lastAssistantIndex={props.lastAssistantIndex}
+                    isQueued={(item as ContentDisplayItem).isQueued}
+                    showAgentMeta={(item as ContentDisplayItem).showAgentMeta}
                     onRevert={props.onRevert}
                     onFork={props.onFork}
                     onContentRendered={props.onContentRendered}
@@ -688,14 +455,46 @@ export default function MessageBlock(props: MessageBlockProps) {
                 <Match when={item.type === "tool"}>
                   {(() => {
                     const toolItem = item as ToolDisplayItem
+                    const toolState = toolItem.toolPart.state as ToolState | undefined
+                    const hasToolState =
+                      Boolean(toolState) && (isToolStateRunning(toolState) || isToolStateCompleted(toolState) || isToolStateError(toolState))
+                    const taskSessionId = hasToolState ? extractTaskSessionId(toolState) : ""
+                    const taskLocation = taskSessionId ? findTaskSessionLocation(taskSessionId, props.instanceId) : null
+                    const handleGoToTaskSession = (event: MouseEvent) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      if (!taskLocation) return
+                      navigateToTaskSession(taskLocation)
+                    }
+
                     return (
                       <div class="tool-call-message" data-key={toolItem.key}>
-                        <ToolCallItem
+                        <div class="tool-call-header-label">
+                          <div class="tool-call-header-meta">
+                            <span class="tool-call-icon">{TOOL_ICON}</span>
+                            <span>{t("messageBlock.tool.header")}</span>
+                            <span class="tool-name">{toolItem.toolPart.tool || t("messageBlock.tool.unknown")}</span>
+                          </div>
+                          <Show when={taskSessionId}>
+                            <button
+                              class="tool-call-header-button"
+                              type="button"
+                              disabled={!taskLocation}
+                              onClick={handleGoToTaskSession}
+                              title={!taskLocation ? t("messageBlock.tool.goToSession.unavailableTitle") : t("messageBlock.tool.goToSession.title")}
+                            >
+                              {t("messageBlock.tool.goToSession.label")}
+                            </button>
+                          </Show>
+                        </div>
+                        <ToolCall
+                          toolCall={toolItem.toolPart}
+                          toolCallId={toolItem.toolPart.id}
+                          messageId={toolItem.messageId}
+                          messageVersion={toolItem.messageVersion}
+                          partVersion={toolItem.partVersion}
                           instanceId={props.instanceId}
                           sessionId={props.sessionId}
-                          store={props.store}
-                          messageId={toolItem.messageId}
-                          partId={toolItem.partId}
                           onContentRendered={props.onContentRendered}
                         />
                       </div>
@@ -703,12 +502,7 @@ export default function MessageBlock(props: MessageBlockProps) {
                   })()}
                 </Match>
                 <Match when={item.type === "step-start"}>
-                  <StepCard
-                    kind="start"
-                    part={(item as StepDisplayItem).part}
-                    messageInfo={(item as StepDisplayItem).messageInfo}
-                    showAgentMeta
-                  />
+                  <StepCard kind="start" part={(item as StepDisplayItem).part} messageInfo={(item as StepDisplayItem).messageInfo} showAgentMeta />
                 </Match>
                 <Match when={item.type === "step-finish"}>
                   <StepCard
@@ -720,15 +514,7 @@ export default function MessageBlock(props: MessageBlockProps) {
                   />
                 </Match>
                 <Match when={item.type === "compaction"}>
-                  <CompactionCard
-                    part={(item as CompactionDisplayItem).part}
-                    messageInfo={(item as CompactionDisplayItem).messageInfo}
-                    borderColor={(item as CompactionDisplayItem).accentColor}
-                    instanceId={props.instanceId}
-                    sessionId={props.sessionId}
-                    messageId={(item as CompactionDisplayItem).messageId}
-                    partId={(item as CompactionDisplayItem).partId}
-                  />
+                  <CompactionCard part={(item as CompactionDisplayItem).part} messageInfo={(item as CompactionDisplayItem).messageInfo} borderColor={(item as CompactionDisplayItem).accentColor} />
                 </Match>
                 <Match when={item.type === "reasoning"}>
                   <ReasoningCard
@@ -736,8 +522,6 @@ export default function MessageBlock(props: MessageBlockProps) {
                     messageInfo={(item as ReasoningDisplayItem).messageInfo}
                     instanceId={props.instanceId}
                     sessionId={props.sessionId}
-                    messageId={(item as ReasoningDisplayItem).messageId}
-                    partId={(item as ReasoningDisplayItem).partId}
                     showAgentMeta={(item as ReasoningDisplayItem).showAgentMeta}
                     defaultExpanded={(item as ReasoningDisplayItem).defaultExpanded}
                   />
@@ -760,19 +544,8 @@ interface StepCardProps {
   borderColor?: string
 }
 
-interface CompactionCardProps {
-  part: ClientPart
-  messageInfo?: MessageInfo
-  borderColor?: string
-  instanceId: string
-  sessionId: string
-  messageId: string
-  partId: string
-}
-
-function CompactionCard(props: CompactionCardProps) {
+function CompactionCard(props: { part: ClientPart; messageInfo?: MessageInfo; borderColor?: string }) {
   const { t } = useI18n()
-  const [deleting, setDeleting] = createSignal(false)
   const isAuto = () => Boolean((props.part as any)?.auto)
   const label = () => (isAuto() ? t("messageBlock.compaction.autoLabel") : t("messageBlock.compaction.manualLabel"))
   const borderColor = () => props.borderColor ?? (isAuto() ? "var(--session-status-compacting-fg)" : USER_BORDER_COLOR)
@@ -780,43 +553,13 @@ function CompactionCard(props: CompactionCardProps) {
   const containerClass = () =>
     `message-compaction-card ${isAuto() ? "message-compaction-card--auto" : "message-compaction-card--manual"}`
 
-  const canDelete = () => Boolean(props.partId) && !deleting()
-
-  const handleDelete = async (event: MouseEvent) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (!canDelete()) return
-    setDeleting(true)
-    try {
-      await deleteMessagePart(props.instanceId, props.sessionId, props.messageId, props.partId)
-    } catch (error) {
-      showAlertDialog(t("messagePart.actions.deleteFailedMessage"), {
-        title: t("messagePart.actions.deleteFailedTitle"),
-        detail: error instanceof Error ? error.message : String(error),
-        variant: "error",
-      })
-    } finally {
-      setDeleting(false)
-    }
-  }
-
   return (
     <div
-      class={`${containerClass()} relative`}
+      class={containerClass()}
       style={{ "border-left": `4px solid ${borderColor()}` }}
       role="status"
       aria-label={t("messageBlock.compaction.ariaLabel")}
     >
-      <button
-        type="button"
-        class="tool-call-header-button absolute right-2 top-1/2 -translate-y-1/2"
-        disabled={!canDelete()}
-        onClick={handleDelete}
-        title={t("messagePart.actions.deleteTitle")}
-      >
-        {deleting() ? t("messagePart.actions.deleting") : t("messagePart.actions.delete")}
-      </button>
-
       <div class="message-compaction-row">
         <FoldVertical class="message-compaction-icon w-4 h-4" aria-hidden="true" />
         <span class="message-compaction-label">{label()}</span>
@@ -870,7 +613,6 @@ function StepCard(props: StepCardProps) {
   }
 
   const finishStyle = () => (props.borderColor ? { "border-left-color": props.borderColor } : undefined)
-
 
   const renderUsageChips = (usage: NonNullable<ReturnType<typeof usageStats>>) => {
     const entries = [
@@ -937,8 +679,6 @@ interface ReasoningCardProps {
   messageInfo?: MessageInfo
   instanceId: string
   sessionId: string
-  messageId: string
-  partId: string
   showAgentMeta?: boolean
   defaultExpanded?: boolean
 }
@@ -946,7 +686,25 @@ interface ReasoningCardProps {
 function ReasoningCard(props: ReasoningCardProps) {
   const { t } = useI18n()
   const [expanded, setExpanded] = createSignal(Boolean(props.defaultExpanded))
-  const [deleting, setDeleting] = createSignal(false)
+
+  // Listen for expansion requests from search system
+  createEffect(() => {
+    if (typeof window === "undefined") return
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SectionExpansionRequest>).detail
+      if (
+        detail.action === "expand-reasoning" &&
+        detail.messageId === props.part.messageID &&
+        detail.instanceId === props.instanceId
+      ) {
+        setExpanded(true)
+      }
+    }
+
+    window.addEventListener(SECTION_EXPANSION_EVENT, handler)
+    onCleanup(() => window.removeEventListener(SECTION_EXPANSION_EVENT, handler))
+  })
 
   createEffect(() => {
     setExpanded(Boolean(props.defaultExpanded))
@@ -1010,27 +768,6 @@ function ReasoningCard(props: ReasoningCardProps) {
 
   const toggle = () => setExpanded((prev) => !prev)
 
-  const hasDeleteTarget = () => Boolean(props.partId)
-  const canDelete = () => hasDeleteTarget() && !deleting()
-
-  const handleDelete = async (event: Event) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (!canDelete()) return
-    setDeleting(true)
-    try {
-      await deleteMessagePart(props.instanceId, props.sessionId, props.messageId, props.partId)
-    } catch (error) {
-      showAlertDialog(t("messagePart.actions.deleteFailedMessage"), {
-        title: t("messagePart.actions.deleteFailedTitle"),
-        detail: error instanceof Error ? error.message : String(error),
-        variant: "error",
-      })
-    } finally {
-      setDeleting(false)
-    }
-  }
-
   return (
     <div class="message-reasoning-card">
       <button
@@ -1061,25 +798,6 @@ function ReasoningCard(props: ReasoningCardProps) {
           <span class="message-reasoning-indicator">
             {expanded() ? t("messageBlock.reasoning.indicator.hide") : t("messageBlock.reasoning.indicator.view")}
           </span>
-
-          <Show when={hasDeleteTarget()}>
-            <span
-              class={`message-reasoning-indicator${canDelete() ? "" : " opacity-50 pointer-events-none"}`}
-              role="button"
-              tabIndex={0}
-              onClick={handleDelete}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  handleDelete(event)
-                }
-              }}
-              aria-label={t("messagePart.actions.deleteTitle")}
-              title={t("messagePart.actions.deleteTitle")}
-            >
-              {deleting() ? t("messagePart.actions.deleting") : t("messagePart.actions.delete")}
-            </span>
-          </Show>
-
           <span class="message-reasoning-time">{timestamp()}</span>
         </span>
       </button>

@@ -1,16 +1,9 @@
 import { For, Show, createMemo, createSignal, createEffect, onCleanup, type Component } from "solid-js"
 import type { PermissionRequestLike } from "../types/permission"
 import { getPermissionCallId, getPermissionDisplayTitle, getPermissionKind, getPermissionMessageId, getPermissionSessionId } from "../types/permission"
-import { getQuestionCallId, getQuestionMessageId, getQuestionSessionId, type QuestionRequest } from "../types/question"
 import { useI18n } from "../lib/i18n"
-import {
-  activeInterruption,
-  getPermissionQueue,
-  getQuestionQueue,
-  getQuestionEnqueuedAtForInstance,
-  sendPermissionResponse,
-} from "../stores/instances"
-import { ensureSessionParentExpanded, loadMessages, sessions as sessionStateSessions, setActiveSessionFromList } from "../stores/sessions"
+import { activePermissionId, getPermissionQueue } from "../stores/instances"
+import { loadMessages, setActiveSession } from "../stores/sessions"
 import { messageStoreBus } from "../stores/message-v2/bus"
 import ToolCall from "./tool-call"
 
@@ -96,115 +89,25 @@ function resolveToolCallFromPermission(
   return null
 }
 
-function resolveToolCallFromQuestion(instanceId: string, request: QuestionRequest): ResolvedToolCall | null {
-  const sessionId = getQuestionSessionId(request)
-  const messageId = getQuestionMessageId(request)
-  if (!sessionId || !messageId) return null
-
-  const store = messageStoreBus.getInstance(instanceId)
-  if (!store) return null
-
-  const record = store.getMessage(messageId)
-  if (!record) return null
-
-  const callId = getQuestionCallId(request)
-  if (!callId) return null
-
-  for (const partId of record.partIds) {
-    const partRecord = record.parts?.[partId]
-    const part = partRecord?.data as any
-    if (!part || part.type !== "tool") continue
-    const partCallId = part.callID ?? part.callId ?? part.toolCallID ?? part.toolCallId ?? undefined
-    if (partCallId !== callId) continue
-
-    if (typeof part.id !== "string" || part.id.length === 0) continue
-    return {
-      messageId,
-      sessionId,
-      toolPart: part as ResolvedToolCall["toolPart"],
-      messageVersion: record.revision,
-      partVersion: partRecord?.revision ?? 0,
-    }
-  }
-
-  return null
-}
-
 const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props) => {
   const { t } = useI18n()
   const [loadingSession, setLoadingSession] = createSignal<string | null>(null)
-  const [permissionSubmitting, setPermissionSubmitting] = createSignal<Set<string>>(new Set())
-  const [permissionError, setPermissionError] = createSignal<Map<string, string>>(new Map())
 
-  const setPermissionBusy = (permissionId: string, busy: boolean) => {
-    setPermissionSubmitting((prev) => {
-      const next = new Set(prev)
-      if (busy) next.add(permissionId)
-      else next.delete(permissionId)
-      return next
-    })
-  }
+  const queue = createMemo(() => getPermissionQueue(props.instanceId))
+  const activePermId = createMemo(() => activePermissionId().get(props.instanceId) ?? null)
 
-  const setPermissionItemError = (permissionId: string, message: string | null) => {
-    setPermissionError((prev) => {
-      const next = new Map(prev)
-      if (!message) next.delete(permissionId)
-      else next.set(permissionId, message)
-      return next
-    })
-  }
-
-  async function handlePermissionDecision(permission: PermissionRequestLike, response: "once" | "always" | "reject") {
-    const permissionId = permission?.id
-    if (!permissionId) return
-
-    if (permissionSubmitting().has(permissionId)) return
-
-    setPermissionBusy(permissionId, true)
-    setPermissionItemError(permissionId, null)
-
-    try {
-      const sessionId = getPermissionSessionId(permission) || ""
-      await sendPermissionResponse(props.instanceId, sessionId, permissionId, response)
-    } catch (error) {
-      setPermissionItemError(
-        permissionId,
-        error instanceof Error ? error.message : t("permissionApproval.errors.unableToUpdatePermission"),
-      )
-    } finally {
-      setPermissionBusy(permissionId, false)
-    }
-  }
-
-  const permissionQueue = createMemo(() => getPermissionQueue(props.instanceId))
-  const questionQueue = createMemo(() => getQuestionQueue(props.instanceId))
-  const active = createMemo(() => activeInterruption().get(props.instanceId) ?? null)
-
-  type InterruptionItem =
-    | { kind: "permission"; id: string; sessionId: string; createdAt: number; payload: PermissionRequestLike }
-    | { kind: "question"; id: string; sessionId: string; createdAt: number; payload: QuestionRequest }
-
-  const orderedQueue = createMemo<InterruptionItem[]>(() => {
-    const permissions = permissionQueue().map((permission) => ({
-      kind: "permission" as const,
-      id: permission.id,
-      sessionId: getPermissionSessionId(permission) || "",
-      createdAt: (permission as any)?.time?.created ?? Date.now(),
-      payload: permission,
-    }))
-
-    const questions = questionQueue().map((question) => ({
-      kind: "question" as const,
-      id: question.id,
-      sessionId: getQuestionSessionId(question) || "",
-      createdAt: getQuestionEnqueuedAtForInstance(props.instanceId, question.id),
-      payload: question,
-    }))
-
-    return [...permissions, ...questions].sort((a, b) => a.createdAt - b.createdAt)
+  const orderedQueue = createMemo(() => {
+    const current = queue()
+    const activeId = activePermId()
+    if (!activeId) return current
+    const index = current.findIndex((entry) => entry.id === activeId)
+    if (index <= 0) return current
+    const active = current[index]
+    if (!active) return current
+    return [active, ...current.slice(0, index), ...current.slice(index + 1)]
   })
 
-  const hasRequests = createMemo(() => orderedQueue().length > 0)
+  const hasPermissions = createMemo(() => queue().length > 0)
 
   const closeOnEscape = (event: KeyboardEvent) => {
     if (event.key === "Escape") {
@@ -221,7 +124,7 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
 
   createEffect(() => {
     if (!props.isOpen) return
-    if (orderedQueue().length === 0) {
+    if (queue().length === 0) {
       props.onClose()
     }
   })
@@ -244,14 +147,7 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
 
   function handleGoToSession(sessionId: string) {
     if (!sessionId) return
-
-    const session = sessionStateSessions().get(props.instanceId)?.get(sessionId)
-    const parentId = session?.parentId ?? session?.id
-    if (parentId) {
-      ensureSessionParentExpanded(props.instanceId, parentId)
-    }
-
-    setActiveSessionFromList(props.instanceId, sessionId)
+    setActiveSession(props.instanceId, sessionId)
     props.onClose()
   }
 
@@ -264,8 +160,8 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
               <h2 id="permission-center-title" class="permission-center-modal-title">
                 {t("permissionApproval.title")}
               </h2>
-              <Show when={orderedQueue().length > 0}>
-                <span class="permission-center-modal-count">{orderedQueue().length}</span>
+              <Show when={queue().length > 0}>
+                <span class="permission-center-modal-count">{queue().length}</span>
               </Show>
             </div>
             <button
@@ -279,44 +175,15 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
           </div>
 
           <div class="permission-center-modal-body">
-            <Show when={hasRequests()} fallback={<div class="permission-center-empty">{t("permissionApproval.empty")}</div>}>
+            <Show when={hasPermissions()} fallback={<div class="permission-center-empty">{t("permissionApproval.empty")}</div>}>
               <div class="permission-center-list" role="list">
                 <For each={orderedQueue()}>
-                  {(item) => {
-                    const isActive = () => active()?.kind === item.kind && active()?.id === item.id
-                    const sessionId = () => item.sessionId
-
-                    const resolved = createMemo(() => {
-                      if (item.kind === "permission") {
-                        return resolveToolCallFromPermission(props.instanceId, item.payload)
-                      }
-                      return resolveToolCallFromQuestion(props.instanceId, item.payload)
-                    })
+                  {(permission) => {
+                    const sessionId = getPermissionSessionId(permission) || ""
+                    const isActive = () => permission.id === activePermId()
+                    const resolved = createMemo(() => resolveToolCallFromPermission(props.instanceId, permission))
 
                     const showFallback = () => !resolved()
-
-                    const kindLabel = () =>
-                      item.kind === "permission"
-                        ? t("permissionApproval.kind.permission")
-                        : t("permissionApproval.kind.question")
-
-                    const primaryTitle = () => {
-                      if (item.kind === "permission") {
-                        return getPermissionDisplayTitle(item.payload)
-                      }
-                      const first = item.payload.questions?.[0]?.question
-                      return typeof first === "string" && first.trim().length > 0 ? first : t("permissionApproval.kind.question")
-                    }
-
-                    const secondaryTitle = () => {
-                      if (item.kind === "permission") {
-                        return getPermissionKind(item.payload)
-                      }
-                      const count = item.payload.questions?.length ?? 0
-                      return count === 1
-                        ? t("permissionApproval.questionCount.one", { count })
-                        : t("permissionApproval.questionCount.other", { count })
-                    }
 
                     return (
                       <div
@@ -325,8 +192,7 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
                       >
                         <div class="permission-center-item-header">
                           <div class="permission-center-item-heading">
-                            <span class={`permission-center-item-chip permission-center-item-chip-${item.kind}`}>{kindLabel()}</span>
-                            <span class="permission-center-item-kind">{secondaryTitle()}</span>
+                            <span class="permission-center-item-kind">{getPermissionKind(permission)}</span>
                             <Show when={isActive()}>
                               <span class="permission-center-item-chip">{t("permissionApproval.status.active")}</span>
                             </Show>
@@ -336,10 +202,7 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
                             <button
                               type="button"
                               class="permission-center-item-action"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleGoToSession(sessionId())
-                              }}
+                              onClick={() => handleGoToSession(sessionId)}
                             >
                               {t("permissionApproval.actions.goToSession")}
                             </button>
@@ -347,13 +210,10 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
                               <button
                                 type="button"
                                 class="permission-center-item-action"
-                                disabled={loadingSession() === sessionId()}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleLoadSession(sessionId())
-                                }}
+                                disabled={loadingSession() === sessionId}
+                                onClick={() => handleLoadSession(sessionId)}
                               >
-                                {loadingSession() === sessionId()
+                                {loadingSession() === sessionId
                                   ? t("permissionApproval.actions.loadingSession")
                                   : t("permissionApproval.actions.loadSession")}
                               </button>
@@ -361,52 +221,17 @@ const PermissionApprovalModal: Component<PermissionApprovalModalProps> = (props)
                           </div>
                         </div>
 
-                          <Show
-                            when={resolved()}
-                            fallback={
-                              <div class="permission-center-fallback">
-                                <div class="permission-center-fallback-title">
-                                  <code>{primaryTitle()}</code>
-                                </div>
-                                <Show when={item.kind === "permission"}>
-                                  <div class="tool-call-permission-actions">
-                                    <div class="tool-call-permission-buttons">
-                                      <button
-                                        type="button"
-                                        class="tool-call-permission-button"
-                                        disabled={permissionSubmitting().has(item.id)}
-                                        onClick={() => void handlePermissionDecision(item.payload as PermissionRequestLike, "once")}
-                                      >
-                                        {t("permissionApproval.actions.allowOnce")}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        class="tool-call-permission-button"
-                                        disabled={permissionSubmitting().has(item.id)}
-                                        onClick={() => void handlePermissionDecision(item.payload as PermissionRequestLike, "always")}
-                                      >
-                                        {t("permissionApproval.actions.alwaysAllow")}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        class="tool-call-permission-button"
-                                        disabled={permissionSubmitting().has(item.id)}
-                                        onClick={() => void handlePermissionDecision(item.payload as PermissionRequestLike, "reject")}
-                                      >
-                                        {t("permissionApproval.actions.deny")}
-                                      </button>
-                                    </div>
-                                  </div>
-                                  <Show when={permissionError().get(item.id)}>
-                                    {(err) => <div class="tool-call-permission-error">{err()}</div>}
-                                  </Show>
-                                </Show>
-                                <Show when={item.kind !== "permission"}>
-                                  <div class="permission-center-fallback-hint">{t("permissionApproval.fallbackHint")}</div>
-                                </Show>
+                        <Show
+                          when={resolved()}
+                          fallback={
+                            <div class="permission-center-fallback">
+                              <div class="permission-center-fallback-title">
+                                <code>{getPermissionDisplayTitle(permission)}</code>
                               </div>
-                            }
-                          >
+                              <div class="permission-center-fallback-hint">{t("permissionApproval.fallbackHint")}</div>
+                            </div>
+                          }
+                        >
                           {(data) => (
                             <ToolCall
                               toolCall={data().toolPart}

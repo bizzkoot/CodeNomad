@@ -1,4 +1,4 @@
-import { createMemo, Show, createEffect, onCleanup } from "solid-js"
+import { createMemo, Show, createEffect } from "solid-js"
 import { DiffView, DiffModeEnum } from "@git-diff-view/solid"
 import { disableCache } from "@git-diff-view/core"
 import type { DiffHighlighterLang } from "@git-diff-view/core"
@@ -30,7 +30,7 @@ type DiffData = {
   hunks: string[]
 }
 
-type CaptureContext = {
+type _CaptureContext = {
   theme: ToolCallDiffViewerProps["theme"]
   mode: DiffViewMode
   diffText: string
@@ -130,7 +130,8 @@ export function ToolCallDiffViewer(props: ToolCallDiffViewerProps) {
           </div>
         }
       >
-        <div innerHTML={props.cachedHtml} />
+        {/* eslint-disable-next-line solid/no-innerhtml -- Cached HTML from trusted diff renderer */}
+      <div innerHTML={props.cachedHtml} />
       </Show>
     </div>
   )

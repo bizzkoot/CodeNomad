@@ -50,6 +50,38 @@ export interface WorkspaceDeleteResponse {
   status: WorkspaceStatus
 }
 
+export type WorktreeKind = "root" | "worktree"
+
+export interface WorktreeDescriptor {
+  /** Stable identifier used by CodeNomad + clients ("root" for repo root). */
+  slug: string
+  /** Absolute directory path on the server host. */
+  directory: string
+  kind: WorktreeKind
+  /** Optional VCS branch name when available. */
+  branch?: string
+}
+
+export interface WorktreeListResponse {
+  worktrees: WorktreeDescriptor[]
+  /** True when the workspace folder resolves to a Git repository. */
+  isGitRepo?: boolean
+}
+
+export interface WorktreeCreateRequest {
+  slug: string
+  /** Optional branch name (defaults to slug). */
+  branch?: string
+}
+
+export interface WorktreeMap {
+  version: 1
+  /** Default worktree to use for new sessions and as fallback. */
+  defaultWorktreeSlug: string
+  /** Mapping of *parent* session IDs to a worktree slug. */
+  parentSessionWorktreeSlug: Record<string, string>
+}
+
 export type LogLevel = "debug" | "info" | "warn" | "error"
 
 export interface WorkspaceLogEntry {
@@ -204,7 +236,8 @@ export interface NetworkAddress {
   ip: string
   family: "ipv4" | "ipv6"
   scope: "external" | "internal" | "loopback"
-  url: string
+  /** Remote URL using the server's remote protocol/port for this IP. */
+  remoteUrl: string
 }
 
 export interface LatestReleaseInfo {
@@ -230,16 +263,20 @@ export interface SupportMeta {
 }
 
 export interface ServerMeta {
-  /** Base URL clients should target for REST calls (useful for Electron embedding). */
-  httpBaseUrl: string
+  /** URL desktop apps should use to connect (prefers loopback HTTP when enabled). */
+  localUrl: string
+  /** URL remote clients should use (prefers HTTPS when enabled). */
+  remoteUrl?: string
   /** SSE endpoint advertised to clients (`/api/events` by default). */
   eventsUrl: string
   /** Host the server is bound to (e.g., 127.0.0.1 or 0.0.0.0). */
   host: string
   /** Listening mode derived from host binding. */
   listeningMode: "local" | "all"
-  /** Actual port in use after binding. */
-  port: number
+  /** Actual local port in use after binding. */
+  localPort: number
+  /** Actual remote port in use after binding (when remoteUrl is set). */
+  remotePort?: number
   /** Display label for the host (e.g., hostname or friendly name). */
   hostLabel: string
   /** Absolute path of the filesystem root exposed to clients. */
@@ -249,6 +286,8 @@ export interface ServerMeta {
   serverVersion?: string
   ui?: UiMeta
   support?: SupportMeta
+  /** Optional update info (dev channel only). */
+  update?: LatestReleaseInfo | null
 }
 
 export type BackgroundProcessStatus = "running" | "stopped" | "error"
@@ -276,6 +315,82 @@ export interface BackgroundProcessOutputResponse {
   content: string
   truncated: boolean
   sizeBytes: number
+}
+
+// Git Source Control Types
+export type GitFileStatus = "modified" | "added" | "deleted" | "renamed" | "copied" | "untracked" | "ignored"
+
+export interface GitFileChange {
+  /** Relative path to the file from workspace root */
+  path: string
+  /** Status of the file */
+  status: GitFileStatus
+  /** Whether the file is staged */
+  staged: boolean
+  /** Original path for renamed files */
+  originalPath?: string
+}
+
+export interface GitBranch {
+  /** Branch name */
+  name: string
+  /** Whether this is the current branch */
+  current: boolean
+  /** Whether this is a remote branch */
+  remote: boolean
+  /** Tracking branch for local branches */
+  upstream?: string
+}
+
+export interface GitStatus {
+  /** Current branch name */
+  branch: string
+  /** List of file changes */
+  changes: GitFileChange[]
+  /** Whether the repo has any commits */
+  hasCommits: boolean
+  /** Number of commits ahead of upstream */
+  ahead: number
+  /** Number of commits behind upstream */
+  behind: number
+}
+
+export interface GitBranchListResponse {
+  branches: GitBranch[]
+  current: string
+}
+
+export interface GitDiffResponse {
+  /** File path */
+  path: string
+  /** Unified diff content */
+  diff: string
+  /** Whether the file is binary */
+  isBinary: boolean
+}
+
+export interface GitCommitRequest {
+  message: string
+}
+
+export interface GitCommitResponse {
+  hash: string
+  message: string
+}
+
+export interface GitCheckoutRequest {
+  branch: string
+  create?: boolean
+}
+
+export interface GitStageRequest {
+  paths: string[]
+}
+
+export interface GitPushResponse {
+  success: boolean
+  pushed?: boolean
+  message?: string
 }
 
 export type {

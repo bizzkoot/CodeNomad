@@ -6,7 +6,6 @@ import { providers, sessions, withSession } from "./session-state"
 import { getDefaultModel, isModelValid } from "./session-models"
 import { updateSessionInfo } from "./message-v2/session-info"
 import { messageStoreBus } from "./message-v2/bus"
-import { removeMessagePartV2 } from "./message-v2/bridge"
 import { getLogger } from "../lib/logger"
 import { requestData } from "../lib/opencode-api"
 
@@ -171,6 +170,26 @@ async function sendMessage(
     updatedAt: createdAt,
     isEphemeral: true,
   })
+
+  // Add agent/model info to user message for display
+  if (session.agent || (session.model.providerId && session.model.modelId)) {
+    const messageInfo: any = {
+      id: messageId,
+      role: "user",
+      sessionID: sessionId,
+      time: { created: createdAt, completed: createdAt }
+    }
+    if (session.agent) {
+      messageInfo.agent = session.agent
+    }
+    if (session.model.providerId && session.model.modelId) {
+      messageInfo.model = {
+        providerID: session.model.providerId,
+        modelID: session.model.modelId
+      }
+    }
+    store.setMessageInfo(messageId, messageInfo)
+  }
 
   withSession(instanceId, sessionId, () => {
     /* trigger reactivity for legacy session data */
@@ -396,26 +415,50 @@ async function renameSession(instanceId: string, sessionId: string, nextTitle: s
   })
 }
 
-async function deleteMessagePart(instanceId: string, sessionId: string, messageId: string, partId: string): Promise<void> {
-  if (!instanceId || !sessionId || !messageId || !partId) return
+async function deleteMessagePart(
+  instanceId: string,
+  sessionId: string,
+  messageId: string,
+  partId: string,
+): Promise<void> {
   const instance = instances().get(instanceId)
   if (!instance || !instance.client) {
     throw new Error("Instance not ready")
   }
 
-  await requestData(
-    instance.client.part.delete({
-      sessionID: sessionId,
-      messageID: messageId,
-      partID: partId,
-    }),
-    "part.delete",
-  )
+  const session = sessions().get(instanceId)?.get(sessionId)
+  if (!session) {
+    throw new Error("Session not found")
+  }
 
-  // Optimistic removal; SSE will also broadcast a part-removed event.
-  removeMessagePartV2(instanceId, messageId, partId)
-  updateSessionInfo(instanceId, sessionId)
+  const sessionClient = (instance.client as any).session
+  if (typeof sessionClient?.deletePart === "function") {
+    await requestData(
+      sessionClient.deletePart({
+        sessionID: sessionId,
+        messageID: messageId,
+        partID: partId,
+      }),
+      "session.deletePart",
+    )
+    return
+  }
+
+  if (typeof sessionClient?.removePart === "function") {
+    await requestData(
+      sessionClient.removePart({
+        sessionID: sessionId,
+        messageID: messageId,
+        partID: partId,
+      }),
+      "session.removePart",
+    )
+    return
+  }
+
+  throw new Error("Deleting message parts is not supported by the current SDK")
 }
+
 
 export {
   abortSession,

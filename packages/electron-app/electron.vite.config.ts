@@ -1,6 +1,7 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite"
 import solid from "vite-plugin-solid"
 import { resolve } from "path"
+import { copyMonacoPublicAssets } from "../ui/scripts/monaco-public-assets.js"
 
 const uiRoot = resolve(__dirname, "../ui")
 const uiSrc = resolve(uiRoot, "src")
@@ -8,9 +9,41 @@ const uiRendererRoot = resolve(uiRoot, "src/renderer")
 const uiRendererEntry = resolve(uiRendererRoot, "index.html")
 const uiRendererLoadingEntry = resolve(uiRendererRoot, "loading.html")
 
+function prepareMonacoPublicAssets() {
+  return {
+    name: "prepare-monaco-public-assets",
+    configureServer(server: any) {
+      copyMonacoPublicAssets({
+        uiRendererRoot: uiRendererRoot,
+        warn: (msg: string) => server.config.logger.warn(msg),
+        sourceRoots: [
+          resolve(__dirname, "../../node_modules/monaco-editor/min/vs"),
+          resolve(uiRoot, "node_modules/monaco-editor/min/vs"),
+        ],
+      })
+    },
+    buildStart(this: any) {
+      copyMonacoPublicAssets({
+        uiRendererRoot: uiRendererRoot,
+        warn: (msg: string) => this.warn(msg),
+        sourceRoots: [
+          resolve(__dirname, "../../node_modules/monaco-editor/min/vs"),
+          resolve(uiRoot, "node_modules/monaco-editor/min/vs"),
+        ],
+      })
+    },
+  }
+}
+
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    plugins: [externalizeDepsPlugin({ exclude: ["@codenomad/mcp-server"] })],
+    resolve: {
+      alias: {
+        "@codenomad/mcp-server/src": resolve(__dirname, "../mcp-server/src"),
+        "@codenomad/mcp-server": resolve(__dirname, "../mcp-server/src/server.ts"),
+      },
+    },
     build: {
       outDir: "dist/main",
       lib: {
@@ -40,7 +73,7 @@ export default defineConfig({
   },
   renderer: {
     root: uiRendererRoot,
-    plugins: [solid()],
+    plugins: [solid(), prepareMonacoPublicAssets()],
     css: {
       postcss: resolve(uiRoot, "postcss.config.js"),
     },

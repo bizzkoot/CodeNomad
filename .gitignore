@@ -8,6 +8,7 @@ release/
 out/
 .dir-locals.el
 .opencode/bashOutputs/
+temp/
 
 # Local runtime artifacts
 .codenomad/

@@ -60,7 +60,14 @@ export interface TextPart {
   renderCache?: RenderCache
 }
 
-export type MessageInfo = SDKMessage
+export type MessageInfo = SDKMessage & {
+  // Extended properties for user messages (agent/model info)
+  agent?: string
+  model?: {
+    providerID: string
+    modelID: string
+  }
+}
 
 function hasTextSegment(segment: string | { text?: string }): boolean {
   if (typeof segment === "string") {

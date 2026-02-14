@@ -35,7 +35,7 @@ const EnvironmentVariablesEditor: Component<EnvironmentVariablesEditorProps> = (
 
   function handleRemoveVariable(key: string) {
     removeEnvironmentVariable(key)
-    const { [key]: removed, ...rest } = envVars()
+    const { [key]: _removed, ...rest } = envVars()
     setEnvVars(rest)
   }
 

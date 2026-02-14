@@ -37,7 +37,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
     const deleting = loading().deletingSession.get(props.instance.id)
     return deleting ? deleting.has(sessionId) : false
   }
-  const newSessionShortcut = createMemo<KeyboardShortcut>(() => {
+  const _newSessionShortcut = createMemo<KeyboardShortcut>(() => {
     const registered = keyboardRegistry.get("session-new")
     if (registered) return registered
     return {
@@ -256,7 +256,7 @@ const InstanceWelcomeView: Component<InstanceWelcomeViewProps> = (props) => {
     return t("time.relative.justNow")
   }
 
-  function formatTimestamp(timestamp: number): string {
+  function _formatTimestamp(timestamp: number): string {
     return new Date(timestamp).toLocaleString()
   }
 

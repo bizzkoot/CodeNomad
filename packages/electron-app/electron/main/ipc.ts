@@ -1,5 +1,7 @@
-import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from "electron"
+import { BrowserWindow, dialog, ipcMain, powerSaveBlocker, type OpenDialogOptions } from "electron"
 import type { CliProcessManager, CliStatus } from "./process-manager"
+
+let wakeLockId: number | null = null
 
 interface DialogOpenRequest {
   mode: "directory" | "file"
@@ -14,23 +16,34 @@ interface DialogOpenResult {
 }
 
 export function setupCliIPC(mainWindow: BrowserWindow, cliManager: CliProcessManager) {
-  cliManager.on("status", (status: CliStatus) => {
+  // Define listeners
+  const onStatus = (status: CliStatus) => {
     if (!mainWindow.isDestroyed()) {
       mainWindow.webContents.send("cli:status", status)
     }
-  })
+  }
 
-  cliManager.on("ready", (status: CliStatus) => {
+  const onReady = (status: CliStatus) => {
     if (!mainWindow.isDestroyed()) {
       mainWindow.webContents.send("cli:ready", status)
     }
-  })
+  }
 
-  cliManager.on("error", (error: Error) => {
+  const onError = (error: Error) => {
     if (!mainWindow.isDestroyed()) {
       mainWindow.webContents.send("cli:error", { message: error.message })
     }
-  })
+  }
+
+  // Register listeners
+  cliManager.on("status", onStatus)
+  cliManager.on("ready", onReady)
+  cliManager.on("error", onError)
+
+  // Clean up existing handlers if any (though usually we clean up on window close)
+  ipcMain.removeHandler("cli:getStatus")
+  ipcMain.removeHandler("cli:restart")
+  ipcMain.removeHandler("dialog:open")
 
   ipcMain.handle("cli:getStatus", async () => cliManager.getStatus())
 
@@ -62,4 +75,31 @@ export function setupCliIPC(mainWindow: BrowserWindow, cliManager: CliProcessMan
 
     return { canceled: result.canceled, paths: result.filePaths }
   })
+
+  ipcMain.handle("power:setWakeLock", async (_, enabled: boolean) => {
+    if (enabled) {
+      if (wakeLockId === null) {
+        wakeLockId = powerSaveBlocker.start("prevent-app-suspension")
+      }
+    } else {
+      if (wakeLockId !== null) {
+        powerSaveBlocker.stop(wakeLockId)
+        wakeLockId = null
+      }
+    }
+    return { enabled: wakeLockId !== null }
+  })
+
+  // Return cleanup function
+  return () => {
+    cliManager.removeListener("status", onStatus)
+    cliManager.removeListener("ready", onReady)
+    cliManager.removeListener("error", onError)
+
+    ipcMain.removeHandler("cli:getStatus")
+    ipcMain.removeHandler("cli:restart")
+    ipcMain.removeHandler("dialog:open")
+    ipcMain.removeHandler("power:setWakeLock")
+  }
 }
+

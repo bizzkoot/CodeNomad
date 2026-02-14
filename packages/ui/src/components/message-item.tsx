@@ -61,7 +61,7 @@ export default function MessageItem(props: MessageItemProps) {
       const parsed = new URL(url)
       const segments = parsed.pathname.split("/")
       return segments.pop() || t("messageItem.attachment.defaultName")
-    } catch (error) {
+    } catch {
       const fallback = url.split("/").pop()
       return fallback && fallback.length > 0 ? fallback : t("messageItem.attachment.defaultName")
     }
@@ -107,7 +107,7 @@ export default function MessageItem(props: MessageItemProps) {
       const objectUrl = URL.createObjectURL(blob)
       directDownload(objectUrl)
       URL.revokeObjectURL(objectUrl)
-    } catch (error) {
+    } catch {
       directDownload(url)
     }
   }
@@ -234,24 +234,43 @@ export default function MessageItem(props: MessageItemProps) {
   const speakerLabel = () => (isUser() ? t("messageItem.speaker.you") : t("messageItem.speaker.assistant"))
 
   const agentIdentifier = () => {
-    if (isUser()) return ""
     const info = props.messageInfo
-    if (!info || info.role !== "assistant") return ""
-    return info.mode || ""
+    if (!info) return ""
+    
+    if (isUser() && info.role === "user") {
+      return info.agent || ""
+    }
+    
+    if (!isUser() && info.role === "assistant") {
+      return (info as any).mode || ""
+    }
+    
+    return ""
   }
 
   const modelIdentifier = () => {
-    if (isUser()) return ""
     const info = props.messageInfo
-    if (!info || info.role !== "assistant") return ""
-    const modelID = info.modelID || ""
-    const providerID = info.providerID || ""
-    if (modelID && providerID) return `${providerID}/${modelID}`
-    return modelID
+    if (!info) return ""
+    
+    if (isUser() && info.role === "user") {
+      const modelID = info.model?.modelID || ""
+      const providerID = info.model?.providerID || ""
+      if (modelID && providerID) return `${providerID}/${modelID}`
+      return modelID
+    }
+    
+    if (!isUser() && info.role === "assistant") {
+      const modelID = (info as any).modelID || ""
+      const providerID = (info as any).providerID || ""
+      if (modelID && providerID) return `${providerID}/${modelID}`
+      return modelID
+    }
+    
+    return ""
   }
 
   const agentMeta = () => {
-    if (isUser() || !props.showAgentMeta) return ""
+    if (!props.showAgentMeta) return ""
     const segments: string[] = []
     const agent = agentIdentifier()
     const model = modelIdentifier()
@@ -268,86 +287,83 @@ export default function MessageItem(props: MessageItemProps) {
   return (
     <div class={containerClass()}>
       <header class={`message-item-header ${isUser() ? "pb-0.5" : "pb-0"}`}>
-        <div class="message-speaker">
-          <span class="message-speaker-label" data-role={isUser() ? "user" : "assistant"}>
-            {speakerLabel()}
-          </span>
-          <Show when={agentMeta()}>{(meta) => <span class="message-agent-meta">{meta()}</span>}</Show>
-        </div>
-        <div class="message-item-actions">
-          <Show when={isUser()}>
-            <div class="message-action-group">
-              <Show when={props.onRevert}>
-                <button
-                  class="message-action-button"
-                  onClick={handleRevert}
-                  title={t("messageItem.actions.revert")}
-                  aria-label={t("messageItem.actions.revert")}
-                >
-                  <Undo class="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
-              </Show>
-              <Show when={props.onFork}>
-                <button
-                  class="message-action-button"
-                  onClick={() => props.onFork?.(props.record.id)}
-                  title={t("messageItem.actions.fork")}
-                  aria-label={t("messageItem.actions.fork")}
-                >
-                  <Split class="w-3.5 h-3.5" aria-hidden="true" />
-                </button>
-              </Show>
-              <button
-                class="message-action-button"
-                onClick={handleCopy}
-                title={copyLabel()}
-                aria-label={copyLabel()}
-              >
-                <Copy class="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
-              <Show when={deletableTextPartId()}>
-                {(partId) => (
-                  <button
-                    class="message-action-button"
-                    onClick={() => void handleDeletePart(partId())}
-                    disabled={isDeletingPart(partId())}
-                    title={isDeletingPart(partId()) ? t("messagePart.actions.deleting") : t("messagePart.actions.delete")}
-                    aria-label={isDeletingPart(partId()) ? t("messagePart.actions.deleting") : t("messagePart.actions.delete")}
-                  >
-                    <Trash2 class="w-3.5 h-3.5" aria-hidden="true" />
-                  </button>
-                )}
-              </Show>
-            </div>
-          </Show>
-          <Show when={!isUser()}>
-            <div class="message-action-group">
-              <button
-                class="message-action-button"
-                onClick={handleCopy}
-                title={copyLabel()}
-                aria-label={copyLabel()}
-              >
-                <Copy class="w-3.5 h-3.5" aria-hidden="true" />
-              </button>
+        <div class="message-item-header-row message-item-header-row--top">
+          <div class="message-speaker">
+            <span class="message-speaker-label" data-role={isUser() ? "user" : "assistant"}>
+              {speakerLabel()}
+            </span>
+          </div>
 
-              <Show when={deletableTextPartId()}>
-                {(partId) => (
+          <div class="message-item-actions">
+            <Show when={isUser()}>
+              <div class="message-action-group">
+                <Show when={props.onRevert}>
                   <button
                     class="message-action-button"
-                    onClick={() => void handleDeletePart(partId())}
-                    disabled={isDeletingPart(partId())}
-                    title={isDeletingPart(partId()) ? t("messagePart.actions.deleting") : t("messagePart.actions.delete")}
-                    aria-label={isDeletingPart(partId()) ? t("messagePart.actions.deleting") : t("messagePart.actions.delete")}
+                    onClick={handleRevert}
+                    title={t("messageItem.actions.revert")}
+                    aria-label={t("messageItem.actions.revert")}
                   >
-                    <Trash2 class="w-3.5 h-3.5" aria-hidden="true" />
+                    <Undo class="w-3.5 h-3.5" aria-hidden="true" />
                   </button>
-                )}
-              </Show>
-            </div>
-          </Show>
-          <time class="message-timestamp" dateTime={timestampIso()}>{timestamp()}</time>
+                </Show>
+                <Show when={props.onFork}>
+                  <button
+                    class="message-action-button"
+                    onClick={() => props.onFork?.(props.record.id)}
+                    title={t("messageItem.actions.fork")}
+                    aria-label={t("messageItem.actions.fork")}
+                  >
+                    <Split class="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                </Show>
+                <button
+                  class="message-action-button"
+                  onClick={handleCopy}
+                  title={copyLabel()}
+                  aria-label={copyLabel()}
+                >
+                  <Copy class="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            </Show>
+            <Show when={!isUser()}>
+              <div class="message-action-group">
+                <button
+                  class="message-action-button"
+                  onClick={handleCopy}
+                  title={copyLabel()}
+                  aria-label={copyLabel()}
+                >
+                  <Copy class="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+
+                <Show when={deletableTextPartId()}>
+                  {(partId) => (
+                    <button
+                      class="message-action-button"
+                      onClick={() => void handleDeletePart(partId())}
+                      disabled={isDeletingPart(partId())}
+                      title={isDeletingPart(partId()) ? t("messagePart.actions.deleting") : t("messagePart.actions.delete")}
+                      aria-label={isDeletingPart(partId()) ? t("messagePart.actions.deleting") : t("messagePart.actions.delete")}
+                    >
+                      <Trash2 class="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  )}
+                </Show>
+              </div>
+            </Show>
+            <time class="message-timestamp" dateTime={timestampIso()}>{timestamp()}</time>
+          </div>
         </div>
+
+        <Show when={agentMeta()}>
+          {(meta) => (
+            <div class="message-item-header-row message-item-header-row--bottom">
+              <span class="message-agent-meta">{meta()}</span>
+            </div>
+          )}
+        </Show>
 
       </header>
 
@@ -369,10 +385,12 @@ export default function MessageItem(props: MessageItemProps) {
         </Show>
 
         <For each={messageParts()}>
-          {(part) => (
+          {(part, index) => (
             <MessagePart
               part={part}
               messageType={props.record.role}
+              messageId={props.record.id}
+              partIndex={index()}
               instanceId={props.instanceId}
               sessionId={props.sessionId}
               onRendered={props.onContentRendered}
