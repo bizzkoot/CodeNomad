@@ -33,9 +33,11 @@ export type ExpansionPreference = "expanded" | "collapsed"
 export type ListeningMode = "local" | "all"
 
 export interface Preferences {
+  [key: string]: unknown
   showThinkingBlocks: boolean
   thinkingBlocksExpansion: ExpansionPreference
   showTimelineTools: boolean
+  promptSubmitOnEnter: boolean
   lastUsedBinary?: string
   locale?: string
   environmentVariables: Record<string, string>
@@ -49,6 +51,10 @@ export interface Preferences {
   autoCleanupBlankSessions: boolean
   listeningMode: ListeningMode
   askUserTimeout: number
+  osNotificationsEnabled: boolean
+  osNotificationsAllowWhenVisible: boolean
+  notifyOnNeedsInput: boolean
+  notifyOnIdle: boolean
 }
 
 
@@ -74,6 +80,7 @@ const defaultPreferences: Preferences = {
   showThinkingBlocks: false,
   thinkingBlocksExpansion: "expanded",
   showTimelineTools: true,
+  promptSubmitOnEnter: false,
   environmentVariables: {},
   modelRecents: [],
   modelFavorites: [],
@@ -85,6 +92,10 @@ const defaultPreferences: Preferences = {
   autoCleanupBlankSessions: true,
   listeningMode: "local",
   askUserTimeout: 300000,
+  osNotificationsEnabled: false,
+  osNotificationsAllowWhenVisible: false,
+  notifyOnNeedsInput: true,
+  notifyOnIdle: true,
 }
 
 
@@ -122,6 +133,7 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
     showThinkingBlocks: sanitized.showThinkingBlocks ?? defaultPreferences.showThinkingBlocks,
     thinkingBlocksExpansion: sanitized.thinkingBlocksExpansion ?? defaultPreferences.thinkingBlocksExpansion,
     showTimelineTools: sanitized.showTimelineTools ?? defaultPreferences.showTimelineTools,
+    promptSubmitOnEnter: sanitized.promptSubmitOnEnter ?? defaultPreferences.promptSubmitOnEnter,
     lastUsedBinary: sanitized.lastUsedBinary ?? defaultPreferences.lastUsedBinary,
     locale: sanitized.locale ?? defaultPreferences.locale,
     environmentVariables,
@@ -135,6 +147,11 @@ function normalizePreferences(pref?: Partial<Preferences> & { agentModelSelectio
     autoCleanupBlankSessions: sanitized.autoCleanupBlankSessions ?? defaultPreferences.autoCleanupBlankSessions,
     listeningMode: sanitized.listeningMode ?? defaultPreferences.listeningMode,
     askUserTimeout: sanitized.askUserTimeout ?? defaultPreferences.askUserTimeout,
+    osNotificationsEnabled: sanitized.osNotificationsEnabled ?? defaultPreferences.osNotificationsEnabled,
+    osNotificationsAllowWhenVisible:
+      sanitized.osNotificationsAllowWhenVisible ?? defaultPreferences.osNotificationsAllowWhenVisible,
+    notifyOnNeedsInput: sanitized.notifyOnNeedsInput ?? defaultPreferences.notifyOnNeedsInput,
+    notifyOnIdle: sanitized.notifyOnIdle ?? defaultPreferences.notifyOnIdle,
   }
 }
 
@@ -389,6 +406,10 @@ function toggleShowTimelineTools(): void {
   updatePreferences({ showTimelineTools: !preferences().showTimelineTools })
 }
 
+function togglePromptSubmitOnEnter(): void {
+  updatePreferences({ promptSubmitOnEnter: !preferences().promptSubmitOnEnter })
+}
+
 function toggleUsageMetrics(): void {
   updatePreferences({ showUsageMetrics: !preferences().showUsageMetrics })
 }
@@ -500,6 +521,7 @@ interface ConfigContextValue {
   updateConfig: typeof updateConfig
   toggleShowThinkingBlocks: typeof toggleShowThinkingBlocks
   toggleShowTimelineTools: typeof toggleShowTimelineTools
+  togglePromptSubmitOnEnter: typeof togglePromptSubmitOnEnter
   toggleUsageMetrics: typeof toggleUsageMetrics
   toggleAutoCleanupBlankSessions: typeof toggleAutoCleanupBlankSessions
 
@@ -537,6 +559,7 @@ const configContextValue: ConfigContextValue = {
   updateConfig,
   toggleShowThinkingBlocks,
   toggleShowTimelineTools,
+  togglePromptSubmitOnEnter,
   toggleUsageMetrics,
   toggleAutoCleanupBlankSessions,
   setDiffViewMode,
@@ -598,6 +621,7 @@ export {
   updatePreferences,
   toggleShowThinkingBlocks,
   toggleShowTimelineTools,
+  togglePromptSubmitOnEnter,
   toggleAutoCleanupBlankSessions,
   toggleUsageMetrics,
   recentFolders,

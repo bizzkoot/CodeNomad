@@ -1,20 +1,20 @@
-import { Show, For, createMemo, createEffect, type Component } from "solid-js"
-import { Expand } from "lucide-solid"
+import { Show, createMemo, createEffect, on, type Component } from "solid-js"
 import type { Session } from "../../types/session"
 import type { Attachment } from "../../types/attachment"
 import type { ClientPart } from "../../types/message"
 import MessageSection from "../message-section"
 import { messageStoreBus } from "../../stores/message-v2/bus"
 import PromptInput from "../prompt-input"
-import type { Attachment as PromptAttachment } from "../../types/attachment"
+import PromptAttachmentsBar from "../prompt-input/PromptAttachmentsBar"
 import { getAttachments, removeAttachment } from "../../stores/attachments"
 import { instances } from "../../stores/instances"
-import { loadMessages, sendMessage, forkSession, isSessionMessagesLoading, setActiveParentSession, setActiveSession, runShellCommand, abortSession } from "../../stores/sessions"
+import { loadMessages, sendMessage, forkSession, renameSession, isSessionMessagesLoading, setActiveParentSession, setActiveSession, runShellCommand, abortSession } from "../../stores/sessions"
 import { isSessionBusy as getSessionBusyStatus } from "../../stores/session-status"
 import { showAlertDialog } from "../../stores/alerts"
 import { getLogger } from "../../lib/logger"
 import { requestData } from "../../lib/opencode-api"
 import { useI18n } from "../../lib/i18n"
+import type { PromptInputApi, PromptInsertMode } from "../prompt-input/types"
 
 const log = getLogger("session")
 
@@ -53,52 +53,9 @@ export const SessionView: Component<SessionViewProps> = (props) => {
 
   const attachments = createMemo(() => getAttachments(props.instanceId, props.sessionId))
 
-  function handleExpandTextAttachment(attachment: PromptAttachment) {
-    if (attachment.source.type !== "text") return
-
-    const textarea = rootRef?.querySelector(".prompt-input") as HTMLTextAreaElement | null
-    const value = attachment.source.value
-    const match = attachment.display.match(/pasted #(\d+)/)
-    const placeholder = match ? `[pasted #${match[1]}]` : null
-
-    const currentText = textarea?.value ?? ""
-
-    let nextText = currentText
-    let selectionTarget: number | null = null
-
-    if (placeholder) {
-      const placeholderIndex = currentText.indexOf(placeholder)
-      if (placeholderIndex !== -1) {
-        nextText =
-          currentText.substring(0, placeholderIndex) +
-          value +
-          currentText.substring(placeholderIndex + placeholder.length)
-        selectionTarget = placeholderIndex + value.length
-      }
-    }
-
-    if (nextText === currentText) {
-      if (textarea) {
-        const start = textarea.selectionStart
-        const end = textarea.selectionEnd
-        nextText = currentText.substring(0, start) + value + currentText.substring(end)
-        selectionTarget = start + value.length
-      } else {
-        nextText = currentText + value
-      }
-    }
-
-    if (textarea) {
-      textarea.value = nextText
-      textarea.dispatchEvent(new Event("input", { bubbles: true }))
-      textarea.focus()
-      if (selectionTarget !== null) {
-        textarea.setSelectionRange(selectionTarget, selectionTarget)
-      }
-    }
-
-    removeAttachment(props.instanceId, props.sessionId, attachment.id)
-  }
+  let promptInputApi: PromptInputApi | null = null
+  let pendingPromptText: string | null = null
+  let pendingSelectionInsert: { text: string; mode: PromptInsertMode } | null = null
 
   let scrollToBottomHandle: (() => void) | undefined
   let rootRef: HTMLDivElement | undefined
@@ -112,8 +69,49 @@ export const SessionView: Component<SessionViewProps> = (props) => {
     if (!props.isActive) return
     scheduleScrollToBottom()
   })
-  let quoteHandler: ((text: string, mode: "quote" | "code") => void) | null = null
- 
+
+  createEffect(
+    on(
+      () => props.isActive,
+      (isActive) => {
+        if (!isActive) return
+
+        // Don't steal focus from other inputs (command palette, dialogs, selectors, etc.)
+        if (typeof document === "undefined") return
+        const activeEl = document.activeElement as HTMLElement | null
+        const activeIsInput =
+          activeEl?.tagName === "INPUT" ||
+          activeEl?.tagName === "TEXTAREA" ||
+          activeEl?.tagName === "SELECT" ||
+          Boolean(activeEl?.isContentEditable)
+        if (activeIsInput) return
+
+        const modalOpen = Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'))
+        if (modalOpen) return
+
+        // Defer until the session pane is visible and the textarea is mounted.
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (promptInputApi) {
+              promptInputApi.focus()
+              return
+            }
+
+            const textarea = rootRef?.querySelector<HTMLTextAreaElement>(".prompt-input")
+            if (!textarea) return
+            if (textarea.disabled) return
+
+            try {
+              textarea.focus({ preventScroll: true } as any)
+            } catch {
+              textarea.focus()
+            }
+          })
+        })
+      },
+    ),
+  )
+
   createEffect(() => {
     const currentSession = session()
     if (currentSession) {
@@ -121,18 +119,31 @@ export const SessionView: Component<SessionViewProps> = (props) => {
     }
   })
 
-  function registerQuoteHandler(handler: (text: string, mode: "quote" | "code") => void) {
-    quoteHandler = handler
+  function registerPromptInputApi(api: PromptInputApi) {
+    promptInputApi = api
+
+    if (pendingPromptText) {
+      api.setPromptText(pendingPromptText, { focus: true })
+      pendingPromptText = null
+    }
+
+    if (pendingSelectionInsert) {
+      api.insertSelection(pendingSelectionInsert.text, pendingSelectionInsert.mode)
+      pendingSelectionInsert = null
+    }
+
     return () => {
-      if (quoteHandler === handler) {
-        quoteHandler = null
+      if (promptInputApi === api) {
+        promptInputApi = null
       }
     }
   }
 
-  function handleQuoteSelection(text: string, mode: "quote" | "code") {
-    if (quoteHandler) {
-      quoteHandler(text, mode)
+  function handleQuoteSelection(text: string, mode: PromptInsertMode) {
+    if (promptInputApi) {
+      promptInputApi.insertSelection(text, mode)
+    } else {
+      pendingSelectionInsert = { text, mode }
     }
   }
  
@@ -193,14 +204,13 @@ export const SessionView: Component<SessionViewProps> = (props) => {
       )
 
       const restoredText = getUserMessageText(messageId)
-      if (restoredText) {
-        const textarea = rootRef?.querySelector(".prompt-input") as HTMLTextAreaElement | undefined
-        if (textarea) {
-          textarea.value = restoredText
-          textarea.dispatchEvent(new Event("input", { bubbles: true }))
-          textarea.focus()
-        }
-      }
+       if (restoredText) {
+         if (promptInputApi) {
+           promptInputApi.setPromptText(restoredText, { focus: true })
+         } else {
+           pendingPromptText = restoredText
+         }
+       }
     } catch (error) {
       log.error("Failed to revert message", error)
       showAlertDialog(t("sessionView.alerts.revertFailed.message"), {
@@ -217,9 +227,14 @@ export const SessionView: Component<SessionViewProps> = (props) => {
     }
 
     const restoredText = getUserMessageText(messageId)
+    const parentTitle = (session()?.title ?? "").trim() || t("sessionList.session.untitled")
 
     try {
       const forkedSession = await forkSession(props.instanceId, props.sessionId, { messageId })
+
+      renameSession(props.instanceId, forkedSession.id, `Fork: ${parentTitle}`).catch((error) => {
+        log.error("Failed to rename forked session", error)
+      })
 
       const parentToActivate = forkedSession.parentId ?? forkedSession.id
       setActiveParentSession(props.instanceId, parentToActivate)
@@ -229,14 +244,13 @@ export const SessionView: Component<SessionViewProps> = (props) => {
 
       await loadMessages(props.instanceId, forkedSession.id).catch((error) => log.error("Failed to load forked session messages", error))
 
-      if (restoredText) {
-        const textarea = rootRef?.querySelector(".prompt-input") as HTMLTextAreaElement | undefined
-        if (textarea) {
-          textarea.value = restoredText
-          textarea.dispatchEvent(new Event("input", { bubbles: true }))
-          textarea.focus()
-        }
-      }
+       if (restoredText) {
+         if (promptInputApi) {
+           promptInputApi.setPromptText(restoredText, { focus: true })
+         } else {
+           pendingPromptText = restoredText
+         }
+       }
     } catch (error) {
       log.error("Failed to fork session", error)
       showAlertDialog(t("sessionView.alerts.forkFailed.message"), {
@@ -285,39 +299,19 @@ export const SessionView: Component<SessionViewProps> = (props) => {
              />
 
 
-              <Show when={attachments().length > 0}>
-                <div class="flex flex-wrap items-center gap-1.5 border-t px-3 py-2" style="border-color: var(--border-base);">
-                  <For each={attachments()}>
-                    {(attachment) => {
-                      const isText = attachment.source.type === "text"
-                      return (
-                        <div class="attachment-chip" title={attachment.source.type === "file" ? attachment.source.path : undefined}>
-                          <span class="font-mono">{attachment.display}</span>
-                          <Show when={isText}>
-                            <button
-                              type="button"
-                              class="attachment-expand"
-                              onClick={() => handleExpandTextAttachment(attachment)}
-                              aria-label={t("sessionView.attachments.expandPastedTextAriaLabel")}
-                              title={t("sessionView.attachments.insertPastedTextTitle")}
-                            >
-                              <Expand class="h-3 w-3" aria-hidden="true" />
-                            </button>
-                          </Show>
-                          <button
-                            type="button"
-                            class="attachment-remove"
-                            onClick={() => removeAttachment(props.instanceId, props.sessionId, attachment.id)}
-                            aria-label={t("sessionView.attachments.removeAriaLabel")}
-                          >
-                            ×
-                          </button>
-                        </div>
-                      )
+                <Show when={attachments().length > 0}>
+                  <PromptAttachmentsBar
+                    attachments={attachments()}
+                    onRemoveAttachment={(attachmentId) => {
+                      if (promptInputApi) {
+                        promptInputApi.removeAttachment(attachmentId)
+                        return
+                      }
+                      removeAttachment(props.instanceId, props.sessionId, attachmentId)
                     }}
-                  </For>
-                </div>
-              </Show>
+                    onExpandTextAttachment={(attachmentId) => promptInputApi?.expandTextAttachment(attachmentId)}
+                  />
+                </Show>
 
               <PromptInput
                instanceId={props.instanceId}
@@ -329,11 +323,11 @@ export const SessionView: Component<SessionViewProps> = (props) => {
                isSessionBusy={sessionBusy()}
                disabled={sessionNeedsInput()}
                onAbortSession={handleAbortSession}
-               registerQuoteHandler={registerQuoteHandler}
-             />
-          </div>
-        )
-      }}
+               registerPromptInputApi={registerPromptInputApi}
+               />
+            </div>
+          )
+        }}
     </Show>
   )
 }

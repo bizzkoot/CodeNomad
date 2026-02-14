@@ -15,15 +15,25 @@ export interface AuthManagerInit {
   username: string
   password?: string
   generateToken: boolean
+  dangerouslySkipAuth?: boolean
 }
 
 export class AuthManager {
-  private readonly authStore: AuthStore
+  private readonly authStore: AuthStore | null
   private readonly tokenManager: TokenManager | null
   private readonly sessionManager = new SessionManager()
   private readonly cookieName = DEFAULT_AUTH_COOKIE_NAME
+  private readonly authEnabled: boolean
 
   constructor(private readonly init: AuthManagerInit, private readonly logger: Logger) {
+    this.authEnabled = !Boolean(init.dangerouslySkipAuth)
+
+    if (!this.authEnabled) {
+      this.authStore = null
+      this.tokenManager = null
+      return
+    }
+
     const authFilePath = resolveAuthFilePath(init.configPath)
     this.authStore = new AuthStore(authFilePath, logger.child({ component: "auth" }))
 
@@ -35,6 +45,10 @@ export class AuthManager {
     })
 
     this.tokenManager = init.generateToken ? new TokenManager(60_000) : null
+  }
+
+  isAuthEnabled(): boolean {
+    return this.authEnabled
   }
 
   getCookieName(): string {
@@ -56,19 +70,31 @@ export class AuthManager {
   }
 
   validateLogin(username: string, password: string): boolean {
-    return this.authStore.validateCredentials(username, password)
+    if (!this.authEnabled) {
+      return true
+    }
+    return this.requireAuthStore().validateCredentials(username, password)
   }
 
   createSession(username: string) {
+    if (!this.authEnabled) {
+      return { id: "auth-disabled", createdAt: Date.now(), username: this.init.username }
+    }
     return this.sessionManager.createSession(username)
   }
 
   getStatus() {
-    return this.authStore.getStatus()
+    if (!this.authEnabled) {
+      return { username: this.init.username, passwordUserProvided: false }
+    }
+    return this.requireAuthStore().getStatus()
   }
 
   setPassword(password: string) {
-    return this.authStore.setPassword({ password, markUserProvided: true })
+    if (!this.authEnabled) {
+      throw new Error("Internal authentication is disabled")
+    }
+    return this.requireAuthStore().setPassword({ password, markUserProvided: true })
   }
 
   isLoopbackRequest(request: FastifyRequest): boolean {
@@ -76,6 +102,12 @@ export class AuthManager {
   }
 
   getSessionFromRequest(request: FastifyRequest): { username: string; sessionId: string } | null {
+    if (!this.authEnabled) {
+      // When auth is disabled, treat all requests as authenticated.
+      // We still return a stable username so callers can display it.
+      return { username: this.init.username, sessionId: "auth-disabled" }
+    }
+
     const cookies = parseCookies(request.headers.cookie)
     const sessionId = cookies[this.cookieName]
     const session = this.sessionManager.getSession(sessionId)
@@ -87,8 +119,23 @@ export class AuthManager {
     reply.header("Set-Cookie", buildSessionCookie(this.cookieName, sessionId))
   }
 
+  setSessionCookieWithOptions(reply: FastifyReply, sessionId: string, options?: { secure?: boolean }) {
+    reply.header("Set-Cookie", buildSessionCookie(this.cookieName, sessionId, options))
+  }
+
   clearSessionCookie(reply: FastifyReply) {
     reply.header("Set-Cookie", buildSessionCookie(this.cookieName, "", { maxAgeSeconds: 0 }))
+  }
+
+  clearSessionCookieWithOptions(reply: FastifyReply, options?: { secure?: boolean }) {
+    reply.header("Set-Cookie", buildSessionCookie(this.cookieName, "", { maxAgeSeconds: 0, ...options }))
+  }
+
+  private requireAuthStore(): AuthStore {
+    if (!this.authStore) {
+      throw new Error("Auth store is unavailable")
+    }
+    return this.authStore
   }
 }
 
@@ -104,8 +151,11 @@ function resolvePath(filePath: string) {
   return path.resolve(filePath)
 }
 
-function buildSessionCookie(name: string, value: string, options?: { maxAgeSeconds?: number }) {
+function buildSessionCookie(name: string, value: string, options?: { maxAgeSeconds?: number; secure?: boolean }) {
   const parts = [`${name}=${encodeURIComponent(value)}`, "HttpOnly", "Path=/", "SameSite=Lax"]
+  if (options?.secure) {
+    parts.push("Secure")
+  }
   if (options?.maxAgeSeconds !== undefined) {
     parts.push(`Max-Age=${Math.max(0, Math.floor(options.maxAgeSeconds))}`)
   }

@@ -801,6 +801,8 @@ export default function ToolCall(props: ToolCallProps) {
     toolCall: toolCallMemo,
     toolState,
     toolName,
+    instanceId: props.instanceId,
+    sessionId: props.sessionId,
     t,
     messageVersion: messageVersionAccessor,
     partVersion: partVersionAccessor,

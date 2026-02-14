@@ -7,6 +7,7 @@ import type {
 } from "../types/message"
 import type {
   EventSessionCompacted,
+  EventSessionDiff,
   EventSessionError,
   EventSessionIdle,
   EventSessionUpdated,
@@ -450,6 +451,24 @@ function handleSessionCompacted(instanceId: string, event: EventSessionCompacted
   })
 }
 
+function handleSessionDiff(instanceId: string, event: EventSessionDiff): void {
+  const sessionId = event.properties?.sessionID
+  if (!sessionId) return
+
+  const nextDiff = (event.properties as { diff?: unknown } | undefined)?.diff
+  if (!Array.isArray(nextDiff)) return
+
+  withSession(instanceId, sessionId, (session) => {
+    session.diff = nextDiff as any
+    session.time = {
+      ...(session.time ?? {}),
+      updated: Date.now(),
+    }
+  })
+
+  log.info(`[SSE] Session diff updated: ${sessionId}`)
+}
+
 function handleSessionError(_instanceId: string, event: EventSessionError): void {
   const error = event.properties?.error
   log.error(`[SSE] Session error:`, error)
@@ -531,6 +550,7 @@ export {
   handlePermissionReplied,
   handlePermissionUpdated,
   handleSessionCompacted,
+  handleSessionDiff,
   handleSessionError,
   handleSessionIdle,
   handleSessionStatus,

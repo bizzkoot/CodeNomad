@@ -17,6 +17,7 @@ import { getCommands } from "../stores/commands"
 import { showAlertDialog } from "../stores/alerts"
 import { useI18n } from "../lib/i18n"
 import { getLogger } from "../lib/logger"
+import type { PromptInputApi } from "./prompt-input/types"
 const log = getLogger("actions")
 
 
@@ -31,6 +32,7 @@ interface PromptInputProps {
   isSessionBusy?: boolean
   onAbortSession?: () => Promise<void>
   registerQuoteHandler?: (handler: (text: string, mode: "quote" | "code") => void) => void | (() => void)
+  registerPromptInputApi?: (api: PromptInputApi) => void | (() => void)
 }
 
 export default function PromptInput(props: PromptInputProps) {
@@ -1111,6 +1113,44 @@ export default function PromptInput(props: PromptInputProps) {
     const block = "```\n" + trimmed + "\n```\n\n"
     insertBlockContent(block)
   }
+
+  createEffect(() => {
+    if (!props.registerPromptInputApi) return
+
+    const api: PromptInputApi = {
+      insertSelection: (text, mode) => {
+        if (mode === "code") {
+          insertCodeSelection(text)
+          return
+        }
+        insertQuotedSelection(text)
+      },
+      expandTextAttachment: (attachmentId) => {
+        const attachment = attachments().find((item) => item.id === attachmentId)
+        if (!attachment || attachment.source.type !== "text") return
+        _handleExpandTextAttachment(attachment)
+      },
+      removeAttachment: (attachmentId) => {
+        _handleRemoveAttachment(attachmentId)
+      },
+      setPromptText: (text, opts) => {
+        setPrompt(text)
+        if (opts?.focus ?? true) {
+          textareaRef?.focus()
+        }
+      },
+      focus: () => {
+        textareaRef?.focus()
+      },
+    }
+
+    const cleanup = props.registerPromptInputApi(api)
+    onCleanup(() => {
+      if (typeof cleanup === "function") {
+        cleanup()
+      }
+    })
+  })
 
   const canStop = () => Boolean(props.isSessionBusy && props.onAbortSession)
 

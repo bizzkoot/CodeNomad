@@ -5,6 +5,7 @@ import { useConfig } from "../stores/preferences"
 import AdvancedSettingsModal from "./advanced-settings-modal"
 import DirectoryBrowserDialog from "./directory-browser-dialog"
 import Kbd from "./kbd"
+import { ThemeModeToggle } from "./theme-mode-toggle"
 import { openNativeFolderDialog, supportsNativeDialogs } from "../lib/native/native-functions"
 import VersionPill from "./version-pill"
 import { DiscordSymbolIcon, GitHubMarkIcon } from "./brand-icons"
@@ -253,10 +254,61 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
 
 
   function getDisplayPath(path: string): string {
+    if (!path) return path
+
+    // macOS: /Users/<name>/...
     if (path.startsWith("/Users/")) {
       return path.replace(/^\/Users\/[^/]+/, "~")
     }
+
+    // Linux: /home/<name>/...
+    if (path.startsWith("/home/")) {
+      return path.replace(/^\/home\/[^/]+/, "~")
+    }
+
+    // Windows: C:\Users\<name>\... (and the forward-slash variant)
+    if (/^[A-Za-z]:\\Users\\/.test(path)) {
+      return path.replace(/^[A-Za-z]:\\Users\\[^\\]+/, "~")
+    }
+    if (/^[A-Za-z]:\/Users\//.test(path)) {
+      return path.replace(/^[A-Za-z]:\/Users\/[^/]+/, "~")
+    }
+
     return path
+  }
+
+  function looksLikeWindowsPath(value: string): boolean {
+    if (!value) return false
+    // Drive letter (C:\...) or UNC (\\server\share\...)
+    return /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value)
+  }
+
+  function splitFolderPath(rawPath: string): { baseName: string; dirName: string } {
+    if (!rawPath) return { baseName: "", dirName: "" }
+
+    const isWindows = looksLikeWindowsPath(rawPath)
+    const trimmed = rawPath.replace(/[\\/]+$/, "")
+
+    // Root edge-cases ("/", "C:\\", "\\\\server\\share\\")
+    if (!trimmed) {
+      return { baseName: rawPath, dirName: "" }
+    }
+
+    if (isWindows && /^[A-Za-z]:$/.test(trimmed)) {
+      return { baseName: `${trimmed}\\`, dirName: "" }
+    }
+
+    const lastSlash = trimmed.lastIndexOf("/")
+    const lastBackslash = isWindows ? trimmed.lastIndexOf("\\") : -1
+    const lastSep = Math.max(lastSlash, lastBackslash)
+
+    if (lastSep < 0) {
+      return { baseName: trimmed, dirName: "" }
+    }
+
+    const baseName = trimmed.slice(lastSep + 1) || trimmed
+    const dirName = trimmed.slice(0, lastSep)
+    return { baseName, dirName }
   }
 
   return (
@@ -313,8 +365,9 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
               </Select.Portal>
             </Select>
           </div>
-          <Show when={props.onOpenRemoteAccess}>
-            <div class="absolute top-4 right-6">
+          <div class="absolute top-4 right-6 flex items-center gap-2">
+            <ThemeModeToggle class="selector-button selector-button-secondary w-auto p-2 inline-flex items-center justify-center" />
+            <Show when={props.onOpenRemoteAccess}>
               <button
                 type="button"
                 class="selector-button selector-button-secondary w-auto p-2 inline-flex items-center justify-center"
@@ -322,8 +375,8 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
               >
                 <MonitorUp class="w-4 h-4" />
               </button>
-            </div>
-          </Show>
+            </Show>
+          </div>
           <div class="mb-6 text-center shrink-0">
             <div class="mb-3 flex justify-center">
               <img src={codeNomadLogo} alt={t("folderSelection.logoAlt")} class="h-32 w-auto sm:h-48" loading="lazy" />
@@ -439,14 +492,14 @@ const FolderSelectionView: Component<FolderSelectionViewProps> = (props) => {
                                   <div class="flex items-center gap-2 mb-1">
                                     <Folder class="w-4 h-4 flex-shrink-0 icon-muted" />
                                     <span class="text-sm font-medium truncate text-primary">
-                                      {folder.path.split("/").pop()}
+                                      {splitFolderPath(folder.path).baseName}
                                     </span>
                                   </div>
-                                  <div class="text-xs font-mono truncate pl-6 text-muted">
-                                    {getDisplayPath(folder.path)}
-                                  </div>
-                                  <div class="text-xs mt-1 pl-6 text-muted">
-                                    {formatRelativeTime(folder.lastAccessed)}
+                                  <div class="flex items-center gap-2 pl-6 text-xs text-muted min-w-0">
+                                    <span class="font-mono truncate-start flex-1 min-w-0">
+                                      {getDisplayPath(folder.path)}
+                                    </span>
+                                    <span class="flex-shrink-0">{formatRelativeTime(folder.lastAccessed)}</span>
                                   </div>
                                 </div>
                                 <Show when={focusMode() === "recent" && selectedIndex() === index()}>

@@ -145,12 +145,33 @@ struct AppConfig {
     preferences: Option<PreferencesConfig>,
 }
 
-fn resolve_config_path() -> PathBuf {
+fn resolve_config_locations() -> (PathBuf, PathBuf) {
     let raw = env::var("CLI_CONFIG")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_CONFIG_PATH.to_string());
-    expand_home(&raw)
+
+    let expanded = expand_home(&raw);
+    let lower = raw.trim().to_lowercase();
+
+    if lower.ends_with(".yaml") || lower.ends_with(".yml") {
+        let base = expanded
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| expanded.clone());
+        return (expanded, base.join("config.json"));
+    }
+
+    if lower.ends_with(".json") {
+        let base = expanded
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| expanded.clone());
+        return (base.join("config.yaml"), expanded);
+    }
+
+    // Treat as directory.
+    (expanded.join("config.yaml"), expanded.join("config.json"))
 }
 
 fn expand_home(path: &str) -> PathBuf {
@@ -163,8 +184,27 @@ fn expand_home(path: &str) -> PathBuf {
 }
 
 fn resolve_listening_mode() -> String {
-    let path = resolve_config_path();
-    if let Ok(content) = fs::read_to_string(path) {
+    let (yaml_path, json_path) = resolve_config_locations();
+
+    if let Ok(content) = fs::read_to_string(&yaml_path) {
+        if let Ok(config) = serde_yaml::from_str::<AppConfig>(&content) {
+            if let Some(mode) = config
+                .preferences
+                .as_ref()
+                .and_then(|prefs| prefs.listening_mode.as_ref())
+            {
+                if mode == "local" {
+                    return "local".to_string();
+                }
+                if mode == "all" {
+                    return "all".to_string();
+                }
+            }
+        }
+    }
+
+    // Legacy fallback.
+    if let Ok(content) = fs::read_to_string(&json_path) {
         if let Ok(config) = serde_json::from_str::<AppConfig>(&content) {
             if let Some(mode) = config
                 .preferences
@@ -260,7 +300,14 @@ impl CliProcessManager {
         let ready_flag = self.ready.clone();
         let token_arc = self.bootstrap_token.clone();
         thread::spawn(move || {
-            if let Err(err) = Self::spawn_cli(app.clone(), status_arc.clone(), child_arc, ready_flag, token_arc, dev) {
+            if let Err(err) = Self::spawn_cli(
+                app.clone(),
+                status_arc.clone(),
+                child_arc,
+                ready_flag,
+                token_arc,
+                dev,
+            ) {
                 log_line(&format!("cli spawn failed: {err}"));
                 let mut locked = status_arc.lock();
                 locked.state = CliState::Error;
@@ -369,7 +416,9 @@ impl CliProcessManager {
 
         if !supports_user_shell() {
             if which::which(&resolution.node_binary).is_err() {
-                return Err(anyhow::anyhow!("Node binary not found. Make sure Node.js is installed."));
+                return Err(anyhow::anyhow!(
+                    "Node binary not found. Make sure Node.js is installed."
+                ));
             }
         }
 
@@ -420,7 +469,6 @@ impl CliProcessManager {
         let token_clone = bootstrap_token.clone();
 
         thread::spawn(move || {
-
             let stdout = child_clone
                 .lock()
                 .as_mut()
@@ -433,10 +481,24 @@ impl CliProcessManager {
                 .map(BufReader::new);
 
             if let Some(reader) = stdout {
-                Self::process_stream(reader, "stdout", &app_clone, &status_clone, &ready_clone, &token_clone);
+                Self::process_stream(
+                    reader,
+                    "stdout",
+                    &app_clone,
+                    &status_clone,
+                    &ready_clone,
+                    &token_clone,
+                );
             }
             if let Some(reader) = stderr {
-                Self::process_stream(reader, "stderr", &app_clone, &status_clone, &ready_clone, &token_clone);
+                Self::process_stream(
+                    reader,
+                    "stderr",
+                    &app_clone,
+                    &status_clone,
+                    &ready_clone,
+                    &token_clone,
+                );
             }
         });
 
@@ -464,13 +526,33 @@ impl CliProcessManager {
         let status_clone = status.clone();
         let app_clone = app.clone();
         thread::spawn(move || {
-            let code = {
-                let mut guard = child_holder.lock();
-                if let Some(child) = guard.as_mut() {
-                    child.wait().ok()
-                } else {
-                    None
+            // Do not hold the child mutex while waiting for process exit.
+            // Holding the lock across `wait()` deadlocks `stop()`, which needs the
+            // same lock to send SIGTERM/SIGKILL when the user quits the app.
+            let code = loop {
+                let maybe_exited = {
+                    let mut guard = child_holder.lock();
+                    if guard.is_none() {
+                        return;
+                    }
+                    match guard
+                        .as_mut()
+                        .and_then(|child| child.try_wait().ok().flatten())
+                    {
+                        Some(status) => {
+                            // Drop the handle after the process exits so other callers
+                            // don't attempt to stop/kill a finished process.
+                            *guard = None;
+                            Some(status)
+                        }
+                        None => None,
+                    }
+                };
+
+                if let Some(status) = maybe_exited {
+                    break Some(status);
                 }
+                thread::sleep(Duration::from_millis(100));
             };
 
             let mut locked = status_clone.lock();
@@ -489,8 +571,14 @@ impl CliProcessManager {
                 if locked.error.is_none() {
                     locked.error = err_msg.clone();
                 }
-                log_line(&format!("cli process exited before ready: {:?}", locked.error));
-                let _ = app_clone.emit("cli:error", json!({"message": locked.error.clone().unwrap_or_default()}));
+                log_line(&format!(
+                    "cli process exited before ready: {:?}",
+                    locked.error
+                ));
+                let _ = app_clone.emit(
+                    "cli:error",
+                    json!({"message": locked.error.clone().unwrap_or_default()}),
+                );
             } else {
                 locked.state = CliState::Stopped;
                 log_line("cli process stopped cleanly");
@@ -511,7 +599,7 @@ impl CliProcessManager {
         bootstrap_token: &Arc<Mutex<Option<String>>>,
     ) {
         let mut buffer = String::new();
-        let port_regex = Regex::new(r"CodeNomad Server is ready at http://[^:]+:(\d+)").ok();
+        let local_url_regex = Regex::new(r"^Local\s+Connection\s+URL\s*:\s*(https?://\S+)").ok();
         let http_regex = Regex::new(r":(\d{2,5})(?!.*:\d)").ok();
         let token_prefix = "CODENOMAD_BOOTSTRAP_TOKEN:";
 
@@ -539,12 +627,12 @@ impl CliProcessManager {
                             continue;
                         }
 
-                        if let Some(port) = port_regex
+                        if let Some(url) = local_url_regex
                             .as_ref()
                             .and_then(|re| re.captures(line).and_then(|c| c.get(1)))
-                            .and_then(|m| m.as_str().parse::<u16>().ok())
+                            .map(|m| m.as_str().to_string())
                         {
-                            Self::mark_ready(app, status, ready, bootstrap_token, port);
+                            Self::mark_ready(app, status, ready, bootstrap_token, url);
                             continue;
                         }
 
@@ -554,13 +642,25 @@ impl CliProcessManager {
                                 .and_then(|re| re.captures(line).and_then(|c| c.get(1)))
                                 .and_then(|m| m.as_str().parse::<u16>().ok())
                             {
-                                Self::mark_ready(app, status, ready, bootstrap_token, port);
+                                Self::mark_ready(
+                                    app,
+                                    status,
+                                    ready,
+                                    bootstrap_token,
+                                    format!("http://localhost:{port}"),
+                                );
                                 continue;
                             }
 
                             if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
                                 if let Some(port) = value.get("port").and_then(|p| p.as_u64()) {
-                                    Self::mark_ready(app, status, ready, bootstrap_token, port as u16);
+                                    Self::mark_ready(
+                                        app,
+                                        status,
+                                        ready,
+                                        bootstrap_token,
+                                        format!("http://localhost:{}", port),
+                                    );
                                     continue;
                                 }
                             }
@@ -577,12 +677,15 @@ impl CliProcessManager {
         status: &Arc<Mutex<CliStatus>>,
         ready: &Arc<AtomicBool>,
         bootstrap_token: &Arc<Mutex<Option<String>>>,
-        port: u16,
+        base_url: String,
     ) {
         ready.store(true, Ordering::SeqCst);
-        let base_url = format!("http://127.0.0.1:{port}");
+        let port = Url::parse(&base_url)
+            .ok()
+            .and_then(|u| u.port_or_known_default())
+            .map(|p| p as u16);
         let mut locked = status.lock();
-        locked.port = Some(port);
+        locked.port = port;
         locked.url = Some(base_url.clone());
         locked.state = CliState::Ready;
         locked.error = None;
@@ -591,22 +694,29 @@ impl CliProcessManager {
         let token = bootstrap_token.lock().take();
 
         if let Some(token) = token {
-            match exchange_bootstrap_token(&base_url, &token) {
-                Ok(Some(session_id)) => {
-                    if let Err(err) = set_session_cookie(app, &base_url, &session_id) {
-                        log_line(&format!("failed to set session cookie: {err}"));
-                        navigate_main(app, &format!("{base_url}/login"));
-                    } else {
-                        navigate_main(app, &base_url);
+            // Token exchange is only implemented for loopback HTTP. If localUrl is HTTPS,
+            // skip the exchange and let the user authenticate normally.
+            let scheme = Url::parse(&base_url).ok().map(|u| u.scheme().to_string());
+            if scheme.as_deref() != Some("http") {
+                navigate_main(app, &base_url);
+            } else {
+                match exchange_bootstrap_token(&base_url, &token) {
+                    Ok(Some(session_id)) => {
+                        if let Err(err) = set_session_cookie(app, &base_url, &session_id) {
+                            log_line(&format!("failed to set session cookie: {err}"));
+                            navigate_main(app, &format!("{base_url}/login"));
+                        } else {
+                            navigate_main(app, &base_url);
+                        }
                     }
-                }
-                Ok(None) => {
-                    log_line("bootstrap token exchange failed (invalid token)");
-                    navigate_main(app, &format!("{base_url}/login"));
-                }
-                Err(err) => {
-                    log_line(&format!("bootstrap token exchange failed: {err}"));
-                    navigate_main(app, &format!("{base_url}/login"));
+                    Ok(None) => {
+                        log_line("bootstrap token exchange failed (invalid token)");
+                        navigate_main(app, &format!("{base_url}/login"));
+                    }
+                    Err(err) => {
+                        log_line(&format!("bootstrap token exchange failed: {err}"));
+                        navigate_main(app, &format!("{base_url}/login"));
+                    }
                 }
             }
         } else {
@@ -693,15 +803,25 @@ impl CliEntry {
             "serve".to_string(),
             "--host".to_string(),
             host.to_string(),
-            "--port".to_string(),
-            "0".to_string(),
             "--generate-token".to_string(),
         ];
+
         if dev {
+            // Dev: plain HTTP + Vite dev server proxy.
+            args.push("--https".to_string());
+            args.push("false".to_string());
+            args.push("--http".to_string());
+            args.push("true".to_string());
             args.push("--ui-dev-server".to_string());
             args.push("http://localhost:3000".to_string());
             args.push("--log-level".to_string());
             args.push("debug".to_string());
+        } else {
+            // Prod desktop: always keep loopback HTTP enabled.
+            args.push("--https".to_string());
+            args.push("true".to_string());
+            args.push("--http".to_string());
+            args.push("true".to_string());
         }
         args
     }
@@ -726,9 +846,10 @@ fn resolve_tsx(_app: &AppHandle) -> Option<String> {
         std::env::current_dir()
             .ok()
             .map(|p| p.join("node_modules/tsx/dist/cli.js")),
-        std::env::current_exe()
-            .ok()
-            .and_then(|ex| ex.parent().map(|p| p.join("../node_modules/tsx/dist/cli.js"))),
+        std::env::current_exe().ok().and_then(|ex| {
+            ex.parent()
+                .map(|p| p.join("../node_modules/tsx/dist/cli.js"))
+        }),
     ];
 
     first_existing(candidates)
@@ -751,7 +872,8 @@ fn resolve_dist_entry(_app: &AppHandle) -> Option<String> {
     let base = workspace_root();
     let mut candidates: Vec<Option<PathBuf>> = vec![
         base.as_ref().map(|p| p.join("packages/server/dist/bin.js")),
-        base.as_ref().map(|p| p.join("packages/server/dist/index.js")),
+        base.as_ref()
+            .map(|p| p.join("packages/server/dist/index.js")),
         base.as_ref().map(|p| p.join("server/dist/bin.js")),
         base.as_ref().map(|p| p.join("server/dist/index.js")),
     ];
@@ -766,7 +888,9 @@ fn resolve_dist_entry(_app: &AppHandle) -> Option<String> {
             candidates.push(Some(resources.join("resources/server/dist/bin.js")));
             candidates.push(Some(resources.join("resources/server/dist/index.js")));
             candidates.push(Some(resources.join("resources/server/dist/server/bin.js")));
-            candidates.push(Some(resources.join("resources/server/dist/server/index.js")));
+            candidates.push(Some(
+                resources.join("resources/server/dist/server/index.js"),
+            ));
 
             let linux_resource_roots = [dir.join("../lib/CodeNomad"), dir.join("../lib/codenomad")];
             for root in linux_resource_roots {
@@ -785,8 +909,10 @@ fn resolve_dist_entry(_app: &AppHandle) -> Option<String> {
     first_existing(candidates)
 }
 
-fn build_shell_command_string(entry: &CliEntry, cli_args: &[String]) -> anyhow::Result<ShellCommand> {
-
+fn build_shell_command_string(
+    entry: &CliEntry,
+    cli_args: &[String],
+) -> anyhow::Result<ShellCommand> {
     let shell = default_shell();
     let mut quoted: Vec<String> = Vec::new();
     quoted.push(shell_escape(&entry.node_binary));
@@ -817,7 +943,7 @@ fn shell_escape(input: &str) -> String {
         "''".to_string()
     } else if !input
         .chars()
-        .any(|c| matches!(c, ' ' | '"' | '\'' | '$' | '`' | '!' ))
+        .any(|c| matches!(c, ' ' | '"' | '\'' | '$' | '`' | '!'))
     {
         input.to_string()
     } else {

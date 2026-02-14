@@ -6,6 +6,7 @@ import { useI18n } from "../../lib/i18n"
 interface ContextUsagePanelProps {
   instanceId: string
   sessionId: string
+  class?: string
 }
 
 const chipClass = "inline-flex items-center gap-1 rounded-full border border-base px-2 py-0.5 text-xs text-primary"
@@ -48,7 +49,7 @@ const ContextUsagePanel: Component<ContextUsagePanelProps> = (props) => {
   const costDisplay = createMemo(() => `$${costValue().toFixed(2)}`)
 
   return (
-    <div class="session-context-panel border-r border-base border-b px-3 py-3 space-y-3">
+    <div class={`session-context-panel border-r border-base border-b px-3 py-3 space-y-3 ${props.class ?? ""}`.trim()}>
       <div class="flex flex-wrap items-center gap-2 text-xs text-primary/90">
         <div class={headingClass}>{t("contextUsagePanel.headings.tokens")}</div>
         <div class={chipClass}>

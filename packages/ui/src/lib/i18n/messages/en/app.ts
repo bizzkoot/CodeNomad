@@ -29,4 +29,14 @@ export const appMessages = {
 
   "releases.uiUpdated.title": "UI updated",
   "releases.uiUpdated.message": "UI is now updated to {version}.",
+
+  "releases.devUpdateAvailable.title": "Dev build available",
+  "releases.devUpdateAvailable.message": "A new dev build is available: {version}.",
+  "releases.devUpdateAvailable.action": "View release",
+
+  "theme.mode.system": "System",
+  "theme.mode.light": "Light",
+  "theme.mode.dark": "Dark",
+  "theme.toggle.title": "Theme: {mode}",
+  "theme.toggle.ariaLabel": "Theme: {mode}",
 } as const

@@ -4,12 +4,15 @@ mod cli_manager;
 
 use cli_manager::{CliProcessManager, CliStatus};
 use serde_json::json;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::menu::{MenuBuilder, MenuItem, SubmenuBuilder};
 use tauri::plugin::{Builder as PluginBuilder, TauriPlugin};
 use tauri::webview::Webview;
 use tauri::{AppHandle, Emitter, Manager, Runtime, Wry};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
+
+static QUIT_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct AppState {
@@ -32,6 +35,7 @@ fn cli_restart(app: AppHandle, state: tauri::State<AppState>) -> Result<CliStatu
     Ok(state.manager.status())
 }
 
+
 fn is_dev_mode() -> bool {
     cfg!(debug_assertions) || std::env::var("TAURI_DEV").is_ok()
 }
@@ -39,7 +43,10 @@ fn is_dev_mode() -> bool {
 fn should_allow_internal(url: &Url) -> bool {
     match url.scheme() {
         "tauri" | "asset" | "file" => true,
-        "http" | "https" => matches!(url.host_str(), Some("127.0.0.1" | "localhost")),
+        // On Windows/WebView2, Tauri serves the app assets from `tauri.localhost`.
+        // This must be treated as an internal origin or the navigation guard will
+        // redirect it to the system browser and the app will appear blank.
+        "http" | "https" => matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "tauri.localhost")),
         _ => false,
     }
 }
@@ -67,6 +74,8 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_keepawake::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(navigation_guard)
         .manage(AppState {
             manager: CliProcessManager::new(),
@@ -164,6 +173,11 @@ fn main() {
         .expect("error while building tauri application")
         .run(|app_handle, event| match event {
             tauri::RunEvent::ExitRequested { api, .. } => {
+                // `app_handle.exit(0)` triggers another `ExitRequested`. Without a guard, we can
+                // prevent exit forever and the app never quits (Cmd+Q / Quit menu appears stuck).
+                if QUIT_REQUESTED.swap(true, Ordering::SeqCst) {
+                    return;
+                }
                 api.prevent_exit();
                 let app = app_handle.clone();
                 std::thread::spawn(move || {
@@ -178,6 +192,9 @@ fn main() {
                 ..
             } => {
                 // Ensure we have time to stop the CLI process before the app exits.
+                if QUIT_REQUESTED.swap(true, Ordering::SeqCst) {
+                    return;
+                }
                 api.prevent_close();
                 let app = app_handle.clone();
                 std::thread::spawn(move || {

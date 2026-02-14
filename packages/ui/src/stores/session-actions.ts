@@ -415,9 +415,54 @@ async function renameSession(instanceId: string, sessionId: string, nextTitle: s
   })
 }
 
+async function deleteMessagePart(
+  instanceId: string,
+  sessionId: string,
+  messageId: string,
+  partId: string,
+): Promise<void> {
+  const instance = instances().get(instanceId)
+  if (!instance || !instance.client) {
+    throw new Error("Instance not ready")
+  }
+
+  const session = sessions().get(instanceId)?.get(sessionId)
+  if (!session) {
+    throw new Error("Session not found")
+  }
+
+  const sessionClient = (instance.client as any).session
+  if (typeof sessionClient?.deletePart === "function") {
+    await requestData(
+      sessionClient.deletePart({
+        sessionID: sessionId,
+        messageID: messageId,
+        partID: partId,
+      }),
+      "session.deletePart",
+    )
+    return
+  }
+
+  if (typeof sessionClient?.removePart === "function") {
+    await requestData(
+      sessionClient.removePart({
+        sessionID: sessionId,
+        messageID: messageId,
+        partID: partId,
+      }),
+      "session.removePart",
+    )
+    return
+  }
+
+  throw new Error("Deleting message parts is not supported by the current SDK")
+}
+
 
 export {
   abortSession,
+  deleteMessagePart,
   executeCustomCommand,
   renameSession,
   runShellCommand,

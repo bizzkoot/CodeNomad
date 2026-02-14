@@ -1,10 +1,13 @@
 import { For, Show, createSignal } from "solid-js"
+import { Copy, Split, Trash2, Undo } from "lucide-solid"
 import type { MessageInfo, ClientPart } from "../types/message"
 import { partHasRenderableText } from "../types/message"
 import type { MessageRecord } from "../stores/message-v2/types"
 import MessagePart from "./message-part"
 import { copyToClipboard } from "../lib/clipboard"
 import { useI18n } from "../lib/i18n"
+import { showAlertDialog } from "../stores/alerts"
+import { deleteMessagePart } from "../stores/session-actions"
 
 interface MessageItemProps {
   record: MessageRecord
@@ -22,6 +25,7 @@ interface MessageItemProps {
 export default function MessageItem(props: MessageItemProps) {
   const { t } = useI18n()
   const [copied, setCopied] = createSignal(false)
+  const [deletingParts, setDeletingParts] = createSignal<Set<string>>(new Set())
 
   const isUser = () => props.record.role === "user"
   const createdTimestamp = () => props.messageInfo?.time?.created ?? props.record.createdAt
@@ -137,8 +141,17 @@ export default function MessageItem(props: MessageItemProps) {
   }
 
   const isGenerating = () => {
+    if (hasContent()) {
+      return false
+    }
+
+    // Prefer the local record status for streaming placeholders.
+    if (!isUser() && props.record.status === "streaming") {
+      return true
+    }
+
     const info = props.messageInfo
-    return !hasContent() && info && info.role === "assistant" && info.time.completed !== undefined && info.time.completed === 0
+    return Boolean(info && info.role === "assistant" && info.time.completed !== undefined && info.time.completed === 0)
   }
 
   const handleRevert = () => {
@@ -146,6 +159,8 @@ export default function MessageItem(props: MessageItemProps) {
       props.onRevert(props.record.id)
     }
   }
+
+  const copyLabel = () => (copied() ? t("messageItem.actions.copied") : t("messageItem.actions.copy"))
 
   const getRawContent = () => {
     return props.parts
@@ -163,7 +178,51 @@ export default function MessageItem(props: MessageItemProps) {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (!isUser() && !hasContent()) {
+  const deletableTextPartId = () => {
+    const part = props.parts.find((candidate) => {
+      if (!candidate || candidate.type !== "text") return false
+      const id = (candidate as any).id
+      if (typeof id !== "string" || id.length === 0) return false
+      return !Boolean((candidate as any).synthetic)
+    })
+    return (part as any)?.id as string | undefined
+  }
+
+  const isDeletingPart = (partId?: string) => {
+    if (!partId) return false
+    return deletingParts().has(partId)
+  }
+
+  const setPartDeleting = (partId: string, value: boolean) => {
+    setDeletingParts((prev) => {
+      const next = new Set(prev)
+      if (value) {
+        next.add(partId)
+      } else {
+        next.delete(partId)
+      }
+      return next
+    })
+  }
+
+  const handleDeletePart = async (partId?: string) => {
+    if (!partId) return
+    if (isDeletingPart(partId)) return
+    setPartDeleting(partId, true)
+    try {
+      await deleteMessagePart(props.instanceId, props.sessionId, props.record.id, partId)
+    } catch (error) {
+      showAlertDialog(t("messagePart.actions.deleteFailedMessage"), {
+        title: t("messagePart.actions.deleteFailedTitle"),
+        detail: error instanceof Error ? error.message : String(error),
+        variant: "error",
+      })
+    } finally {
+      setPartDeleting(partId, false)
+    }
+  }
+
+  if (!isUser() && !hasContent() && !isGenerating()) {
     return null
   }
 
@@ -228,61 +287,83 @@ export default function MessageItem(props: MessageItemProps) {
   return (
     <div class={containerClass()}>
       <header class={`message-item-header ${isUser() ? "pb-0.5" : "pb-0"}`}>
-        <div class="message-speaker">
-          <span class="message-speaker-label" data-role={isUser() ? "user" : "assistant"}>
-            {speakerLabel()}
-          </span>
-          <Show when={agentMeta()}>{(meta) => <span class="message-agent-meta">{meta()}</span>}</Show>
-        </div>
-        <div class="message-item-actions">
-          <Show when={isUser()}>
-            <div class="message-action-group">
-              <Show when={props.onRevert}>
-                <button
-                  class="message-action-button"
-                  onClick={handleRevert}
-                  title={t("messageItem.actions.revertTitle")}
-                  aria-label={t("messageItem.actions.revertTitle")}
-                >
-                  {t("messageItem.actions.revert")}
-                </button>
-              </Show>
-              <Show when={props.onFork}>
-                <button
-                  class="message-action-button"
-                  onClick={() => props.onFork?.(props.record.id)}
-                  title={t("messageItem.actions.forkTitle")}
-                  aria-label={t("messageItem.actions.forkTitle")}
-                >
-                  {t("messageItem.actions.fork")}
-                </button>
-              </Show>
-              <button
-                class="message-action-button"
-                onClick={handleCopy}
-                title={t("messageItem.actions.copyTitle")}
-                aria-label={t("messageItem.actions.copyTitle")}
-              >
-                <Show when={copied()} fallback={t("messageItem.actions.copy")}>
-                  {t("messageItem.actions.copied")}
+        <div class="message-item-header-row message-item-header-row--top">
+          <div class="message-speaker">
+            <span class="message-speaker-label" data-role={isUser() ? "user" : "assistant"}>
+              {speakerLabel()}
+            </span>
+          </div>
+
+          <div class="message-item-actions">
+            <Show when={isUser()}>
+              <div class="message-action-group">
+                <Show when={props.onRevert}>
+                  <button
+                    class="message-action-button"
+                    onClick={handleRevert}
+                    title={t("messageItem.actions.revert")}
+                    aria-label={t("messageItem.actions.revert")}
+                  >
+                    <Undo class="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
                 </Show>
-              </button>
-            </div>
-          </Show>
-          <Show when={!isUser()}>
-            <button
-              class="message-action-button"
-              onClick={handleCopy}
-              title={t("messageItem.actions.copyTitle")}
-              aria-label={t("messageItem.actions.copyTitle")}
-            >
-              <Show when={copied()} fallback={t("messageItem.actions.copy")}>
-                {t("messageItem.actions.copied")}
-              </Show>
-            </button>
-          </Show>
-          <time class="message-timestamp" dateTime={timestampIso()}>{timestamp()}</time>
+                <Show when={props.onFork}>
+                  <button
+                    class="message-action-button"
+                    onClick={() => props.onFork?.(props.record.id)}
+                    title={t("messageItem.actions.fork")}
+                    aria-label={t("messageItem.actions.fork")}
+                  >
+                    <Split class="w-3.5 h-3.5" aria-hidden="true" />
+                  </button>
+                </Show>
+                <button
+                  class="message-action-button"
+                  onClick={handleCopy}
+                  title={copyLabel()}
+                  aria-label={copyLabel()}
+                >
+                  <Copy class="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            </Show>
+            <Show when={!isUser()}>
+              <div class="message-action-group">
+                <button
+                  class="message-action-button"
+                  onClick={handleCopy}
+                  title={copyLabel()}
+                  aria-label={copyLabel()}
+                >
+                  <Copy class="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+
+                <Show when={deletableTextPartId()}>
+                  {(partId) => (
+                    <button
+                      class="message-action-button"
+                      onClick={() => void handleDeletePart(partId())}
+                      disabled={isDeletingPart(partId())}
+                      title={isDeletingPart(partId()) ? t("messagePart.actions.deleting") : t("messagePart.actions.delete")}
+                      aria-label={isDeletingPart(partId()) ? t("messagePart.actions.deleting") : t("messagePart.actions.delete")}
+                    >
+                      <Trash2 class="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  )}
+                </Show>
+              </div>
+            </Show>
+            <time class="message-timestamp" dateTime={timestampIso()}>{timestamp()}</time>
+          </div>
         </div>
+
+        <Show when={agentMeta()}>
+          {(meta) => (
+            <div class="message-item-header-row message-item-header-row--bottom">
+              <span class="message-agent-meta">{meta()}</span>
+            </div>
+          )}
+        </Show>
 
       </header>
 
@@ -347,6 +428,19 @@ export default function MessageItem(props: MessageItemProps) {
                       <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12l4 4 4-4m-4-8v12" />
+                      </svg>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => void handleDeletePart(attachment.id)}
+                      class="attachment-remove"
+                      disabled={isDeletingPart(attachment.id)}
+                      aria-label={t("messagePart.actions.deleteTitle")}
+                      title={t("messagePart.actions.deleteTitle")}
+                    >
+                      <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                       </svg>
                     </button>
                     <Show when={isImage}>

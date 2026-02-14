@@ -2,6 +2,7 @@
   "name": "@codenomad/tauri-app",
   "version": "0.9.2-patch.5",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "dev": "tauri dev",
     "dev:ui": "npm run dev --workspace @codenomad/ui",

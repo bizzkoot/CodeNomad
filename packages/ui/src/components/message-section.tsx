@@ -7,6 +7,8 @@ import { getSessionInfo } from "../stores/sessions"
 import { messageStoreBus } from "../stores/message-v2/bus"
 import { useScrollCache } from "../lib/hooks/use-scroll-cache"
 import { useI18n } from "../lib/i18n"
+import { copyToClipboard } from "../lib/clipboard"
+import { showToastNotification } from "../lib/notifications"
 import type { InstanceMessageStore } from "../stores/message-v2/instance-store"
 import SearchPanel from "./search-panel"
 import { registerSearchShortcuts } from "../lib/shortcuts/search"
@@ -96,6 +98,9 @@ export default function MessageSection(props: MessageSectionProps) {
 
   const seenTimelineMessageIds = new Set<string>()
   const seenTimelineSegmentKeys = new Set<string>()
+  const timelinePartCountsByMessageId = new Map<string, number>()
+  let pendingTimelineMessagePartUpdates = new Set<string>()
+  let pendingTimelinePartUpdateFrame: number | null = null
 
   function makeTimelineKey(segment: TimelineSegment) {
     return `${segment.messageId}:${segment.id}:${segment.type}`
@@ -104,6 +109,7 @@ export default function MessageSection(props: MessageSectionProps) {
   function seedTimeline() {
     seenTimelineMessageIds.clear()
     seenTimelineSegmentKeys.clear()
+    timelinePartCountsByMessageId.clear()
     const ids = untrack(messageIds)
     const resolvedStore = untrack(store)
     const segments: TimelineSegment[] = []
@@ -111,6 +117,7 @@ export default function MessageSection(props: MessageSectionProps) {
       const record = resolvedStore.getMessage(messageId)
       if (!record) return
       seenTimelineMessageIds.add(messageId)
+      timelinePartCountsByMessageId.set(messageId, record.partIds.length)
       const built = buildTimelineSegments(props.instanceId, record, t)
       built.forEach((segment) => {
         const key = makeTimelineKey(segment)
@@ -125,6 +132,7 @@ export default function MessageSection(props: MessageSectionProps) {
   function appendTimelineForMessage(messageId: string) {
     const record = untrack(() => store().getMessage(messageId))
     if (!record) return
+    timelinePartCountsByMessageId.set(messageId, record.partIds.length)
     const built = buildTimelineSegments(props.instanceId, record, t)
     if (built.length === 0) return
     const newSegments: TimelineSegment[] = []
@@ -377,7 +385,9 @@ export default function MessageSection(props: MessageSectionProps) {
     const anchorRect = rects.length > 0 ? rects[0] : range.getBoundingClientRect()
     const shellRect = shell.getBoundingClientRect()
     const relativeTop = Math.max(anchorRect.top - shellRect.top - 40, 8)
-    const maxLeft = Math.max(shell.clientWidth - 180, 8)
+    // Keep the popover within the stream shell. The quote popover currently
+    // renders 3 actions; keep enough horizontal room for the pill.
+    const maxLeft = Math.max(shell.clientWidth - 260, 8)
     const relativeLeft = Math.min(Math.max(anchorRect.left - shellRect.left, 8), maxLeft)
     setQuoteSelection({ text: limited, top: relativeTop, left: relativeLeft })
   }
@@ -390,6 +400,24 @@ export default function MessageSection(props: MessageSectionProps) {
     const info = quoteSelection()
     if (!info || !props.onQuoteSelection) return
     props.onQuoteSelection(info.text, mode)
+    clearQuoteSelection()
+    if (typeof window !== "undefined") {
+      const selection = window.getSelection()
+      selection?.removeAllRanges()
+    }
+  }
+
+  async function handleCopySelectionRequest() {
+    const info = quoteSelection()
+    if (!info) return
+
+    const success = await copyToClipboard(info.text)
+    showToastNotification({
+      message: success ? t("messageSection.quote.copied") : t("messageSection.quote.copyFailed"),
+      variant: success ? "success" : "error",
+      duration: success ? 2000 : 6000,
+    })
+
     clearQuoteSelection()
     if (typeof window !== "undefined") {
       const selection = window.getSelection()
@@ -470,8 +498,6 @@ export default function MessageSection(props: MessageSectionProps) {
   })
 
   let previousTimelineIds: string[] = []
-  let previousLastTimelineMessageId: string | null = null
-  let previousLastTimelinePartCount = 0
 
   createEffect(() => {
     const loading = Boolean(props.loading)
@@ -479,11 +505,15 @@ export default function MessageSection(props: MessageSectionProps) {
 
     if (loading) {
       previousTimelineIds = []
-      previousLastTimelineMessageId = null
-      previousLastTimelinePartCount = 0
       setTimelineSegments([])
       seenTimelineMessageIds.clear()
       seenTimelineSegmentKeys.clear()
+      timelinePartCountsByMessageId.clear()
+      pendingTimelineMessagePartUpdates.clear()
+      if (pendingTimelinePartUpdateFrame !== null) {
+        cancelAnimationFrame(pendingTimelinePartUpdateFrame)
+        pendingTimelinePartUpdateFrame = null
+      }
       return
     }
 
@@ -525,6 +555,14 @@ export default function MessageSection(props: MessageSectionProps) {
             next.forEach((segment) => seenTimelineSegmentKeys.add(makeTimelineKey(segment)))
             return next
           })
+
+          // Keep part count tracking in sync with id replacement.
+          const existingPartCount = timelinePartCountsByMessageId.get(oldId)
+          if (existingPartCount !== undefined) {
+            timelinePartCountsByMessageId.delete(oldId)
+            timelinePartCountsByMessageId.set(newId, existingPartCount)
+          }
+
           previousTimelineIds = ids.slice()
           return
         }
@@ -548,30 +586,95 @@ export default function MessageSection(props: MessageSectionProps) {
     previousTimelineIds = ids.slice()
   })
 
+  function clearPendingTimelinePartUpdateFrame() {
+    if (pendingTimelinePartUpdateFrame !== null) {
+      cancelAnimationFrame(pendingTimelinePartUpdateFrame)
+      pendingTimelinePartUpdateFrame = null
+    }
+  }
+
+  function scheduleTimelinePartUpdateFlush() {
+    if (pendingTimelinePartUpdateFrame !== null) return
+    pendingTimelinePartUpdateFrame = requestAnimationFrame(() => {
+      pendingTimelinePartUpdateFrame = null
+      if (pendingTimelineMessagePartUpdates.size === 0) return
+      const changedIds = Array.from(pendingTimelineMessagePartUpdates)
+      pendingTimelineMessagePartUpdates = new Set<string>()
+
+      const ids = messageIds()
+      const resolvedStore = store()
+
+      setTimelineSegments((prev) => {
+        let next = prev
+
+        for (const changedId of changedIds) {
+          // Remove old segments for this message.
+          next = next.filter((segment) => segment.messageId !== changedId)
+
+          const record = resolvedStore.getMessage(changedId)
+          const rebuilt = record ? buildTimelineSegments(props.instanceId, record, t) : []
+
+          // Insert rebuilt segments in the correct place based on session message order.
+          if (rebuilt.length > 0) {
+            let insertAt = next.length
+            const changedIndex = ids.indexOf(changedId)
+            if (changedIndex >= 0) {
+              for (let i = changedIndex + 1; i < ids.length; i++) {
+                const followingId = ids[i]
+                const existingIndex = next.findIndex((segment) => segment.messageId === followingId)
+                if (existingIndex >= 0) {
+                  insertAt = existingIndex
+                  break
+                }
+              }
+            }
+            next = [...next.slice(0, insertAt), ...rebuilt, ...next.slice(insertAt)]
+          }
+        }
+
+        // Rebuild the segment key set since we may have removed/replaced segments.
+        seenTimelineSegmentKeys.clear()
+        next.forEach((segment) => seenTimelineSegmentKeys.add(makeTimelineKey(segment)))
+        return next
+      })
+    })
+  }
+
+  // Keep timeline segments in sync when message parts are added/removed.
+  // Part deletion does not remove message ids from the session, so we must
+  // explicitly replace segments for messages whose part count changed.
   createEffect(() => {
     if (props.loading) return
     const ids = messageIds()
-    if (ids.length === 0) return
-    const lastId = ids[ids.length - 1]
-    if (!lastId) return
-    const record = store().getMessage(lastId)
-    if (!record) return
-    const partCount = record.partIds.length
-    if (lastId === previousLastTimelineMessageId && partCount === previousLastTimelinePartCount) {
-      return
+    const resolvedStore = store()
+
+    let hasChanges = false
+    for (const messageId of ids) {
+      const record = resolvedStore.getMessage(messageId)
+      const partCount = record?.partIds.length ?? 0
+      const previousCount = timelinePartCountsByMessageId.get(messageId)
+
+      if (previousCount === undefined) {
+        timelinePartCountsByMessageId.set(messageId, partCount)
+        continue
+      }
+
+      if (previousCount !== partCount) {
+        timelinePartCountsByMessageId.set(messageId, partCount)
+        pendingTimelineMessagePartUpdates.add(messageId)
+        hasChanges = true
+      }
     }
-    previousLastTimelineMessageId = lastId
-    previousLastTimelinePartCount = partCount
-    const built = buildTimelineSegments(props.instanceId, record, t)
-    const newSegments: TimelineSegment[] = []
-    built.forEach((segment) => {
-      const key = makeTimelineKey(segment)
-      if (seenTimelineSegmentKeys.has(key)) return
-      seenTimelineSegmentKeys.add(key)
-      newSegments.push(segment)
-    })
-    if (newSegments.length > 0) {
-      setTimelineSegments((prev) => [...prev, ...newSegments])
+
+    // Drop tracking for ids that are no longer present.
+    for (const trackedId of Array.from(timelinePartCountsByMessageId.keys())) {
+      if (!ids.includes(trackedId)) {
+        timelinePartCountsByMessageId.delete(trackedId)
+      }
+    }
+
+    if (hasChanges) {
+      scheduleTimelinePartUpdateFlush()
     }
   })
 
@@ -738,6 +841,7 @@ export default function MessageSection(props: MessageSectionProps) {
       cancelAnimationFrame(pendingAnchorScroll)
     }
     clearScrollToBottomFrames()
+    clearPendingTimelinePartUpdateFrame()
     if (detachScrollIntentListeners) {
       detachScrollIntentListeners()
     }
@@ -854,6 +958,9 @@ export default function MessageSection(props: MessageSectionProps) {
                   </button>
                   <button type="button" class="message-quote-button" onClick={() => handleQuoteSelectionRequest("code")}>
                     {t("messageSection.quote.addAsCode")}
+                  </button>
+                  <button type="button" class="message-quote-button" onClick={() => void handleCopySelectionRequest()}>
+                    {t("messageSection.quote.copy")}
                   </button>
                 </div>
               </div>

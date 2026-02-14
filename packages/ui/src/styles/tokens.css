@@ -1,21 +1,26 @@
 :root {
+  color-scheme: light;
   /* Surface tokens */
   --surface-base: #ffffff;
   --surface-secondary: #f5f5f5;
-  --surface-muted: #f8f9fa;
-  --surface-code: #f8f8f8;
+  --surface-muted: #f8fafc;
+  --surface-code: #f1f5f9;
   --surface-hover: #e0e0e0;
+  --markdown-table-row-odd: transparent;
+  --markdown-table-row-even: #f1f5f9;
   
   /* Border tokens */
   --border-base: #e0e0e0;
   --border-secondary: #e0e0e0;
   --border-muted: #e0e0e0;
+  --border-strong: color-mix(in oklab, var(--border-base) 62%, var(--text-primary));
   
   /* Text tokens */
-  --text-primary: #1a1a1a;
-  --text-secondary: #666666;
-  --text-muted: #666666;
+  --text-primary: #111827;
+  --text-secondary: #334155;
+  --text-muted: #475569;
   --text-inverted: #ffffff;
+  --text-on-accent: #ffffff;
   
   /* Accent tokens */
   --accent-primary: #0066ff;
@@ -27,14 +32,13 @@
   --status-warning: #ff9800;
   
   /* Message-specific tokens */
-  --message-user-bg: var(--surface-secondary);
+  --message-user-bg: color-mix(in oklab, var(--surface-secondary) 88%, var(--message-user-border));
   --message-user-border: #2196f3;
   --message-assistant-bg: var(--message-tool-bg);
   --message-assistant-border: #f59e0b;
 
-  --message-tool-bg: #f8f9fa;
-  --message-tool-border: #6c757d;
-  --message-question-border: #8b5cf6;
+  --message-tool-bg: #eef2f7;
+  --message-tool-border: #64748b;
 
   /* Session list selection tints */
   --session-user-active-bg: color-mix(in oklab, var(--surface-secondary) 85%, var(--message-user-border));
@@ -57,6 +61,7 @@
   --attachment-chip-ring: rgba(0, 102, 255, 0.1);
   --badge-neutral-bg: rgba(0, 102, 255, 0.05);
   --badge-neutral-text: #0066ff;
+  --badge-success-bg: rgba(76, 175, 80, 0.12);
   --status-ready-fg: #16a34a;
   --status-ready-bg: rgba(34, 197, 94, 0.1);
   --status-starting-fg: #ca8a04;
@@ -72,11 +77,15 @@
   --folder-card-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
   --folder-card-radius: 16px;
   --dropdown-highlight-bg: rgba(0, 102, 255, 0.1);
-  --dropdown-highlight-text: var(--text-inverted);
+  --dropdown-highlight-text: var(--text-primary);
   --selection-highlight-bg: rgba(0, 102, 255, 0.12);
   --selection-highlight-strong-bg: rgba(0, 102, 255, 0.18);
   --overlay-scrim: rgba(0, 0, 0, 0.5);
   --scroll-elevation-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
+  --panel-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  --panel-shadow-strong: 0 12px 32px rgba(0, 0, 0, 0.18);
+  --popover-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+  --code-block-header-bg: color-mix(in oklab, var(--surface-secondary) 78%, var(--text-primary));
   --message-error-bg: rgba(244, 67, 54, 0.1);
   --message-error-bg-strong: rgba(244, 67, 54, 0.15);
   --danger-soft-bg: rgba(239, 68, 68, 0.1);
@@ -87,6 +96,19 @@
   --log-level-default: var(--text-primary);
   --focus-ring-color: var(--accent-primary);
   --focus-ring-offset: var(--surface-base);
+  --control-ghost-bg: color-mix(in oklab, var(--text-primary) 6%, transparent);
+  --status-success-ring: color-mix(in oklab, var(--status-success) 45%, transparent);
+  --border-critical: var(--status-error);
+
+  /* Message timeline active segment (light theme should be a light tint). */
+  --timeline-segment-active-bg: #b7e6d6;
+  --timeline-segment-active-text: #032f23;
+  --timeline-segment-active-ring: inset 0 0 0 1px rgba(3, 47, 35, 0.28);
+
+  --button-danger-bg: rgba(239, 68, 68, 0.85);
+  --button-danger-hover-bg: rgba(239, 68, 68, 0.9);
+  --button-danger-active-bg: rgba(239, 68, 68, 1);
+  --button-danger-text: var(--text-inverted);
   --kbd-bg: var(--surface-secondary);
   --kbd-border: var(--border-base);
   --kbd-text: var(--text-primary);
@@ -152,24 +174,29 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
+    color-scheme: dark;
     /* Surface tokens */
     --surface-base: #1a1a1a;
     --surface-secondary: #2a2a2a;
     --surface-muted: #212529;
     --surface-code: #1a1a1a;
     --surface-hover: #3a3a3a;
+    --markdown-table-row-odd: #0f1114;
+    --markdown-table-row-even: #181c22;
     
     /* Border tokens */
     --border-base: #3a3a3a;
     --border-secondary: #3a3a3a;
     --border-muted: #3a3a3a;
+    --border-strong: var(--border-base);
     
     /* Text tokens */
     --text-primary: #cfd4dc;
     --text-secondary: #999999;
     --text-muted: #999999;
     --text-inverted: #1a1a1a;
+    --text-on-accent: #f5f6f8;
     
     /* Accent tokens */
     --accent-primary: #0080ff;
@@ -188,7 +215,6 @@
 
     --message-tool-bg: #212529;
     --message-tool-border: #adb5bd;
-    --message-question-border: #a78bfa;
 
     /* Semantic component colors */
     --session-status-working-fg: #facc15;
@@ -208,6 +234,7 @@
     --attachment-chip-ring: rgba(0, 128, 255, 0.2);
   --badge-neutral-bg: rgba(0, 128, 255, 0.15);
   --badge-neutral-text: #0080ff;
+  --badge-success-bg: rgba(76, 175, 80, 0.22);
   --status-ready-fg: #22c55e;
   --status-ready-bg: rgba(34, 197, 94, 0.2);
   --status-starting-fg: #facc15;
@@ -227,6 +254,15 @@
   --kbd-bg: var(--surface-secondary);
   --kbd-border: var(--border-base);
   --kbd-text: var(--text-primary);
+  --panel-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  --panel-shadow-strong: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --popover-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --code-block-header-bg: var(--surface-secondary);
+  --border-critical: var(--status-error);
+  --timeline-segment-active-bg: #0f5b44;
+  --timeline-segment-active-text: #ffffff;
+  --timeline-segment-active-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  --button-danger-text: var(--text-inverted);
   --button-primary-bg: #3f3f46;
   --button-primary-hover-bg: #52525b;
   --button-primary-text: #f5f6f8;
@@ -308,23 +344,28 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   /* Surface tokens */
   --surface-base: #1a1a1a;
   --surface-secondary: #2a2a2a;
   --surface-muted: #212529;
   --surface-code: #1a1a1a;
   --surface-hover: #3a3a3a;
+  --markdown-table-row-odd: #0f1114;
+  --markdown-table-row-even: #181c22;
   
   /* Border tokens */
   --border-base: #3a3a3a;
   --border-secondary: #3a3a3a;
   --border-muted: #3a3a3a;
+  --border-strong: var(--border-base);
   
   /* Text tokens */
   --text-primary: #cfd4dc;
   --text-secondary: #999999;
   --text-muted: #999999;
   --text-inverted: #1a1a1a;
+  --text-on-accent: #f5f6f8;
   
   /* Accent tokens */
   --accent-primary: #0080ff;
@@ -343,7 +384,6 @@
 
   --message-tool-bg: #212529;
   --message-tool-border: #adb5bd;
-  --message-question-border: #a78bfa;
 
   /* Semantic component colors */
   --session-status-working-fg: #facc15;
@@ -362,6 +402,7 @@
   --attachment-chip-ring: rgba(0, 128, 255, 0.2);
   --badge-neutral-bg: rgba(0, 128, 255, 0.15);
   --badge-neutral-text: #0080ff;
+  --badge-success-bg: rgba(76, 175, 80, 0.22);
   --status-ready-fg: #22c55e;
   --status-ready-bg: rgba(34, 197, 94, 0.2);
   --status-starting-fg: #facc15;
@@ -382,6 +423,15 @@
   --selection-highlight-strong-bg: rgba(0, 128, 255, 0.28);
   --overlay-scrim: rgba(0, 0, 0, 0.6);
   --scroll-elevation-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+  --panel-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  --panel-shadow-strong: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --popover-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  --code-block-header-bg: var(--surface-secondary);
+  --border-critical: var(--status-error);
+  --timeline-segment-active-bg: #0f5b44;
+  --timeline-segment-active-text: #ffffff;
+  --timeline-segment-active-ring: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  --button-danger-text: var(--text-inverted);
   --message-error-bg: rgba(244, 67, 54, 0.12);
   --message-error-bg-strong: rgba(244, 67, 54, 0.2);
   --danger-soft-bg: rgba(244, 67, 54, 0.16);
@@ -395,6 +445,18 @@
   --kbd-bg: var(--surface-secondary);
   --kbd-border: var(--border-base);
   --kbd-text: var(--text-primary);
+  --button-primary-bg: #3f3f46;
+  --button-primary-hover-bg: #52525b;
+  --button-primary-text: #f5f6f8;
+  --tab-active-bg: #3f3f46;
+  --tab-active-hover-bg: #52525b;
+  --tab-active-text: #f5f6f8;
+  --tab-inactive-bg: #2a2a31;
+  --tab-inactive-hover-bg: #3f3f46;
+  --tab-inactive-text: #d4d4d8;
+  --new-tab-bg: #3f3f46;
+  --new-tab-hover-bg: #52525b;
+  --new-tab-text: #f5f6f8;
 
   /* Layout & spacing tokens */
   --space-2xs: 2px;
