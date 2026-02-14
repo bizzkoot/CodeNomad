@@ -114,7 +114,7 @@ export function PermissionToolBlock(props: PermissionToolBlockProps) {
                 </div>
               </Show>
             </div>
-            <Show when={props.error()}>
+            <Show when={props.error() !== null && props.error() !== undefined}>
               <div class="tool-call-permission-error">{props.error()}</div>
             </Show>
           </div>

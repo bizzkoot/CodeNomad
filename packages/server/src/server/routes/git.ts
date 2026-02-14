@@ -469,6 +469,57 @@ export function registerGitRoutes(app: FastifyInstance, deps: GitRoutesDeps) {
         },
     )
 
+    // GET /api/workspaces/:id/git/file-original
+    // Gets the original version of a file (staged for unstaged changes, HEAD for staged changes)
+    app.get<{ Params: { id: string }; Querystring: { path: string; staged?: string } }>(
+        "/api/workspaces/:id/git/file-original",
+        async (request, reply) => {
+            const workspacePath = getWorkspacePath(request.params.id)
+            if (!workspacePath) {
+                return reply.status(404).send({ error: "Workspace not found" })
+            }
+
+            if (!(await isGitRepository(workspacePath))) {
+                return reply.status(400).send({ error: "Not a git repository" })
+            }
+
+            const filePath = request.query.path
+            if (!filePath) {
+                return reply.status(400).send({ error: "File path is required" })
+            }
+
+            const staged = request.query.staged === "true"
+
+            try {
+                // For staged changes, get HEAD version
+                // For unstaged changes, get staged version (if staged) or HEAD version
+                let content: string
+                try {
+                    if (staged) {
+                        // Get HEAD version for staged changes
+                        content = await runGitCommand(workspacePath, `show HEAD:"${filePath}"`)
+                    } else {
+                        // Try to get staged version first
+                        try {
+                            content = await runGitCommand(workspacePath, `show :"${filePath}"`)
+                        } catch {
+                            // If no staged version, get HEAD version
+                            content = await runGitCommand(workspacePath, `show HEAD:"${filePath}"`)
+                        }
+                    }
+                } catch {
+                    // File might be new (not in HEAD or staged), return empty string
+                    content = ""
+                }
+
+                return { path: filePath, content }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to get original file content"
+                return reply.status(500).send({ error: message })
+            }
+        },
+    )
+
     // POST /api/workspaces/:id/git/stage
     app.post<{ Params: { id: string }; Body: GitStageRequest }>(
         "/api/workspaces/:id/git/stage",

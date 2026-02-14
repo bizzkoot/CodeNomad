@@ -52,9 +52,9 @@ export function useGitStore(workspaceId: string) {
         loading: () => store().loading,
         error: () => store().error,
         isGitRepo: () => store().isGitRepo,
-        stagedChanges: (): GitFileChange[] => store().status?.changes.filter((c) => c.staged) ?? [],
-        unstagedChanges: (): GitFileChange[] => store().status?.changes.filter((c) => !c.staged && c.status !== "untracked") ?? [],
-        untrackedChanges: (): GitFileChange[] => store().status?.changes.filter((c) => c.status === "untracked") ?? [],
+        stagedChanges: (): GitFileChange[] => store().status?.changes?.filter((c) => c.staged) ?? [],
+        unstagedChanges: (): GitFileChange[] => store().status?.changes?.filter((c) => !c.staged && c.status !== "untracked") ?? [],
+        untrackedChanges: (): GitFileChange[] => store().status?.changes?.filter((c) => c.status === "untracked") ?? [],
     }
 }
 

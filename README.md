@@ -89,19 +89,38 @@ We've replaced the standard `question` tool with a native **Model Context Protoc
 
 This change is critical for users on metered plans (like GitHub Copilot), effectively "unlocking" unlimited user interactions without draining quotas.
 
-### 🔄 Upstream/dev Sync (v0.10.3 line)
+### 🔄 Upstream/dev Sync (Since commit 444335ad)
 
-This fork stays synchronized with the core CodeNomad experience.
+This fork selectively merges features from upstream while preserving fork-specific architecture.
 
-| Category | Synced from upstream/dev |
-| :-- | :-- |
-| **🧭 Right Panel & Session Changes** | Changes/Status tabs, session diff hydration, compact session changes list, status notifications |
-| **🧩 Monaco Diff/File Viewers** | Monaco-powered changes/files viewers, worker boot fixes, dev asset preparation |
-| **🌳 Worktrees & Git UX** | Worktree implementation + selector UX, root worktree labeling/badges, Git Changes tab |
-| **🎨 Theme & UI Polish** | System/light/dark theme toggle, persisted theme preference, light/dark rendering fixes |
-| **⌨️ Prompt & Message UX** | Enter-to-submit toggle, message-part delete action, copy selected text/tool-call title |
-| **🔐 Runtime & Platform** | YAML config/state migration, HTTPS + self-signed support, keep-awake while busy |
-| **📦 Release Track** | Version/min-server progression to v0.10.2/v0.10.3 and dev prerelease flow updates |
+#### ✅ Successfully Merged (v0.10.3 line)
+
+| Category | Feature | Commit |
+| :-- | :-- | :-- |
+| **🔧 Server API** | `GET /api/workspaces/:id/git/file-original` endpoint for fetching file HEAD/staged content | infrastructure preserved |
+| **🔌 API Client** | `fetchGitOriginalContent()` method for Monaco diff preparation | infrastructure preserved |
+| **🛡️ Stability** | Git store optional chaining safety fix | `755b768` |
+| **🛡️ Stability** | Permission/Question block null checks | `permission-block.tsx`, `question-block.tsx` |
+| **🛡️ Stability** | "Object has been destroyed" Electron crash fix | `13edfa4` |
+| **⚡ Platform** | Power save blocker wake lock during busy instances | `3393911` |
+| **🎨 UI Polish** | Sticky header background for bash tool output | `d8b018a` |
+| **🎨 UI Polish** | Diff syntax highlighting for code blocks | `a06aa01` |
+| **🔧 DevEx** | Electron dev startup CLI detection and URL swap fixes | `5f113c3` |
+| **📦 Release** | Version bump to 0.10.3 | `11deb19` |
+
+#### ⏸️ Deferred to Custom Implementation
+
+These features require architectural alignment with fork patterns and are documented in PR.md:
+
+| Category | Upstream Feature | Status |
+| :-- | :-- | :-- |
+| **🧭 Right Panel & Session Changes** | Changes/Status tabs with session diff hydration | Use existing RightPanel tabs |
+| **🧩 Monaco Diff/File Viewers** | Monaco-powered changes/files viewers in SourceControlPanel | Infrastructure ready; custom UI needed |
+| **🌳 Worktrees & Git UX** | Worktree file browser in SourceControlPanel | Infrastructure ready; custom UI needed |
+| **🎨 Theme & UI Polish** | System/light/dark theme toggle | Fork uses different theme system |
+| **⌨️ Prompt & Message UX** | Enter-to-submit toggle, message-part delete | Preserved in fork-specific implementation |
+
+> **Note**: The server infrastructure for Monaco diff and worktrees is preserved (API endpoints and client methods). Custom UI implementation can leverage these when architecturally aligned.
 
 ## Requirements
 
@@ -125,7 +144,7 @@ This fork includes several major enhancements not available in the upstream repo
 > [!NOTE]
 > These features are not included in upstream and represent divergent functionality from the original CodeNomad repository.
 
-_Last updated: 2026-02-14_
+_Last updated: 2026-02-15_
 
 ## CI/CD on Forks
 

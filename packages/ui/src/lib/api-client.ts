@@ -358,6 +358,15 @@ export const serverApi = {
       `/api/workspaces/${encodeURIComponent(workspaceId)}/git/file-content?${params.toString()}`,
     )
   },
+  // Gets the original version of a file (staged for unstaged changes, HEAD for staged changes)
+  fetchGitOriginalContent(workspaceId: string, filePath: string, staged = false): Promise<{ path: string; content: string }> {
+    const params = new URLSearchParams()
+    params.set("path", filePath)
+    if (staged) params.set("staged", "true")
+    return request<{ path: string; content: string }>(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/git/file-original?${params.toString()}`,
+    )
+  },
   stageFiles(workspaceId: string, paths: string[]): Promise<{ success: boolean }> {
     return request<{ success: boolean }>(`/api/workspaces/${encodeURIComponent(workspaceId)}/git/stage`, {
       method: "POST",

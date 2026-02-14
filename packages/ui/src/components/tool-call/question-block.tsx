@@ -334,7 +334,7 @@ export function QuestionToolBlock(props: QuestionToolBlockProps) {
                   <span>{t("toolCall.question.shortcuts.dismiss")}</span>
                 </div>
 
-                <Show when={props.error()}>
+                <Show when={props.error() !== null && props.error() !== undefined}>
                   <div class="tool-call-permission-error">{props.error()}</div>
                 </Show>
               </div>
