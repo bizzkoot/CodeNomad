@@ -101,6 +101,35 @@ async function getOrCreateHighlighter() {
   return highlighter
 }
 
+function addDiffClasses(html: string, originalCode: string): string {
+  const lines = originalCode.split("\n")
+  const hasDiffContent = lines.some((line) => line.startsWith("+") || line.startsWith("-"))
+
+  if (!hasDiffContent) {
+    return html
+  }
+
+  let lineIndex = 0
+  return html.replace(/<span class="line">/g, () => {
+    const line = lines[lineIndex]
+    lineIndex++
+
+    if (!line) {
+      return '<span class="line">'
+    }
+
+    if (line.startsWith("+")) {
+      return '<span class="line diff-added">'
+    }
+
+    if (line.startsWith("-")) {
+      return '<span class="line diff-removed">'
+    }
+
+    return '<span class="line">'
+  })
+}
+
 function normalizeLanguageToken(token: string): string {
   return token.trim().toLowerCase()
 }
@@ -301,8 +330,9 @@ function setupRenderer(isDark: boolean) {
            lang: langKey,
            theme: currentTheme === "dark" ? "github-dark" : "github-light-high-contrast",
          })
-        return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}${html}</div>`
-      } catch {
+         const processedHtml = addDiffClasses(html, decodedCode)
+         return `<div class="markdown-code-block" data-language="${escapedLang}" data-code="${encodedCode}">${header}${processedHtml}</div>`
+       } catch {
         // Fall through to plain code if highlighting fails
       }
     }

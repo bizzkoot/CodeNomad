@@ -455,7 +455,7 @@ ${diff}`
         return (
             <div class={`px-2 py-0.5 ${bgClass} ${borderClass} hover:bg-surface-tertiary/50`}>
                 <span class={`${textClass} font-mono text-xs whitespace-pre`}>
-                    <span class="select-none inline-block w-4 text-gray-500">{prefix}</span>
+                    <span class={`select-none inline-block w-4 ${textClass}`}>{prefix}</span>
                     <span class="whitespace-pre-wrap break-all">{content}</span>
                 </span>
             </div>

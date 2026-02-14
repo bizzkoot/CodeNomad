@@ -4,6 +4,11 @@ const ESC_CHAR = "\u001b"
 const ANSI_LITERAL_PATTERN = /\\u001b|\\x1b|\\033/
 const ANSI_ESCAPE_PATTERN = /\u001b/
 
+const DIFF_ADDED_LINE = /^(?!\+\+\+ )(\+.*)$/gm
+const DIFF_REMOVED_LINE = /^(?!--- )(-.*)$/gm
+const DIFF_CONTEXT_LINE = /^(@@ .* @@)$/gm
+const DIFF_HEADER_LINE = /^(diff --git|index |--- |\+\+\+ |Binary files)/gm
+
 const colorPalette = createColorPalette()
 
 export function hasAnsi(text: string): boolean {
@@ -16,6 +21,17 @@ export function ansiToHtml(text: string): string {
   const parser = createAnsiSequenceParser()
   const tokens = parser.parse(normalized)
   return tokensToHtml(tokens)
+}
+
+export function isDiffContent(text: string): boolean {
+  return DIFF_HEADER_LINE.test(text) || DIFF_ADDED_LINE.test(text) || DIFF_REMOVED_LINE.test(text)
+}
+
+export function highlightDiff(html: string): string {
+  return html
+    .replace(DIFF_ADDED_LINE, '<span class="diff-added">$1</span>')
+    .replace(DIFF_REMOVED_LINE, '<span class="diff-removed">$1</span>')
+    .replace(DIFF_CONTEXT_LINE, '<span class="diff-context">$1</span>')
 }
 
 export interface AnsiStreamRenderer {

@@ -21,6 +21,9 @@
   --text-muted: #475569;
   --text-inverted: #ffffff;
   --text-on-accent: #ffffff;
+
+  /* Code-specific text (optimized for code backgrounds) */
+  --code-text-primary: #0f172a;
   
   /* Accent tokens */
   --accent-primary: #0066ff;
@@ -366,6 +369,9 @@
   --text-muted: #999999;
   --text-inverted: #1a1a1a;
   --text-on-accent: #f5f6f8;
+
+  /* Code-specific text (optimized for code backgrounds) */
+  --code-text-primary: #e2e8f0;
   
   /* Accent tokens */
   --accent-primary: #0080ff;

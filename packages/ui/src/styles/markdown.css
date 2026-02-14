@@ -125,6 +125,100 @@
     color: var(--text-primary);
   }
 
+  /* Shiki github-dark theme has dark text (for light backgrounds). Override in dark mode. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .markdown-body .shiki,
+    :root:not([data-theme]) .markdown-body .shiki code {
+      color: var(--code-text-primary, #e2e8f0) !important;
+    }
+
+    :root:not([data-theme]) .markdown-body .shiki .line,
+    :root:not([data-theme]) .markdown-body .shiki .line span {
+      color: inherit !important;
+    }
+  }
+
+  [data-theme="dark"] .markdown-body .shiki,
+  [data-theme="dark"] .markdown-body .shiki code {
+    color: var(--code-text-primary, #e2e8f0) !important;
+  }
+
+  [data-theme="dark"] .markdown-body .shiki .line,
+  [data-theme="dark"] .markdown-body .shiki .line span {
+    color: inherit !important;
+  }
+
+  /* Diff highlighting for Shiki code blocks (+ additions, - deletions) using JS-added classes */
+  .markdown-body .shiki .line {
+    position: relative;
+  }
+
+  /* Light mode */
+  .markdown-body .shiki .line.diff-added {
+    background-color: rgba(22, 163, 74, 0.08);
+  }
+
+  .markdown-body .shiki .line.diff-removed {
+    background-color: rgba(220, 38, 38, 0.08);
+  }
+
+  .markdown-body .shiki .line.diff-added span:first-child {
+    color: var(--status-success, #16a34a) !important;
+    font-weight: 600;
+  }
+
+  .markdown-body .shiki .line.diff-removed span:first-child {
+    color: var(--status-error, #dc2626) !important;
+    font-weight: 600;
+  }
+
+  .markdown-body .shiki .line.diff-added span:first-child ~ * {
+    color: var(--status-success, #16a34a) !important;
+  }
+
+  .markdown-body .shiki .line.diff-removed span:first-child ~ * {
+    color: var(--status-error, #dc2626) !important;
+  }
+
+  /* Dark mode */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-added {
+      background-color: rgba(74, 222, 128, 0.12);
+    }
+
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-removed {
+      background-color: rgba(248, 113, 113, 0.12);
+    }
+
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-added span:first-child,
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-added span:first-child ~ * {
+      color: var(--status-success, #4ade80) !important;
+    }
+
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-removed span:first-child,
+    :root:not([data-theme]) .markdown-body .shiki .line.diff-removed span:first-child ~ * {
+      color: var(--status-error, #f87171) !important;
+    }
+  }
+
+  [data-theme="dark"] .markdown-body .shiki .line.diff-added {
+    background-color: rgba(74, 222, 128, 0.12);
+  }
+
+  [data-theme="dark"] .markdown-body .shiki .line.diff-removed {
+    background-color: rgba(248, 113, 113, 0.12);
+  }
+
+  [data-theme="dark"] .markdown-body .shiki .line.diff-added span:first-child,
+  [data-theme="dark"] .markdown-body .shiki .line.diff-added span:first-child ~ * {
+    color: var(--status-success, #4ade80) !important;
+  }
+
+  [data-theme="dark"] .markdown-body .shiki .line.diff-removed span:first-child,
+  [data-theme="dark"] .markdown-body .shiki .line.diff-removed span:first-child ~ * {
+    color: var(--status-error, #f87171) !important;
+  }
+
   .markdown-body blockquote {
     border-left: 3px solid var(--border-base);
     color: var(--text-secondary);

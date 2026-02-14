@@ -23,7 +23,7 @@ import type {
 import { getRelativePath, getToolIcon, getToolName, isToolStateCompleted, isToolStateError, isToolStateRunning, getDefaultToolAction } from "./tool-call/utils"
 import { resolveTitleForTool } from "./tool-call/tool-title"
 import { getLogger } from "../lib/logger"
-import { ansiToHtml, createAnsiStreamRenderer, hasAnsi } from "../lib/ansi"
+import { ansiToHtml, createAnsiStreamRenderer, hasAnsi, isDiffContent, highlightDiff } from "../lib/ansi"
 import { escapeHtml } from "../lib/markdown"
 import { SECTION_EXPANSION_EVENT, type SectionExpansionRequest } from "../lib/section-expansion"
 
@@ -703,7 +703,11 @@ export default function ToolCall(props: ToolCallProps) {
           nextCache = { text: content, html, mode, hasAnsi: true }
         } else {
           runningAnsiRenderer.reset()
-          nextCache = { text: content, html: escapeHtml(content), mode, hasAnsi: false }
+          let html = escapeHtml(content)
+          if (isDiffContent(content)) {
+            html = highlightDiff(html)
+          }
+          nextCache = { text: content, html, mode, hasAnsi: false }
         }
       } else {
         const delta = content.slice(cached.text.length)
@@ -717,7 +721,11 @@ export default function ToolCall(props: ToolCallProps) {
           const htmlChunk = runningAnsiRenderer.render(delta)
           nextCache = { text: content, html: `${cached.html}${htmlChunk}`, mode, hasAnsi: true }
         } else {
-          nextCache = { text: content, html: `${cached.html}${escapeHtml(delta)}`, mode, hasAnsi: false }
+          let deltaHtml = escapeHtml(delta)
+          if (isDiffContent(delta)) {
+            deltaHtml = highlightDiff(deltaHtml)
+          }
+          nextCache = { text: content, html: `${cached.html}${deltaHtml}`, mode, hasAnsi: false }
         }
       }
 
@@ -728,7 +736,10 @@ export default function ToolCall(props: ToolCallProps) {
         nextCache = { ...cached, mode }
       } else {
         const detectedAnsi = hasAnsi(options.content)
-        const html = detectedAnsi ? ansiToHtml(options.content) : escapeHtml(options.content)
+        let html = detectedAnsi ? ansiToHtml(options.content) : escapeHtml(options.content)
+        if (!detectedAnsi && isDiffContent(options.content)) {
+          html = highlightDiff(html)
+        }
         nextCache = { text: options.content, html, mode, hasAnsi: detectedAnsi }
         cacheHandle.set(nextCache)
       }
