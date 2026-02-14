@@ -71,6 +71,31 @@ applyTo: '**'
 8. **packages/electron-app/electron/main/process-manager.ts** - Both modified
 
 # Merge History
+## 2026-02-14 - UPSTREAM DEV MERGE into restore_v0.9.2-patch.4
+- **Strategy**: Hybrid (auto-merge + targeted fork preservation)
+- **Source**: `refs/remotes/upstream/dev`
+- **Divergence at start**: ahead 174 / behind 132 (merge-base `158f6e25`)
+- **Commit**: `620e933`
+
+### Conflict Strategy Applied
+- **Preserved fork-critical files**: prompt input/tool-call/session-events/session-actions/instance store flows tied to ask_user MCP behavior.
+- **Accepted upstream in low-risk areas**: keyboard hint, instance tab, style token updates, many new right-panel/worktree/monaco files.
+- **Manual hybrids**:
+  - `packages/server/src/config/schema.ts`: kept `askUserTimeout` + added upstream OS notification preference fields and passthrough.
+  - `packages/server/src/server/http-server.ts`: kept both git routes and worktree routes.
+  - `packages/ui/src/lib/api-client.ts`: retained git APIs + upstream worktree APIs.
+  - `packages/ui/src/types/global.d.ts`: kept MCP bridge methods + upstream wake lock/notification methods.
+  - package manifests: preserved fork versions while including required upstream deps where needed.
+
+### Validation
+- `npm run lint` ✅ (warnings only, no errors)
+- `npm run typecheck` ✅ (UI + electron-app)
+
+### Additional Compatibility Fixes
+- Added preference fields required by merged upstream UI (`promptSubmitOnEnter`, OS notification settings) in `packages/ui/src/stores/preferences.tsx`.
+- Added missing SSE handler export `handleSessionDiff` and session action `deleteMessagePart` to satisfy integrated upstream callers.
+- Added `registerPromptInputApi` support in prompt input component and class passthrough for context panel.
+
 ## 2026-01-27 - UPSTREAM MERGE v0.9.2 (origin/mirror)
 - **Strategy**: Direct merge with manual conflict resolution
 - **Upstream Source**: origin/mirror (15 commits, v0.9.2)
