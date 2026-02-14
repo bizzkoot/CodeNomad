@@ -1,6 +1,6 @@
 {
   "name": "@codenomad/mcp-server",
-  "version": "0.9.2-patch.5",
+  "version": "0.10.3",
   "description": "CodeNomad MCP Server - native ask_user tool for saving premium requests (Raw JSON-RPC implementation)",
   "type": "module",
   "main": "dist/index.js",

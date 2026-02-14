@@ -89,15 +89,19 @@ We've replaced the standard `question` tool with a native **Model Context Protoc
 
 This change is critical for users on metered plans (like GitHub Copilot), effectively "unlocking" unlimited user interactions without draining quotas.
 
-### 🔄 Upstream v0.9.2 Synced
+### 🔄 Upstream/dev Sync (v0.10.3 line)
 
 This fork stays synchronized with the core CodeNomad experience.
 
-| Category                   | New in v0.9.2                                                                        |
-| :------------------------- | :----------------------------------------------------------------------------------- |
-| **🌍 Internationalization** | Full UI support for **English, Spanish, French, Japanese, Russian, and Chinese**     |
-| **🧠 Model UX**             | **Pin favorite models**, toggle "thinking" models, and use inline selector shortcuts |
-| **🔧 Reliability**          | Enhanced shutdown safeguards and improved process management                         |
+| Category | Synced from upstream/dev |
+| :-- | :-- |
+| **🧭 Right Panel & Session Changes** | Changes/Status tabs, session diff hydration, compact session changes list, status notifications |
+| **🧩 Monaco Diff/File Viewers** | Monaco-powered changes/files viewers, worker boot fixes, dev asset preparation |
+| **🌳 Worktrees & Git UX** | Worktree implementation + selector UX, root worktree labeling/badges, Git Changes tab |
+| **🎨 Theme & UI Polish** | System/light/dark theme toggle, persisted theme preference, light/dark rendering fixes |
+| **⌨️ Prompt & Message UX** | Enter-to-submit toggle, message-part delete action, copy selected text/tool-call title |
+| **🔐 Runtime & Platform** | YAML config/state migration, HTTPS + self-signed support, keep-awake while busy |
+| **📦 Release Track** | Version/min-server progression to v0.10.2/v0.10.3 and dev prerelease flow updates |
 
 ## Requirements
 
@@ -121,7 +125,7 @@ This fork includes several major enhancements not available in the upstream repo
 > [!NOTE]
 > These features are not included in upstream and represent divergent functionality from the original CodeNomad repository.
 
-_Last updated: 2026-01-28_
+_Last updated: 2026-02-14_
 
 ## CI/CD on Forks
 
