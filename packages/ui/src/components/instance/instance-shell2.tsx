@@ -21,7 +21,6 @@ import IconButton from "@suid/material/IconButton"
 import Toolbar from "@suid/material/Toolbar"
 import Typography from "@suid/material/Typography"
 import useMediaQuery from "@suid/material/useMediaQuery"
-import CloseIcon from "@suid/icons-material/Close"
 import MenuIcon from "@suid/icons-material/Menu"
 import MenuOpenIcon from "@suid/icons-material/MenuOpen"
 import PushPinIcon from "@suid/icons-material/PushPin"
@@ -68,7 +67,6 @@ import { AskQuestionWizard } from "../askquestion-wizard"
 import { TodoListView } from "../tool-call/renderers/todo"
 import ContextUsagePanel from "../session/context-usage-panel"
 import SessionView from "../session/session-view"
-import SearchPanel from "../search-panel"
 import { formatTokenTotal } from "../../lib/formatters"
 import { sseManager } from "../../lib/sse-manager"
 import "../../styles/components/failed-notification.css"
@@ -489,7 +487,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     return activeSessionMap().get(props.instance.id) || null
   })
 
-  const parentSessionIdForInstance = createMemo(() => {
+  const _parentSessionIdForInstance = createMemo(() => {
     return activeParentSessionId().get(props.instance.id) || null
   })
 
@@ -567,7 +565,7 @@ const InstanceShell2: Component<InstanceShellProps> = (props) => {
     showCommandPalette(props.instance.id)
   }
 
-  const openCurrentSessionSearch = () => {
+  const _openCurrentSessionSearch = () => {
     const currentSessionId = activeSessionIdForInstance()
     openSearch(props.instance.id, currentSessionId || undefined)
   }

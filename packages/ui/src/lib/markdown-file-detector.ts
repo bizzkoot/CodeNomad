@@ -38,7 +38,7 @@ export function detectMarkdownFiles(text: string): MarkdownFileMatch[] {
 
   let match: RegExpExecArray | null
 
-  // eslint-disable-next-line no-cond-assign
+   
   while ((match = pattern.exec(text)) !== null) {
     const filePath = match[1].trim()
 

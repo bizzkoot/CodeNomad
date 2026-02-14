@@ -190,7 +190,7 @@ const FolderTreeNode: Component<FolderTreeNodeProps> = (props) => {
           {/* Loading state */}
           <Show when={isLoading()}>
             <div class="folder-tree-node-loading" style={{ "padding-left": `${(props.level + 1) * 16 + 8}px` }}>
-              <span class="spinner-small"></span>
+              <span class="spinner-small" />
               <span>Loading...</span>
             </div>
           </Show>

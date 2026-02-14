@@ -1,9 +1,3 @@
-import type {
-  Session as SDKSession,
-  Agent as SDKAgent,
-  Provider as SDKProvider,
-  Model as SDKModel,
-} from "@opencode-ai/sdk"
 import type { SessionStatus as SDKSessionStatus } from "@opencode-ai/sdk/v2/client"
 
 // Export SDK types for external use

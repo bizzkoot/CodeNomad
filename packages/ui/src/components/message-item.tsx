@@ -57,7 +57,7 @@ export default function MessageItem(props: MessageItemProps) {
       const parsed = new URL(url)
       const segments = parsed.pathname.split("/")
       return segments.pop() || t("messageItem.attachment.defaultName")
-    } catch (error) {
+    } catch {
       const fallback = url.split("/").pop()
       return fallback && fallback.length > 0 ? fallback : t("messageItem.attachment.defaultName")
     }
@@ -103,7 +103,7 @@ export default function MessageItem(props: MessageItemProps) {
       const objectUrl = URL.createObjectURL(blob)
       directDownload(objectUrl)
       URL.revokeObjectURL(objectUrl)
-    } catch (error) {
+    } catch {
       directDownload(url)
     }
   }

@@ -32,7 +32,7 @@ function findClosestMatchToViewport(allMatches: SearchMatch[]): number {
   const viewportCenter = scrollContainer.scrollTop + (scrollContainer.clientHeight / 2)
 
   let closestIndex = 0
-  let closestDistance = Infinity
+  let _closestDistance = Infinity
 
   // Get all message anchors in order
   const anchors = Array.from(document.querySelectorAll('[id^="message-anchor-"]'))
@@ -75,7 +75,7 @@ function findClosestMatchToViewport(allMatches: SearchMatch[]): number {
 /**
  * Build CSS selector for a search match element
  */
-function buildMatchSelector(match: SearchMatch): string {
+function _buildMatchSelector(match: SearchMatch): string {
   return (
     'mark[data-search-match="true"]' +
     `[data-search-message-id="${CSS.escape(match.messageId)}"]` +
@@ -184,7 +184,7 @@ export function closeSearch() {
  */
 export function executeSearch(store: InstanceMessageStore) {
   const currentQuery = query()
-  const currentInstanceId = instanceId()
+  const _currentInstanceId = instanceId()
   const currentSessionId = sessionId()
   const currentOptions = options()
 

@@ -182,7 +182,7 @@ export function Markdown(props: MarkdownProps) {
       if (existingCurrent) {
         existingCurrent.classList.remove("search-match--current")
       }
-    } catch (error) {
+    } catch {
       // Ignore errors during cleanup
     }
 
@@ -473,5 +473,6 @@ export function Markdown(props: MarkdownProps) {
     waitForDOMAndApplyHighlights()
   })
 
+  {/* eslint-disable-next-line solid/no-innerhtml */}  
   return <div ref={containerRef} class={proseClass()} innerHTML={html()} />
 }

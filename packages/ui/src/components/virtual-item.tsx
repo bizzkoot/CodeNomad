@@ -122,7 +122,7 @@ export default function VirtualItem(props: VirtualItemProps) {
   const cachedHeight = sizeCache.get(props.cacheKey)
   const [isIntersecting, setIsIntersecting] = createSignal(true)
   const [measuredHeight, setMeasuredHeight] = createSignal(cachedHeight ?? 0)
-  const [hasMeasured, setHasMeasured] = createSignal(cachedHeight !== undefined)
+  const [_hasMeasured, setHasMeasured] = createSignal(cachedHeight !== undefined)
   let hasReportedMeasurement = Boolean(cachedHeight && cachedHeight > 0)
   let pendingVisibility: boolean | null = null
   let visibilityFrame: number | null = null

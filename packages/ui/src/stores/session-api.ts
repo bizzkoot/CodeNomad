@@ -7,8 +7,6 @@ import {
   activeSessionId,
   agents,
   clearSessionDraftPrompt,
-  getChildSessions,
-  isBlankSession,
   messagesLoaded,
   pruneDraftPrompts,
   providers,

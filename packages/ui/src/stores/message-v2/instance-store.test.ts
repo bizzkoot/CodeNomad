@@ -8,7 +8,7 @@
  * References: tasks/todo/prd-subagent-premium-fix.md
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import type { MessageInfo } from '../../types/message'
 import type { SessionRecord, SessionUsageState, UsageEntry } from './types'
 

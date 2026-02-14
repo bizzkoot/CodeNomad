@@ -1,5 +1,4 @@
 import { Component, For } from "solid-js"
-import { formatShortcut, isMac } from "../lib/keyboard-utils"
 import type { KeyboardShortcut } from "../lib/keyboard-registry"
 import Kbd from "./kbd"
 import HintRow from "./hint-row"

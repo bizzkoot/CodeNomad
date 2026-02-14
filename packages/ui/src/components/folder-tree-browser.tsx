@@ -1,4 +1,4 @@
-import { Component, createSignal, Show, onMount, createEffect } from "solid-js"
+import { Component, createSignal, Show, createEffect } from "solid-js"
 import { Dialog } from "@kobalte/core/dialog"
 import { X, FolderTree } from "lucide-solid"
 import { serverApi } from "../lib/api-client"
@@ -175,7 +175,7 @@ const FolderTreeBrowser: Component<FolderTreeBrowserProps> = (props) => {
                 {/* Loading state */}
                 <Show when={isLoadingRoot()}>
                   <div class="folder-tree-browser-loading">
-                    <div class="spinner-small"></div>
+                    <div class="spinner-small" />
                     <p>Loading workspace files...</p>
                   </div>
                 </Show>

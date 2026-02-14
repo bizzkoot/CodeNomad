@@ -1,6 +1,6 @@
 import type { ToolState } from "@opencode-ai/sdk"
 import type { ToolRendererContext, ToolRenderer, ToolCallPart } from "./types"
-import { getDefaultToolAction, getToolName, isToolStateCompleted, isToolStateRunning } from "./utils"
+import { getDefaultToolAction, getToolName } from "./utils"
 import { enMessages } from "../../lib/i18n/messages/en"
 import { defaultRenderer } from "./renderers/default"
 import { bashRenderer } from "./renderers/bash"

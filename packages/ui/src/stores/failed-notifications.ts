@@ -1,4 +1,4 @@
-import { createSignal, untrack } from "solid-js"
+import { createSignal } from "solid-js"
 import type { QuestionInfo } from "../types/question"
 import type { PermissionRequestLike } from "../types/permission"
 import { getLogger } from "../lib/logger"
@@ -281,7 +281,7 @@ export function cleanupOldNotifications(): void {
                                 }
                             })
                         }
-                    } catch (error) {
+                    } catch {
                         // Ignore parse errors, cleanup will handle stale keys
                     }
                 }
@@ -469,8 +469,8 @@ export function preloadAllNotifications(): void {
                             if (import.meta.env.DEV) {
                                 console.log(`[FailedNotifications] Removed legacy key: ${key}`)
                             }
-                        } catch (error) {
-                            log.warn(`Failed to remove legacy key ${key}:`, error)
+                    } catch (_error) {
+                            log.warn(`Failed to remove legacy key ${key}:`, _error)
                         }
                     })
                     log.info(`Cleaned up ${oldKeysToKeep.length} legacy notification keys from localStorage`)

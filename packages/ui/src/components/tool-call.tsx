@@ -740,6 +740,7 @@ export default function ToolCall(props: ToolCallProps) {
 
     return (
       <div class={messageClass} ref={(element) => scrollHelpers.registerContainer(element)} onScroll={scrollHelpers.handleScroll}>
+        {/* eslint-disable-next-line solid/no-innerhtml -- HTML from ANSI renderer */}
         <pre class="tool-call-content tool-call-ansi" innerHTML={nextCache.html} />
         {scrollHelpers.renderSentinel()}
       </div>
@@ -1028,7 +1029,7 @@ export default function ToolCall(props: ToolCallProps) {
  
           <Show when={status() === "pending" && !pendingPermission()}>
             <div class="tool-call-pending-message">
-              <span class="spinner-small"></span>
+              <span class="spinner-small" />
               <span>{t("toolCall.pending.waitingToRun")}</span>
             </div>
           </Show>

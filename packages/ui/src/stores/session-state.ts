@@ -1,7 +1,7 @@
 import { batch, createSignal } from "solid-js"
 
 import type { Session, SessionStatus, Agent, Provider } from "../types/session"
-import { deleteSession, loadMessages } from "./session-api"
+import { deleteSession } from "./session-api"
 import { showToastNotification } from "../lib/notifications"
 import { messageStoreBus } from "./message-v2/bus"
 import { instances } from "./instances"

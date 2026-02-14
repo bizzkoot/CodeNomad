@@ -8,7 +8,7 @@ const CONFIG_FILE = join(CONFIG_DIR, "config.json")
 const INSTANCES_DIR = join(CONFIG_DIR, "instances")
 
 // File watching for config changes
-let configWatchers = new Set<number>()
+let _configWatchers = new Set<number>()
 let configLastModified = 0
 let configCache: string | null = null
 
@@ -57,7 +57,7 @@ export function setupStorageIPC() {
   ipcMain.handle("storage:readConfigFile", async () => {
     try {
       return await readConfigWithCache()
-    } catch (error) {
+    } catch {
       // Return empty config if file doesn't exist
       return JSON.stringify({ preferences: { showThinkingBlocks: false, thinkingBlocksExpansion: "expanded" }, recentFolders: [] }, null, 2)
     }
@@ -84,14 +84,14 @@ export function setupStorageIPC() {
             return
           }
           webContents.send("storage:configChanged")
-        } catch (error) {
+        } catch (_error2) {
           // Silently ignore errors during shutdown - window may be in destruction process
-          console.debug("[storage] Failed to send config change notification:", error)
+          console.debug("[storage] Failed to send config change notification:", _error2)
         }
       })
-    } catch (error) {
-      console.error("Failed to write config file:", error)
-      throw error
+    } catch (_error) {
+      console.error("Failed to write config file:", _error)
+      throw _error
     }
   })
 
@@ -99,7 +99,7 @@ export function setupStorageIPC() {
     const instanceFile = join(INSTANCES_DIR, `${filename}.json`)
     try {
       return await readFile(instanceFile, "utf-8")
-    } catch (error) {
+    } catch {
       // Return empty instance data if file doesn't exist
       return JSON.stringify({ messageHistory: [] }, null, 2)
     }
@@ -109,9 +109,9 @@ export function setupStorageIPC() {
     const instanceFile = join(INSTANCES_DIR, `${filename}.json`)
     try {
       await writeFile(instanceFile, content, "utf-8")
-    } catch (error) {
-      console.error(`Failed to write instance file for ${filename}:`, error)
-      throw error
+    } catch (_error) {
+      console.error(`Failed to write instance file for ${filename}:`, _error)
+      throw _error
     }
   })
 
@@ -121,9 +121,9 @@ export function setupStorageIPC() {
       if (existsSync(instanceFile)) {
         await unlink(instanceFile)
       }
-    } catch (error) {
-      console.error(`Failed to delete instance file for ${filename}:`, error)
-      throw error
+    } catch (_error) {
+      console.error(`Failed to delete instance file for ${filename}:`, _error)
+      throw _error
     }
   })
 }

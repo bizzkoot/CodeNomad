@@ -90,7 +90,7 @@ export function TodoListView(props: TodoListViewProps) {
                 }}
                 role="listitem"
               >
-                <span class="tool-call-todo-checkbox" data-status={todo.status} aria-label={label}></span>
+                <span class="tool-call-todo-checkbox" data-status={todo.status} aria-label={label} />
                   <div class="tool-call-todo-body">
                     <div class="tool-call-todo-heading">
                       <span class="tool-call-todo-text">{todo.content}</span>

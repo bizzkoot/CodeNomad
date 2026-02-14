@@ -56,7 +56,7 @@ export default function MessageSection(props: MessageSectionProps) {
     },
   )
 
-  const tokenStats = createMemo(() => {
+  const _tokenStats = createMemo(() => {
     const usage = usageSnapshot()
     const info = sessionInfo()
     return {
@@ -144,7 +144,7 @@ export default function MessageSection(props: MessageSectionProps) {
   const isActive = createMemo(() => props.isActive !== false)
 
 
-  const scrollCache = useScrollCache({
+  const _scrollCache = useScrollCache({
     instanceId: () => props.instanceId,
     sessionId: () => props.sessionId,
     scope: SCROLL_SCOPE,

@@ -176,7 +176,7 @@ export function initMcpBridge(instanceId: string): void {
                 locationHref: typeof window !== 'undefined' ? window.location.href : 'unknown'
             });
         }
-    } catch (e) {
+    } catch {
         // Ignore if electron not available yet
     }
 

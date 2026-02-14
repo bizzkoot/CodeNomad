@@ -59,8 +59,8 @@ export function updateSessionInfo(instanceId: string, sessionId: string): void {
   const latestModelId = (latestInfo as any)?.modelID || (latestInfo as any)?.modelId || ""
   // Use extended MessageInfo type properties for user messages
   const userMessageModel = (latestInfo as any)?.model
-  const userMessageProviderId = userMessageModel?.providerID || ""
-  const userMessageModelId = userMessageModel?.modelID || ""
+  const _userMessageProviderId = userMessageModel?.providerID || ""
+  const _userMessageModelId = userMessageModel?.modelID || ""
 
   const selectedModel =
     resolveSelectedModel(instanceProviders, sessionProviderId, sessionModelId) ??

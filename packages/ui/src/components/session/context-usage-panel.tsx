@@ -33,7 +33,7 @@ const ContextUsagePanel: Component<ContextUsagePanelProps> = (props) => {
   const outputTokens = createMemo(() => info().outputTokens ?? 0)
   const actualUsageTokens = createMemo(() => info().actualUsageTokens ?? 0)
   const availableTokens = createMemo(() => info().contextAvailableTokens)
-  const outputLimit = createMemo(() => info().modelOutputLimit ?? 0)
+  const _outputLimit = createMemo(() => info().modelOutputLimit ?? 0)
   const costValue = createMemo(() => {
     const value = info().isSubscriptionModel ? 0 : info().cost
     return value > 0 ? value : 0

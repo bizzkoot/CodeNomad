@@ -404,7 +404,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
     // Scroll selected option into view when active tab changes
     createEffect(() => {
         const activeTab = store.activeTab
-        const selectedOption = store.questionStates[activeTab].selectedOption
+        const _selectedOption = store.questionStates[activeTab].selectedOption
 
         // Scroll to selected option with a slight delay to ensure DOM is updated
         setTimeout(() => {
@@ -517,6 +517,7 @@ export const AskQuestionWizard: Component<AskQuestionWizardProps> = (props) => {
 
             {/* Current question */}
             <div class="askquestion-wizard-question">
+                {/* eslint-disable-next-line solid/no-innerhtml -- User input rendered as markdown */}
                 <div class="askquestion-wizard-question-text markdown-body" innerHTML={questionHtml()} />
                 <Show when={currentQuestion().multiple}>
                     <p class="askquestion-wizard-question-hint">(select multiple, press Enter to confirm)</p>

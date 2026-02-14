@@ -11,7 +11,7 @@ interface InstanceTabProps {
   onClose: () => void
 }
 
-function formatFolderName(path: string, instances: Instance[], currentInstance: Instance): string {
+function _formatFolderName(path: string, instances: Instance[], currentInstance: Instance): string {
   const name = path.split("/").pop() || path
 
   const duplicates = instances.filter((i) => {

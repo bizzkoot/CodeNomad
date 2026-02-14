@@ -74,7 +74,7 @@ function clonePart(part: ClientPart): ClientPart {
   return part
 }
 
-function cloneStructuredValue<T>(value: T): T {
+function _cloneStructuredValue<T>(value: T): T {
   // Legacy helper kept as a no-op to avoid deep copies.
   return value
 }

@@ -452,7 +452,7 @@ function addEnvironmentVariable(key: string, value: string): void {
 
 function removeEnvironmentVariable(key: string): void {
   const current = preferences().environmentVariables || {}
-  const { [key]: removed, ...rest } = current
+  const { [key]: _removed, ...rest } = current
   updateEnvironmentVariables(rest)
 }
 

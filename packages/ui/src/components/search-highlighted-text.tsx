@@ -10,7 +10,6 @@
 import { createMemo, Show, For } from "solid-js"
 import { matches, currentIndex } from "../stores/search-store"
 import { getMatchesForMessage } from "../lib/search-highlight"
-import type { SearchMatch } from "../types/search"
 
 interface SearchHighlightedTextProps {
   text: string

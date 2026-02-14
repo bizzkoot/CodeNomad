@@ -98,7 +98,7 @@ const MarkdownPreviewModal: Component<MarkdownPreviewModalProps> = (props) => {
               {/* Loading state */}
               <Show when={props.isLoading && !props.content}>
                 <div class="markdown-preview-loading">
-                  <div class="markdown-preview-spinner"></div>
+                  <div class="markdown-preview-spinner" />
                   <p>Loading preview...</p>
                 </div>
               </Show>

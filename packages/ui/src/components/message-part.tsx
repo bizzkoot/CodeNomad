@@ -4,8 +4,7 @@ import { isItemExpanded, toggleItemExpanded } from "../stores/tool-call-state"
 import { Markdown } from "./markdown"
 import { useTheme } from "../lib/theme"
 import { useConfig } from "../stores/preferences"
-import { partHasRenderableText, SDKPart, TextPart, ClientPart } from "../types/message"
-import SearchHighlightedText from "./search-highlighted-text"
+import { partHasRenderableText, TextPart, ClientPart } from "../types/message"
 
 type ToolCallPart = Extract<ClientPart, { type: "tool" }>
 
@@ -21,14 +20,14 @@ interface MessagePartProps {
  export default function MessagePart(props: MessagePartProps) {
 
   const { isDark } = useTheme()
-  const { preferences } = useConfig()
+  const _preferences = useConfig()
   const partType = () => props.part?.type || ""
   const reasoningId = () => `reasoning-${props.part?.id || ""}`
-  const isReasoningExpanded = () => isItemExpanded(reasoningId())
+  const _isReasoningExpanded = () => isItemExpanded(reasoningId())
   const isAssistantMessage = () => props.messageType === "assistant"
   const textContainerClass = () => (isAssistantMessage() ? "message-text message-text-assistant" : "message-text")
 
-  const plainTextContent = () => {
+  const _plainTextContent = () => {
     const part = props.part
 
     if ((part.type === "text" || part.type === "reasoning") && typeof part.text === "string") {
@@ -57,7 +56,7 @@ interface MessagePartProps {
     return false
   }
 
-  const hasReasoningContent = () => {
+  const _hasReasoningContent = () => {
     if (props.part?.type !== "reasoning") {
       return false
     }
@@ -89,7 +88,7 @@ interface MessagePartProps {
     }
   }
 
-  function handleReasoningClick(e: Event) {
+  function _handleReasoningClick(e: Event) {
     e.preventDefault()
     toggleItemExpanded(reasoningId())
   }

@@ -1,6 +1,6 @@
 import { Component, createSignal, Show, For, createEffect } from "solid-js"
 import { Dialog } from "@kobalte/core/dialog"
-import type { Session, Agent } from "../types/session"
+import type {} from "../types/session"
 import { getParentSessions, createSession, setActiveParentSession } from "../stores/sessions"
 import { instances, stopInstance } from "../stores/instances"
 import { agents } from "../stores/sessions"

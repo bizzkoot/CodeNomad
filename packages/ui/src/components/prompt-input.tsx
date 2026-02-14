@@ -1,4 +1,4 @@
-import { createSignal, Show, onMount, For, onCleanup, createEffect, on, untrack, createMemo } from "solid-js"
+import { createSignal, Show, onMount, onCleanup, createEffect, on, untrack, createMemo } from "solid-js"
 import { ArrowBigUp, ArrowBigDown } from "lucide-solid"
 import UnifiedPicker from "./unified-picker"
 import ExpandButton from "./expand-button"
@@ -236,7 +236,7 @@ export default function PromptInput(props: PromptInputProps) {
     )
   )
 
-  function handleRemoveAttachment(attachmentId: string) {
+  function _handleRemoveAttachment(attachmentId: string) {
     const currentAttachments = attachments()
     const attachment = currentAttachments.find((a) => a.id === attachmentId)
 
@@ -272,7 +272,7 @@ export default function PromptInput(props: PromptInputProps) {
     }
   }
 
-  function handleExpandTextAttachment(attachment: Attachment) {
+  function _handleExpandTextAttachment(attachment: Attachment) {
     if (attachment.source.type !== "text") return
 
     const textarea = textareaRef

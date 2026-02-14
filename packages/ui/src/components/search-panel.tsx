@@ -12,7 +12,7 @@
  * @module search-panel
  */
 
-import { createEffect, createSignal, onMount, onCleanup, Show, For } from "solid-js"
+import { createEffect, createSignal, onCleanup, Show, For } from "solid-js"
 import type { InstanceMessageStore } from "../stores/message-v2/instance-store"
 import { Search, ChevronUp, ChevronDown, Settings, X } from "lucide-solid"
 import type { SearchOptions } from "../types/search"
@@ -28,8 +28,6 @@ import {
   closeSearch, 
   navigateNext, 
   navigatePrevious,
-  instanceId,
-  sessionId as searchSessionId,
   setInstanceId,
   setSessionId,
 } from "../stores/search-store"

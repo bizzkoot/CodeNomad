@@ -379,7 +379,7 @@ export function expandSectionsForMatch(instanceId: string, match: SearchMatch): 
 /**
  * Wait for DOM to update after expansion
  */
-export function waitForExpansionCompletion(maxWaitMs = 500): Promise<void> {
+export function waitForExpansionCompletion(_maxWaitMs = 500): Promise<void> {
   return new Promise((resolve) => {
     // Wait for a few frames to let reactivity settle
     let frames = 0
