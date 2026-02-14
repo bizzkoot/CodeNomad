@@ -331,6 +331,11 @@ function startCliPreload(url: string) {
     return
   }
 
+  if (process.env.NODE_ENV === "development") {
+    finalizeCliSwap(url)
+    return
+  }
+
   const view = new WebContentsView({
     webPreferences: {
       contextIsolation: true,
@@ -377,6 +382,7 @@ function finalizeCliSwap(url: string) {
   showingLoadingScreen = false
   currentCliUrl = url
   pendingCliUrl = null
+  console.info("[cli] loading renderer from", url)
   mainWindow.loadURL(url).catch((error) => console.error("[cli] failed to load CLI view:", error))
 }
 

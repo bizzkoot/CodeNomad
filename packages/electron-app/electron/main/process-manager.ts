@@ -290,7 +290,17 @@ export class CliProcessManager extends EventEmitter {
       return parseInt(readyMatch[1], 10)
     }
 
+    const localUrlMatch = line.match(/Local Connection URL\s*:\s*https?:\/\/[^:]+:(\d{2,5})/i)
+    if (localUrlMatch) {
+      return parseInt(localUrlMatch[1], 10)
+    }
+
     if (line.toLowerCase().includes("http server listening")) {
+      const keyValueMatch = line.match(/port\s*[=:]\s*(\d{2,5})/i)
+      if (keyValueMatch) {
+        return parseInt(keyValueMatch[1], 10)
+      }
+
       const httpMatch = line.match(/:(\d{2,5})(?!.*:\d)/)
       if (httpMatch) {
         return parseInt(httpMatch[1], 10)
@@ -314,7 +324,17 @@ export class CliProcessManager extends EventEmitter {
   }
 
   private buildCliArgs(options: StartOptions, host: string): string[] {
-    const args = ["serve", "--host", host, "--port", "0", "--generate-token"]
+    const args = [
+      "--host",
+      host,
+      "--http",
+      "true",
+      "--https",
+      "false",
+      "--http-port",
+      "0",
+      "--generate-token",
+    ]
 
     if (options.dev) {
       const devUrl = process.env.VITE_DEV_SERVER_URL || process.env.ELECTRON_RENDERER_URL || "http://localhost:3000"
