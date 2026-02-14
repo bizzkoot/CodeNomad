@@ -1,6 +1,6 @@
 import { Select } from "@kobalte/core/select"
 import { Dialog } from "@kobalte/core/dialog"
-import { For, Show, createMemo, createSignal } from "solid-js"
+import { Show, createMemo, createSignal } from "solid-js"
 import { ChevronDown, Copy, Trash2 } from "lucide-solid"
 import type { WorktreeDescriptor } from "../../../server/src/api-types"
 import { getLogger } from "../lib/logger"

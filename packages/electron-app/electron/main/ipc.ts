@@ -1,5 +1,7 @@
-import { BrowserWindow, dialog, ipcMain, type OpenDialogOptions } from "electron"
+import { BrowserWindow, dialog, ipcMain, powerSaveBlocker, type OpenDialogOptions } from "electron"
 import type { CliProcessManager, CliStatus } from "./process-manager"
+
+let wakeLockId: number | null = null
 
 interface DialogOpenRequest {
   mode: "directory" | "file"
@@ -74,6 +76,20 @@ export function setupCliIPC(mainWindow: BrowserWindow, cliManager: CliProcessMan
     return { canceled: result.canceled, paths: result.filePaths }
   })
 
+  ipcMain.handle("power:setWakeLock", async (_, enabled: boolean) => {
+    if (enabled) {
+      if (wakeLockId === null) {
+        wakeLockId = powerSaveBlocker.start("prevent-app-suspension")
+      }
+    } else {
+      if (wakeLockId !== null) {
+        powerSaveBlocker.stop(wakeLockId)
+        wakeLockId = null
+      }
+    }
+    return { enabled: wakeLockId !== null }
+  })
+
   // Return cleanup function
   return () => {
     cliManager.removeListener("status", onStatus)
@@ -83,6 +99,7 @@ export function setupCliIPC(mainWindow: BrowserWindow, cliManager: CliProcessMan
     ipcMain.removeHandler("cli:getStatus")
     ipcMain.removeHandler("cli:restart")
     ipcMain.removeHandler("dialog:open")
+    ipcMain.removeHandler("power:setWakeLock")
   }
 }
 

@@ -14,6 +14,7 @@ const electronAPI = {
   getCliStatus: () => ipcRenderer.invoke("cli:getStatus"),
   restartCli: () => ipcRenderer.invoke("cli:restart"),
   openDialog: (options) => ipcRenderer.invoke("dialog:open", options),
+  setWakeLock: (enabled) => ipcRenderer.invoke("power:setWakeLock", Boolean(enabled)),
   // MCP bridge methods
   mcpSend: (channel, data) => ipcRenderer.send(channel, data),
   mcpOn: (channel, callback) => {

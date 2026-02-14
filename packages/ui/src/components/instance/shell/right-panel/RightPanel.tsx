@@ -113,9 +113,9 @@ const RightPanel: Component<RightPanelProps> = (props) => {
   const [filesListOpen, setFilesListOpen] = createSignal(true)
   const [filesListTouched, setFilesListTouched] = createSignal(false)
   const [changesListOpen, setChangesListOpen] = createSignal(true)
-  const [changesListTouched, setChangesListTouched] = createSignal(false)
+  const [_changesListTouched, setChangesListTouched] = createSignal(false)
   const [gitChangesListOpen, setGitChangesListOpen] = createSignal(true)
-  const [gitChangesListTouched, setGitChangesListTouched] = createSignal(false)
+  const [_gitChangesListTouched, setGitChangesListTouched] = createSignal(false)
 
   const listLayoutKey = createMemo(() => (props.isPhoneLayout() ? "phone" : "nonphone"))
 

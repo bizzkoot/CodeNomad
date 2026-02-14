@@ -319,7 +319,6 @@ const SessionList: Component<SessionListProps> = (props) => {
     let failed = 0
     for (const sessionId of selected) {
       try {
-        // eslint-disable-next-line no-await-in-loop
         await deleteSession(props.instanceId, sessionId)
       } catch (error) {
         failed += 1

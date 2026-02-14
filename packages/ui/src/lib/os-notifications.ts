@@ -51,7 +51,6 @@ async function sendWebNotification(payload: OsNotificationPayload): Promise<void
     throw new Error("Web notification permission not granted")
   }
 
-  // eslint-disable-next-line no-new
   new (window as any).Notification(payload.title, { body: payload.body })
 }
 
