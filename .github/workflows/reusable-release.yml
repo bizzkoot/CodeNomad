@@ -90,9 +90,8 @@ jobs:
     secrets: inherit
 
   release-ui:
-    if: github.repository == 'NeuralNomadsAI/CodeNomad'
+    if: github.repository == 'NeuralNomadsAI/CodeNomad' && inputs.release_ui
     needs: prepare-release
-    if: ${{ inputs.release_ui }}
     permissions:
       contents: read
     uses: ./.github/workflows/release-ui.yml
