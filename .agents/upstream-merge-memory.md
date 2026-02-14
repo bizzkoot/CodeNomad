@@ -71,6 +71,81 @@ applyTo: '**'
 8. **packages/electron-app/electron/main/process-manager.ts** - Both modified
 
 # Merge History
+## 2026-02-15 - PARTIAL UPSTREAM DEV MERGE v0.10.3 - Infrastructure Only
+- **Strategy**: Infrastructure merge with UI component reverts
+- **Source**: `upstream/dev` (v0.10.3 line)
+- **Last Merge**: `444335ad99276922831ba7308de2c7f3b2fcb1e2`
+- **Status**: Partial Success - Server/API merged, UI components reverted
+
+### What Was Attempted
+Full merge of upstream v0.10.3 including:
+- Monaco-powered diff viewer in SourceControlPanel
+- Worktree file browser section
+- Session changes section with reactive data
+- Source Control panel reorganization
+
+### What Failed
+**UI components caused "Starting instance..." hangs** during instance creation.
+
+**Root Cause**: Upstream's reactive patterns incompatible with fork initialization:
+- `createEffect` hooks tracking `instances()` store
+- Monaco editor loading during component mount  
+- Worktree client initialization on render
+- Reactive dependencies on instance/sessions stores
+
+### Resolution Applied
+**Reverted**: `packages/ui/src/components/source-control/source-control-panel.tsx`
+- Restored to original fork version (914 lines, text-based diff)
+- Removed all reactive store dependencies
+- Verified "Starting instance..." completes successfully
+
+### Successfully Merged (Infrastructure)
+- ✅ **Server API**: `GET /api/workspaces/:id/git/file-original` endpoint
+- ✅ **API Client**: `fetchGitOriginalContent()` method
+- ✅ **Git Store**: Optional chaining safety fix
+- ✅ **Platform**: Power save blocker, dev startup fixes
+- ✅ **UI Safety**: Permission/Question null checks
+
+### Files Modified
+```
+packages/server/src/server/routes/git.ts          (+50 lines) - New endpoint
+packages/ui/src/lib/api-client.ts                 (+9 lines)  - New API method
+packages/ui/src/stores/git.ts                     (+1 line)   - Safety fix
+packages/ui/src/components/tool-call/
+  permission-block.tsx                            (+1 line)   - Null check
+  question-block.tsx                              (+1 line)   - Null check
+```
+
+### Files Reverted
+```
+packages/ui/src/components/source-control/source-control-panel.tsx
+  → Restored to fork version (works reliably)
+```
+
+### Validation After Reverts
+- ✅ `npm run lint` — no errors
+- ✅ `npm run typecheck` — all packages pass
+- ✅ `npm run dev` — No "Starting instance..." hang
+- ✅ Instance creation — Works reliably
+- ✅ Source Control — Functional with text-based diff
+
+### Lesson Learned
+Upstream UI components cannot be directly merged due to architectural differences:
+- Fork uses lazy-loading on user interaction
+- Upstream uses reactive store subscriptions
+- Fork prioritizes stability over feature parity
+- Future UI features should be custom implementations using preserved infrastructure
+
+### Available for Custom Implementation
+Infrastructure is preserved for these deferred features:
+| Feature | Infrastructure | UI Status |
+|---------|---------------|-----------|
+| Monaco diff viewer | ✅ API ready | Reverted - add to existing modal |
+| Worktree file browser | ✅ API ready | Reverted - add to RightPanel |
+| Session changes | ✅ API ready | Reverted - add to RightPanel |
+
+---
+
 ## 2026-02-14 - UPSTREAM DEV MERGE into restore_v0.9.2-patch.4
 - **Strategy**: Hybrid (auto-merge + targeted fork preservation)
 - **Source**: `refs/remotes/upstream/dev`
