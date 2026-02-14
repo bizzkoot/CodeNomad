@@ -487,10 +487,16 @@
   background-color: transparent;
 }
 
+.tool-call-markdown .markdown-code-block:has(.code-block-header) {
+  max-height: var(--tool-call-max-height-compact, calc(15 * 1.4em));
+  overflow-y: auto;
+  background-color: var(--surface-code);
+}
+
 .tool-call-markdown .code-block-header {
   position: sticky;
   top: 0;
-  z-index: auto;
+  z-index: 1;
   background-color: var(--code-block-header-bg, var(--surface-secondary));
   border-bottom: 1px solid var(--tool-call-border-color);
   box-shadow: none;
@@ -523,8 +529,8 @@
 .tool-call-markdown pre.shiki,
 .tool-call-markdown pre.shiki code,
 .tool-call-markdown .shiki {
-  background: transparent !important;
-  background-color: transparent !important;
+  background: transparent;
+  background-color: transparent;
 }
 
 /* Diff highlighting for Shiki code blocks (+ additions, - deletions) using JS-added classes */
